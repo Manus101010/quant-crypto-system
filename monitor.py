@@ -72,66 +72,115 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     return "\n".join(lines)
 
 
-def _evaluate(trg: dict, price: float | None, rsi_now: float | None,
-              rsi_prev: float | None) -> tuple[bool, str]:
+def _indicators(df: pd.DataFrame) -> dict | None:
+    """Live indicator bundle from candles: price, prior close, RSI(2), RSI(14), 20d mean."""
+    if len(df) < 25:
+        return None
+    close = df["close"]
+    rsi2 = _rsi_series(close, 2).dropna()
+    rsi14 = _rsi_series(close, 14).dropna()
+    if len(rsi2) < 2 or len(rsi14) < 1:
+        return None
+    return {
+        "price":     float(close.iloc[-1]),
+        "prev":      float(close.iloc[-2]),
+        "rsi2_now":  float(rsi2.iloc[-1]),
+        "rsi2_prev": float(rsi2.iloc[-2]),
+        "rsi14_now": float(rsi14.iloc[-1]),
+        "mean20":    float(close.iloc[-20:].mean()),
+    }
+
+
+def _evaluate(trg: dict, ind: dict) -> tuple[str, str]:
+    """
+    Returns (verdict, reason) where verdict is 'fire' | 'invalidate' | 'wait'.
+    Multi-factor confirmation per setup kind; auto-invalidates on a stop hit.
+    """
+    import json as _json
+    cond = _json.loads(trg["condition_json"]) if trg.get("condition_json") else {}
+    kind = cond.get("kind")
+    price, prev = ind["price"], ind["prev"]
+    stop = cond.get("stop")
+
+    if kind == "mr_reversal":
+        if stop and price <= stop:
+            return ("invalidate", f"stop {_fmt_price(stop)} hit before the bounce")
+        lvl = cond.get("rsi2_level", 12.0)
+        mean = cond.get("mean")
+        turned    = ind["rsi2_prev"] < lvl <= ind["rsi2_now"]      # RSI(2) turning up
+        green     = price > prev                                    # price confirming
+        below_mean = mean is None or price < mean                   # still in reversion zone
+        above_stop = stop is None or price > stop
+        if turned and green and below_mean and above_stop:
+            return ("fire", f"RSI2 {ind['rsi2_prev']:.0f}→{ind['rsi2_now']:.0f}↑, green bar, "
+                            f"below mean {_fmt_price(mean)}")
+        return ("wait", "")
+
+    if kind == "breakout":
+        if stop and price <= stop:
+            return ("invalidate", f"stop {_fmt_price(stop)} hit before breakout")
+        lvl, rmax = cond.get("level"), cond.get("rsi_max", 80)
+        if lvl is not None and price >= lvl and ind["rsi14_now"] < rmax:
+            return ("fire", f"broke {_fmt_price(lvl)}, RSI14 {ind['rsi14_now']:.0f} (<{rmax})")
+        return ("wait", "")
+
+    if kind == "breakdown":
+        if stop and price >= stop:
+            return ("invalidate", f"stop {_fmt_price(stop)} hit")
+        lvl, rmin = cond.get("level"), cond.get("rsi_min", 20)
+        if lvl is not None and price <= lvl and ind["rsi14_now"] > rmin:
+            return ("fire", f"broke {_fmt_price(lvl)} down, RSI14 {ind['rsi14_now']:.0f} (>{rmin})")
+        return ("wait", "")
+
+    # ── Legacy single-factor fallback (older triggers) ────────────────────────
     ct, cv = trg["condition_type"], trg["condition_value"]
-    if ct == "price_below" and price is not None:
-        return (price <= cv, f"price {_fmt_price(price)} ≤ {_fmt_price(cv)}")
-    if ct == "price_above" and price is not None:
-        return (price >= cv, f"price {_fmt_price(price)} ≥ {_fmt_price(cv)}")
-    if ct == "rsi_cross_up" and rsi_now is not None and rsi_prev is not None:
-        return (rsi_prev < cv <= rsi_now, f"RSI reclaimed {cv:.0f} ({rsi_prev:.0f}→{rsi_now:.0f})")
-    if ct == "rsi_cross_down" and rsi_now is not None and rsi_prev is not None:
-        return (rsi_prev > cv >= rsi_now, f"RSI broke {cv:.0f} ({rsi_prev:.0f}→{rsi_now:.0f})")
-    return (False, "")
+    if ct == "price_below" and price <= cv:
+        return ("fire", f"price {_fmt_price(price)} ≤ {_fmt_price(cv)}")
+    if ct == "price_above" and price >= cv:
+        return ("fire", f"price {_fmt_price(price)} ≥ {_fmt_price(cv)}")
+    if ct == "rsi_cross_up" and ind["rsi14_now"] >= cv:
+        return ("fire", f"RSI reclaimed {cv:.0f}")
+    return ("wait", "")
 
 
 def poll_once() -> dict:
     """One evaluation pass over all active triggers. Returns a summary."""
-    # Expire stale triggers first.
     now_iso = datetime.datetime.utcnow().isoformat()
     tdb.expire_stale(now_iso)
 
     active = tdb.get_triggers("active")
     if not active:
-        return {"active": 0, "fired": 0}
+        return {"active": 0, "fired": 0, "invalidated": 0}
 
     symbols = sorted({t["symbol"] for t in active})
-    prices = exchange.get_last_prices(symbols)
+    candles = exchange.get_ohlcv_batch(symbols, timeframe="1d", limit=_CANDLE_LIMIT)
 
-    # Candle-based RSI only for symbols that need it.
-    rsi_syms = sorted({t["symbol"] for t in active
-                       if t["condition_type"].startswith("rsi_")})
-    rsi_now: dict[str, float] = {}
-    rsi_prev: dict[str, float] = {}
-    if rsi_syms:
-        candles = exchange.get_ohlcv_batch(rsi_syms, timeframe="1d", limit=_CANDLE_LIMIT)
-        for s, df in candles.items():
-            if len(df) >= 20:
-                r = _rsi_series(df["close"]).dropna()
-                if len(r) >= 2:
-                    rsi_now[s], rsi_prev[s] = float(r.iloc[-1]), float(r.iloc[-2])
-
-    fired = 0
+    fired = invalidated = 0
     for t in active:
-        sym = t["symbol"]
-        price = prices.get(sym)
-        met, reason = _evaluate(t, price, rsi_now.get(sym), rsi_prev.get(sym))
-        if not met:
+        df = candles.get(t["symbol"])
+        if df is None:
             continue
-        px = price if price is not None else (t.get("ref_price") or 0.0)
-        text = _alert_text(t, px, reason)
-        delivered = telegram.send_message(text)
-        # Mark fired if delivered, or if Telegram isn't configured (no-op) — but
-        # NOT on a transient send failure, so a real alert can retry next poll.
-        if delivered or not telegram.is_configured():
-            tdb.mark_fired(t["id"], px, note=reason)
-            fired += 1
-            log.info("FIRED #%d %s — %s", t["id"], sym, reason)
-        else:
-            log.warning("trigger #%d met but Telegram send failed; will retry", t["id"])
+        ind = _indicators(df)
+        if ind is None:
+            continue
+        verdict, reason = _evaluate(t, ind)
+        if verdict == "fire":
+            text = _alert_text(t, ind["price"], reason)
+            delivered = telegram.send_message(text)
+            # Mark fired if delivered (or Telegram is a no-op); leave active to
+            # retry on a transient send failure so a real alert isn't lost.
+            if delivered or not telegram.is_configured():
+                tdb.mark_fired(t["id"], ind["price"], note=reason)
+                fired += 1
+                log.info("FIRED #%d %s — %s", t["id"], t["symbol"], reason)
+            else:
+                log.warning("trigger #%d met but Telegram send failed; will retry", t["id"])
+        elif verdict == "invalidate":
+            tdb.set_status(t["id"], "invalidated")
+            invalidated += 1
+            log.info("INVALIDATED #%d %s — %s", t["id"], t["symbol"], reason)
 
-    return {"active": len(active), "fired": fired}
+    return {"active": len(active), "fired": fired, "invalidated": invalidated}
 
 
 def main() -> None:

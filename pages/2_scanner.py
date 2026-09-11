@@ -77,11 +77,31 @@ if res and res["candidates"]:
 st.divider()
 st.subheader("Active Triggers")
 from triggers import db as tdb
+import json as _json
+
+
+def _cond_desc(t: dict) -> str:
+    """Human-readable multi-factor condition."""
+    try:
+        c = _json.loads(t.get("condition_json") or "{}")
+    except Exception:
+        c = {}
+    kind = c.get("kind")
+    if kind == "mr_reversal":
+        return (f"RSI2 turns up ≥{c.get('rsi2_level',12):.0f} + green bar + "
+                f"price < mean ({c.get('mean',0):.4g}) + above stop")
+    if kind == "breakout":
+        return f"Close breaks > {c.get('level',0):.4g} + RSI14 < {c.get('rsi_max',80)} (invalidate < stop)"
+    if kind == "breakdown":
+        return f"Close breaks < {c.get('level',0):.4g} + RSI14 > {c.get('rsi_min',20)} (invalidate > stop)"
+    return f"{t['condition_type']} @ {t['condition_value']}"
+
+
 active = tdb.get_triggers("active")
 if active:
     at = pd.DataFrame([{
         "ID": t["id"], "Symbol": t["symbol"], "Setup": t["setup_label"],
-        "Dir": t["direction"], "Condition": f"{t['condition_type']} @ {t['condition_value']}",
+        "Dir": t["direction"], "Condition (all must hold)": _cond_desc(t),
         "Composite": t["composite"], "Expires": (t.get("expires_at") or "")[:16],
     } for t in active])
     st.dataframe(at, use_container_width=True, hide_index=True)

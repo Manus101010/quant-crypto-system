@@ -20,8 +20,9 @@ CREATE TABLE IF NOT EXISTS triggers (
     setup_category TEXT,                    -- mean_reversion | momentum
     direction      TEXT,                    -- long | short
     -- The armed condition the monitor watches:
-    condition_type TEXT    NOT NULL,        -- price_below | price_above | rsi_cross_up | rsi_cross_down
-    condition_value REAL   NOT NULL,        -- price level, or RSI threshold
+    condition_type TEXT    NOT NULL,        -- mr_reversal_long | breakout_long | breakdown_short | (legacy price_*/rsi_*)
+    condition_value REAL   NOT NULL,        -- primary numeric (breakout level, or RSI-2 reclaim level) — for display
+    condition_json TEXT,                    -- full multi-factor condition {kind, ...levels}
     timeframe      TEXT    DEFAULT '1d',    -- candle timeframe for indicator conditions
     -- Suggested trade (informational; user executes manually):
     ref_price      REAL,                    -- price at scan time
@@ -43,7 +44,7 @@ CREATE INDEX IF NOT EXISTS idx_triggers_status ON triggers(status);
 
 _COLS = [
     "id", "symbol", "setup_label", "setup_category", "direction",
-    "condition_type", "condition_value", "timeframe", "ref_price",
+    "condition_type", "condition_value", "condition_json", "timeframe", "ref_price",
     "entry", "target", "stop", "rr", "composite", "status",
     "created_at", "expires_at", "fired_at", "fired_price", "note",
 ]
@@ -51,7 +52,13 @@ _COLS = [
 
 def _conn() -> sqlite3.Connection:
     con = sqlite3.connect(str(DB_PATH))
+    con.row_factory = sqlite3.Row          # column-name access → order-independent reads
     con.executescript(_CREATE_SQL)
+    # ALTER-safe migration for DBs created before condition_json existed.
+    try:
+        con.execute("ALTER TABLE triggers ADD COLUMN condition_json TEXT")
+    except sqlite3.OperationalError:
+        pass  # column already exists
     return con
 
 
@@ -65,6 +72,7 @@ def add_trigger(
     condition_type: str,
     condition_value: float,
     *,
+    condition_json: str | None = None,
     setup_label: str | None = None,
     setup_category: str | None = None,
     direction: str | None = "long",
@@ -83,12 +91,12 @@ def add_trigger(
         cur = con.execute(
             """INSERT INTO triggers
                (symbol, setup_label, setup_category, direction, condition_type,
-                condition_value, timeframe, ref_price, entry, target, stop, rr,
-                composite, status, created_at, expires_at, note)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'active',?,?,?)""",
+                condition_value, condition_json, timeframe, ref_price, entry, target,
+                stop, rr, composite, status, created_at, expires_at, note)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'active',?,?,?)""",
             (symbol, setup_label, setup_category, direction, condition_type,
-             condition_value, timeframe, ref_price, entry, target, stop, rr,
-             composite, now, expires_at, note),
+             condition_value, condition_json, timeframe, ref_price, entry, target,
+             stop, rr, composite, now, expires_at, note),
         )
         return cur.lastrowid
 
@@ -101,7 +109,7 @@ def get_triggers(status: str | None = "active", limit: int = 500) -> list[dict]:
             f"SELECT * FROM triggers {where} ORDER BY composite DESC, created_at DESC LIMIT ?",
             (*params, limit),
         ).fetchall()
-    return [dict(zip(_COLS, r)) for r in rows]
+    return [dict(r) for r in rows]
 
 
 def active_symbols() -> list[str]:

@@ -15,6 +15,7 @@ Signal-only: arming a trigger sends the user an alert later; it never trades.
 """
 from __future__ import annotations
 import re
+import json
 import datetime
 from triggers import db as tdb
 from skills.scanner import run_crypto_scan, ScanCriteria
@@ -24,7 +25,7 @@ from utils.logger import get_logger
 log = get_logger(__name__)
 
 _MR_BOOST = 1.15          # mean-reversion setups get a 15% composite edge
-_RSI_CONFIRM = 35.0       # RSI(14) level a MR long must reclaim to confirm
+_RSI2_RECLAIM = 12.0      # RSI(2) level a MR long must turn back up through to confirm
 
 
 def _num(s) -> float | None:
@@ -79,22 +80,32 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         cat = r.get("setup_category")
         ref = r.get("price")
         entry, target, stop = _num(trade.get("entry")), _num(trade.get("target")), _num(trade.get("stop"))
+        # 20-day mean = Bollinger midline (from the scan's BB bands).
+        bb_u, bb_l = r.get("bb_upper"), r.get("bb_lower")
+        mean20 = (bb_u + bb_l) / 2 if (bb_u is not None and bb_l is not None) else ref
 
         if cat == "mean_reversion" and direction == "long":
-            # Wait for the bounce to confirm (RSI reclaims the level) — don't
-            # catch a knife. rsi_cross_up only fires on the actual cross.
-            ctype, cval = "rsi_cross_up", _RSI_CONFIRM
+            # Multi-factor bounce confirmation (evaluated live by the monitor):
+            # RSI(2) turns up through the level + green bar + still below the mean
+            # + above the stop. Auto-invalidates if the stop is hit first.
+            ctype, cval = "mr_reversal_long", _RSI2_RECLAIM
+            cond = {"kind": "mr_reversal", "rsi2_level": _RSI2_RECLAIM,
+                    "mean": mean20, "stop": stop}
+            desc = f"RSI2↑{_RSI2_RECLAIM:.0f} + green bar + price<mean({mean20:.4g}) + >stop"
         elif direction == "long":
-            # Momentum: require a real breakout above the reference so the alert
-            # marks upward confirmation, not an instant fire at current price.
             level = entry if (entry and ref and entry > ref) else (ref or entry) * 1.005
-            ctype, cval = "price_above", level
+            ctype, cval = "breakout_long", level
+            cond = {"kind": "breakout", "level": level, "stop": stop, "rsi_max": 80}
+            desc = f"close>{level:.4g} breakout + RSI14<80 (invalidate<stop)"
         else:
             level = entry if (entry and ref and entry < ref) else (ref or entry) * 0.995
-            ctype, cval = "price_below", level
+            ctype, cval = "breakdown_short", level
+            cond = {"kind": "breakdown", "level": level, "stop": stop, "rsi_min": 20}
+            desc = f"close<{level:.4g} breakdown + RSI14>20 (invalidate>stop)"
 
         tid = tdb.add_trigger(
             symbol=r["ticker"], condition_type=ctype, condition_value=float(cval),
+            condition_json=json.dumps(cond),
             setup_label=r.get("setup_label"), setup_category=cat, direction=direction,
             timeframe="1d", ref_price=ref, entry=entry, target=target, stop=stop,
             rr=_num(trade.get("rr")), composite=r["_composite"], expires_at=expires,
@@ -103,7 +114,7 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         armed.append({
             "id": tid, "symbol": r["ticker"], "setup_label": r.get("setup_label"),
             "category": cat, "direction": direction, "composite": r["_composite"],
-            "condition": f"{ctype} @ {cval}",
+            "condition": desc,
         })
 
     log.info("scan_and_arm: %d candidates, armed top %d (cancelled %d prior)",
