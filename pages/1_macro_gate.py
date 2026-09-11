@@ -122,6 +122,59 @@ def history_chart(raw: list, label: str, color: str = "#4ade80") -> go.Figure:
     return fig
 
 
+# ── Plain-English interpretation ───────────────────────────────────────────────
+def plain_read(key: str, sig: dict) -> str:
+    """One-line 'what this means' per signal, so the page reads without jargon."""
+    s = sig["score"]
+    v = sig.get("value")
+    if key == "crypto_momentum":
+        return ("BTC in a strong uptrend" if s >= 70 else
+                "BTC trend is mixed" if s >= 45 else "BTC in a downtrend — caution")
+    if key == "crypto_breadth":
+        return (f"Broad — most coins trending up ({v:.0f}%)" if s >= 65 else
+                f"Mixed participation ({v:.0f}%)" if s >= 40 else
+                f"Narrow — few coins holding up ({v:.0f}%), fragile")
+    if key == "total_mcap":
+        return ("Market expanding — money flowing in" if s >= 60 else
+                "Market flat / transitioning" if s >= 45 else "Market contracting")
+    if key == "m2_growth":
+        return ("Global liquidity rising — supportive" if s >= 60 else
+                "Liquidity flat" if s >= 45 else "Liquidity tightening — headwind")
+    if key == "funding_regime":
+        return ("Positioning healthy" if s >= 60 else
+                "Positioning neutral" if s >= 45 else "Crowded/froth or stress — careful")
+    if key == "fear_greed":
+        if v is None: return "—"
+        return ("Extreme greed — contrarian caution" if v >= 80 else
+                "Greedy — don't chase" if v >= 65 else
+                "Neutral sentiment" if v >= 40 else
+                "Fear — contrarian opportunity" if v >= 20 else
+                "Extreme fear — capitulation (opportunity, risky)")
+    if key == "btc_dominance":
+        d = (sig.get("detail") or "")
+        return ("Capital rotating to alts — risk-on" if "falling" in d else
+                "Flight to BTC — risk-off" if "rising" in d else "Dominance flat")
+    if key == "dxy":
+        return ("Dollar weakening — tailwind for crypto" if s >= 60 else
+                "Dollar flat" if s >= 45 else "Dollar strengthening — headwind")
+    return ("Bullish" if s >= 65 else "Neutral" if s >= 45 else "Bearish")
+
+
+def bottom_line(score: float, regime: str, sigs: dict) -> str:
+    bull = sum(1 for x in sigs.values() if x["score"] >= 60)
+    bear = sum(1 for x in sigs.values() if x["score"] < 40)
+    if score >= 70:
+        action = "Conditions are risk-on. Deploy with your normal size; both momentum and dip-buys are in play."
+    elif score >= 50:
+        action = "Selective. Favor high-conviction mean-reversion entries, size down, and don't chase breakouts."
+    elif score >= 30:
+        action = "Cautious. Keep exposure light — take only the very best setups, tighten stops."
+    else:
+        action = "Risk-off. Preserve capital; wait for the regime to improve before deploying."
+    return (f"**Bottom line — {regime} ({score:.0f}/100).** {action}  \n"
+            f"*{bull} of {len(sigs)} signals bullish, {bear} bearish.*")
+
+
 # ── Page ──────────────────────────────────────────────────────────────────────
 st.title("🌐 Macro Deployment Gate")
 st.caption("8-signal crypto macro regime scanner · Answers: *Should I deploy capital into crypto right now?*")
@@ -165,6 +218,14 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# Plain-English "what this means for me right now"
+_bl_color = score_color_hex(deploy_score)
+st.markdown(
+    f'<div style="background:#161b22;border-left:4px solid {_bl_color};border-radius:6px;'
+    f'padding:14px 18px;margin:6px 0 4px 0">{bottom_line(deploy_score, regime, signals)}</div>',
+    unsafe_allow_html=True,
+)
+
 st.divider()
 
 # ── Radar chart + signal gauges ───────────────────────────────────────────────
@@ -195,6 +256,7 @@ for key, sig in signals.items():
     rows.append({
         "Signal":  sig["name"],
         "Score":   round(score, 1),
+        "What it means": plain_read(key, sig),
         "Value":   val_str,
         "Weight":  f"{SIGNAL_WEIGHTS[key]*100:.0f}%",
         "Detail":  sig.get("detail", ""),
