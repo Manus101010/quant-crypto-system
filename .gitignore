@@ -1,0 +1,20 @@
+# Secrets — never commit
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual env
+venv/
+.venv/
+
+# Data / caches / DBs (regenerated at runtime)
+data/*.db
+data/*.json
+*.log
+
+# OS
+.DS_Store

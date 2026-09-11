@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "quantcore",
+      "runtimeExecutable": "/Users/manusmclaughlin/Desktop/claude-trading-sytem/venv/bin/python",
+      "runtimeArgs": ["/Users/manusmclaughlin/Desktop/claude-trading-sytem/server.py"],
+      "port": 8501
+    }
+  ]
+}

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuantCore — AI Trading Intelligence</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js" defer></script>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────── -->
+  <nav id="sidebar">
+    <div class="logo">
+      <div class="logo-icon">Q</div>
+      <div>
+        <div class="logo-name">QuantCore</div>
+        <div class="logo-sub">AI Intelligence</div>
+      </div>
+    </div>
+
+    <div class="nav-section">Core</div>
+    <a class="nav-item active" data-page="dashboard">
+      <span class="nav-icon">◈</span> Dashboard
+    </a>
+    <a class="nav-item" data-page="scanner">
+      <span class="nav-icon">⊞</span> Scanner
+    </a>
+
+    <div class="nav-section">Analysis</div>
+    <a class="nav-item" data-page="macro">
+      <span class="nav-icon">▦</span> Macro Gate
+    </a>
+    <a class="nav-item" data-page="analyst">
+      <span class="nav-icon">◉</span> Analyst Rankings
+    </a>
+    <a class="nav-item" data-page="deltas">
+      <span class="nav-icon">⬡</span> Rank Deltas
+    </a>
+    <a class="nav-item" data-page="journal">
+      <span class="nav-icon">◱</span> Journal
+    </a>
+    <a class="nav-item" data-page="papertrades">
+      <span class="nav-icon">◎</span> Paper Trades
+    </a>
+
+    <div class="sidebar-footer">
+      <div class="status-pill">
+        <div class="status-dot"></div>
+        <span id="status-text">System Online</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Main ───────────────────────────────────────────────────── -->
+  <div id="main">
+    <!-- Topbar -->
+    <div id="topbar">
+      <div id="topbar-left">
+        <div id="page-title">Dashboard</div>
+        <div id="regime-chip" class="regime-chip" style="display:none">⬡ —</div>
+      </div>
+      <div id="topbar-right"></div>
+    </div>
+
+    <!-- Dynamic page content -->
+    <div id="page-content"></div>
+  </div>
+
+</div>
+
+<!-- Global tooltip -->
+<div id="qc-tooltip" role="tooltip" aria-hidden="true"></div>
+
+<script src="/static/js/api.js"></script>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/pages.js"></script>
+</body>
+</html>
