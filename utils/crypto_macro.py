@@ -11,6 +11,7 @@ None / [] gracefully on failure so signals degrade to neutral rather than crash.
 """
 from __future__ import annotations
 import time
+import threading
 import requests
 from utils.logger import get_logger
 
@@ -19,6 +20,10 @@ log = get_logger(__name__)
 _TTL = 900  # 15-minute cache — these are slow-moving macro series
 _cache: dict[str, tuple[float, object]] = {}
 _TIMEOUT = 12
+# CoinGecko's free tier rate-limits bursts. Serialise CoinGecko calls so the
+# parallel macro signals don't fire ~6 at once and trip a 429; the cache makes
+# all but the first caller instant. DeFiLlama / alternative.me are unaffected.
+_CG_LOCK = threading.Lock()
 
 
 def _cached(key: str):
@@ -33,41 +38,55 @@ def _store(key: str, val):
     return val
 
 
+def _cg_get(key: str, fetch):
+    """Locked, double-checked cache around a CoinGecko fetch. Serialises
+    CoinGecko calls (free-tier burst protection); `fetch()` returns the value."""
+    c = _cached(key)
+    if c is not None:
+        return c
+    with _CG_LOCK:
+        c = _cached(key)              # re-check: another thread may have filled it
+        if c is not None:
+            return c
+        return _store(key, fetch())
+
+
 # ── CoinGecko globals: BTC dominance + total market cap ───────────────────────
 def global_snapshot() -> dict:
     """{'btc_dominance': %, 'total_mcap_usd': float} — or empty dict on failure."""
-    c = _cached("global")
-    if c is not None:
-        return c
-    try:
-        r = requests.get("https://api.coingecko.com/api/v3/global", timeout=_TIMEOUT)
-        r.raise_for_status()
-        d = r.json()["data"]
-        out = {
-            "btc_dominance":  float(d["market_cap_percentage"]["btc"]),
-            "eth_dominance":  float(d["market_cap_percentage"].get("eth", 0.0)),
-            "total_mcap_usd": float(d["total_market_cap"]["usd"]),
-        }
-        return _store("global", out)
-    except Exception as exc:               # noqa: BLE001
-        log.warning("crypto_macro: CoinGecko /global failed — %s", exc)
-        return {}
+    def _fetch():
+        try:
+            r = requests.get("https://api.coingecko.com/api/v3/global", timeout=_TIMEOUT)
+            r.raise_for_status()
+            d = r.json()["data"]
+            return {
+                "btc_dominance":  float(d["market_cap_percentage"]["btc"]),
+                "eth_dominance":  float(d["market_cap_percentage"].get("eth", 0.0)),
+                "total_mcap_usd": float(d["total_market_cap"]["usd"]),
+            }
+        except Exception as exc:           # noqa: BLE001
+            log.warning("crypto_macro: CoinGecko /global failed — %s", exc)
+            return {}
+    return _cg_get("global", _fetch)
 
 
 def _coin_mcap_history(coin_id: str, days: int) -> list[float]:
-    """Free per-coin market-cap history (USD) via CoinGecko /market_chart."""
-    try:
-        r = requests.get(
-            f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart",
-            params={"vs_currency": "usd", "days": days, "interval": "daily"},
-            timeout=_TIMEOUT,
-        )
-        r.raise_for_status()
-        caps = r.json().get("market_caps", [])
-        return [float(p[1]) for p in caps if p and p[1] is not None]
-    except Exception as exc:               # noqa: BLE001
-        log.warning("crypto_macro: coin mcap %s failed — %s", coin_id, exc)
-        return []
+    """Free per-coin market-cap history (USD) via CoinGecko /market_chart.
+    Cached + serialised so concurrent macro signals share one fetch, no 429s."""
+    def _fetch():
+        try:
+            r = requests.get(
+                f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart",
+                params={"vs_currency": "usd", "days": days, "interval": "daily"},
+                timeout=_TIMEOUT,
+            )
+            r.raise_for_status()
+            caps = r.json().get("market_caps", [])
+            return [float(p[1]) for p in caps if p and p[1] is not None]
+        except Exception as exc:           # noqa: BLE001
+            log.warning("crypto_macro: coin mcap %s failed — %s", coin_id, exc)
+            return []
+    return _cg_get(f"coinmcap_{coin_id}_{days}", _fetch)
 
 
 def total_mcap_history(days: int = 365) -> list[float]:

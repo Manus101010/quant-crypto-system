@@ -16,26 +16,19 @@ FRED_API_KEY: str = os.getenv("FRED_API_KEY", "")
 
 CLAUDE_MODEL = "claude-sonnet-4-6"
 
-# Macro signal relative weights (normalised automatically by aggregator).
-# Methodology: equal weighting as base, with correlated signals down-weighted.
-# VIX level + term structure are correlated → each weighted at 0.8 of base.
-# Yield curve has long lead times (12-24 months) → 0.8 of base.
-# Monthly signals (M2) → 0.8 of base due to data lag.
-# Inflation breakeven is a regime classifier more than a timing signal → 0.6.
-# Sources: AQR multi-factor framework, IMF FCI equal-weighting research (2022).
+# Crypto macro-gate signal weights (normalised automatically by the aggregator).
+# The deployment score answers: "should I deploy capital into crypto right now?"
+# Primary trend/health signals weighted at 1.0; positioning/sentiment at 0.8;
+# rotation and macro-backdrop at 0.6. Tunable via the What-If sliders on page 1.
 SIGNAL_WEIGHTS = {
-    # Original 7 signals (rebalanced)
-    "vix_level":          0.80,   # high correlation with term structure → reduced
-    "vix_term_structure": 0.80,   # high correlation with vix_level → reduced
-    "breadth":            1.00,
-    "credit_spreads":     1.00,
-    "put_call":           1.00,   # improved with VIX9D component
-    "yield_curve":        0.80,   # strong but long lead time → reduced
-    "momentum":           1.00,
-    # New institutional signals (FRED)
-    "nfci":               1.00,   # Chicago Fed Financial Conditions — composite, daily
-    "m2_growth":          0.80,   # M2 money supply YoY — monthly lag
-    "inflation":          0.60,   # 10Y TIPS breakeven — regime signal, not timing
+    "crypto_momentum": 1.00,   # BTC golden cross + 3M/12-1 momentum — trend backbone
+    "crypto_breadth":  1.00,   # % of top coins above their 50-DMA — market health
+    "total_mcap":      1.00,   # total market-cap trend vs its MA — expansion/contraction
+    "m2_growth":       0.80,   # global M2 YoY (FRED) — liquidity, carried over
+    "funding_regime":  0.80,   # perp funding across top coins — leverage / froth
+    "fear_greed":      0.80,   # alternative.me Fear & Greed — sentiment (contrarian)
+    "btc_dominance":   0.60,   # BTC vs alts rotation — risk appetite within crypto
+    "dxy":             0.60,   # broad USD trend (FRED) — macro backdrop
 }
 
 # Deployment score thresholds

@@ -124,7 +124,7 @@ def history_chart(raw: list, label: str, color: str = "#4ade80") -> go.Figure:
 
 # ── Page ──────────────────────────────────────────────────────────────────────
 st.title("🌐 Macro Deployment Gate")
-st.caption("7-signal macro regime scanner · Answers: *Should I deploy capital right now?*")
+st.caption("8-signal crypto macro regime scanner · Answers: *Should I deploy capital into crypto right now?*")
 st.divider()
 
 run_col, info_col = st.columns([1, 3])

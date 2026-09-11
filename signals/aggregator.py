@@ -1,39 +1,38 @@
 """
 Signal Aggregator
-Runs all 7 signals, blends them into a weighted deployment score,
+Runs the crypto macro signals, blends them into a weighted deployment score,
 and returns a structured result with regime classification.
+
+The framework (parallel fetch, weighted blend, regime classification) is
+unchanged from the equity version — only the signal set was swapped for the
+crypto refocus. Equity signal modules remain in git history / on disk but are
+no longer wired in here.
 """
 from __future__ import annotations
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from config import SIGNAL_WEIGHTS, DEPLOY_THRESHOLDS
 from utils.logger import get_logger
-import signals.vix_level as vix_level
-import signals.vix_term_structure as vix_ts
-import signals.breadth as breadth
-import signals.credit_spreads as credit_spreads
-import signals.put_call as put_call
-import signals.yield_curve as yield_curve
-import signals.momentum as momentum
-import signals.nfci as nfci
+import signals.crypto_momentum as crypto_momentum
+import signals.crypto_breadth as crypto_breadth
+import signals.total_mcap as total_mcap
 import signals.m2_growth as m2_growth
-import signals.inflation as inflation
+import signals.funding_regime as funding_regime
+import signals.fear_greed as fear_greed
+import signals.btc_dominance as btc_dominance
+import signals.dxy as dxy
 
 log = get_logger(__name__)
 
 _SIGNAL_MAP = {
-    # Original 7
-    "vix_level":          vix_level.compute,
-    "vix_term_structure": vix_ts.compute,
-    "breadth":            breadth.compute,
-    "credit_spreads":     credit_spreads.compute,
-    "put_call":           put_call.compute,
-    "yield_curve":        yield_curve.compute,
-    "momentum":           momentum.compute,
-    # New institutional signals
-    "nfci":               nfci.compute,
-    "m2_growth":          m2_growth.compute,
-    "inflation":          inflation.compute,
+    "crypto_momentum": crypto_momentum.compute,
+    "crypto_breadth":  crypto_breadth.compute,
+    "total_mcap":      total_mcap.compute,
+    "m2_growth":       m2_growth.compute,
+    "funding_regime":  funding_regime.compute,
+    "fear_greed":      fear_greed.compute,
+    "btc_dominance":   btc_dominance.compute,
+    "dxy":             dxy.compute,
 }
 
 
