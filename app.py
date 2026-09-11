@@ -17,45 +17,44 @@ st.markdown(DARK_THEME_CSS, unsafe_allow_html=True)
 
 # ── Sidebar branding ──────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 📊 Quant AI System")
-    st.caption("Macro Gate · Analyst Rankings · Backtests · Journal")
+    st.markdown("## 📊 Quant Crypto System")
+    st.caption("Macro Gate · Scanner · Journal")
     st.divider()
     st.markdown("**Navigation**")
-    st.page_link("pages/1_macro_gate.py",       label="🌐 Macro Gate",        icon="🌐")
-    st.page_link("pages/6_scanner.py",          label="🛰️ Scanner",           icon="🛰️")
-    st.page_link("pages/2_analyst_rankings.py", label="🔬 Analyst Rankings",  icon="🔬")
-    st.page_link("pages/3_rank_deltas.py",      label="📈 Rank Deltas",       icon="📈")
-    st.page_link("pages/4_backtests.py",        label="⏱  Backtests",         icon="⏱")
-    st.page_link("pages/5_journal.py",          label="📓 Journal",           icon="📓")
+    st.page_link("pages/1_macro_gate.py", label="🌐 Macro Gate", icon="🌐")
+    st.page_link("pages/6_scanner.py",    label="🛰️ Scanner",     icon="🛰️")
+    st.page_link("pages/5_journal.py",    label="📓 Journal",     icon="📓")
     st.divider()
-    st.caption("Powered by Claude + yfinance")
+    st.caption("Signal-only · you execute manually")
 
 # ── Home splash ───────────────────────────────────────────────────────────────
-st.title("Quant AI Trading System")
+st.title("Quant Crypto Trading System")
 st.markdown("""
-A professional two-layer trading intelligence system:
+A **signal-only** crypto intelligence system — it scans, ranks, and alerts;
+**you** execute every trade manually.
 
-| Layer | Module | Description |
-|-------|--------|-------------|
-| **L1** | Macro Gate | 7-signal deployment scoring — *should I be in the market right now?* |
-| **L3** | Claude Analyst | AI-powered fundamental analysis — *which stocks deserve capital?* |
+| Module | Description |
+|--------|-------------|
+| **🌐 Macro Gate** | 8-signal crypto deployment score — *is the regime risk-on right now?* |
+| **🛰️ Scanner** | Screens liquid coins for mean-reversion & momentum setups, arms triggers |
+| **📱 Monitor** | Standalone `monitor.py` watches triggers and pushes Telegram alerts |
+| **📓 Journal** | Log your manual trades and ideas |
 
 ---
 
 ### Quick Start
-1. Go to **Macro Gate** to check current market conditions.
-2. Run **Analyst Rankings** to score your watchlist.
-3. Review **Rank Deltas** for upgrades / downgrades.
-4. Use **Backtests** to validate strategy ideas.
-5. Log trades and ideas in the **Journal**.
+1. **Macro Gate** — check the crypto regime.
+2. **Scanner** — run a scan, arm the top setups as triggers.
+3. Run the monitor on an always-on host (`python monitor.py`) for phone alerts.
+4. Log fills in the **Journal**.
 
 ---
 """)
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.info("**7 Macro Signals**\nVIX, Term Structure, Breadth, Credit, Sentiment, Yield Curve, Momentum")
+    st.info("**8 Crypto Macro Signals**\nBTC Momentum, Breadth, Total Mcap, M2, Funding, Fear & Greed, BTC.D, DXY")
 with col2:
-    st.info("**Claude L3 Analyst**\n7 scoring dimensions with chain-of-thought, self-critique & peer benchmarks")
+    st.info("**Mean-Reversion-Weighted Scanner**\nRSI/BB/z-score setups on the liquid ccxt universe, ranked by composite")
 with col3:
-    st.info("**vectorbt Backtests**\nSMA cross & macro-gated strategies with full equity curves")
+    st.info("**Telegram Alerts**\nStandalone monitor fires phone alerts when a trigger condition is met — signal only")
