@@ -119,6 +119,40 @@ def get_ohlcv_batch(symbols: list[str], timeframe: str = "1d", limit: int = 400,
     return out
 
 
+def get_last_prices(symbols: list[str]) -> dict[str, float]:
+    """
+    Batched latest spot price → {symbol: last_price}. One fetch_tickers call
+    covers the whole list on a venue; falls back to per-symbol 1m candles.
+    Used by the monitor to evaluate price-level triggers with live prices.
+    """
+    if not symbols:
+        return {}
+    ccxt_syms = [to_ccxt_symbol(s) for s in symbols]
+    for name in _SPOT_CHAIN:
+        ex = _client(name)
+        if ex is None:
+            continue
+        try:
+            tickers = ex.fetch_tickers(ccxt_syms)
+            out = {}
+            for orig, cs in zip(symbols, ccxt_syms):
+                t = tickers.get(cs)
+                if t and t.get("last") is not None:
+                    out[orig] = float(t["last"])
+            if out:
+                return out
+        except Exception as exc:           # noqa: BLE001
+            log.debug("exchange: %s fetch_tickers failed — %s", name, exc)
+            continue
+    # Per-symbol fallback
+    out = {}
+    for s in symbols:
+        df = get_ohlcv(s, "1m", limit=1)
+        if not df.empty:
+            out[s] = float(df["close"].iloc[-1])
+    return out
+
+
 def get_funding_rate(symbol: str, exchange: str | None = None) -> dict | None:
     """
     Latest funding rate for a USDT perp. Returns {symbol, rate, exchange} or None.

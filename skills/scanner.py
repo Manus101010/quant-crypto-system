@@ -648,12 +648,19 @@ def run_crypto_scan(
     criteria: ScanCriteria | None = None,
     regime_score: float | None = None,
 ) -> pd.DataFrame:
-    """Crypto scanner — uses Bybit public API for OHLCV (faster, no rate limits)."""
-    from utils.bybit import fetch_ohlcv
+    """
+    Crypto scanner — sources OHLCV from the ccxt data layer (utils/exchange.py),
+    the canonical read-only price source for the crypto refocus. Multi-exchange
+    fallback, no keys. (utils/bybit.py is retained only as a legacy fallback.)
+    """
+    from utils.exchange import get_ohlcv_batch
     ticker_list = tickers or DEFAULT_CRYPTO_WATCHLIST
     crit = criteria or ScanCriteria(min_price=0.0, above_sma200=False, above_sma50=False)
-    bybit_data = fetch_ohlcv(ticker_list, days=400)   # ≥273 bars for 12-1 momentum
-    return _run_from_bybit(bybit_data, ticker_list, crit, regime_score=regime_score)
+    # ≥273 daily bars for the 12-1 momentum factor. get_ohlcv_batch returns
+    # {ticker: DataFrame[open,high,low,close,volume]} — the shape _run_from_bybit
+    # consumes (turnover optional → falls back to volume×close for USD volume).
+    ohlc = get_ohlcv_batch(ticker_list, timeframe="1d", limit=400)
+    return _run_from_bybit(ohlc, ticker_list, crit, regime_score=regime_score)
 
 
 # ── Core scanner ──────────────────────────────────────────────────────────────

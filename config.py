@@ -13,6 +13,8 @@ CACHE_PATH = DATA_DIR / "analyst_cache.db"
 
 ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
 FRED_API_KEY: str = os.getenv("FRED_API_KEY", "")
+TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
 
 CLAUDE_MODEL = "claude-sonnet-4-6"
 

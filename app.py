@@ -22,6 +22,7 @@ with st.sidebar:
     st.divider()
     st.markdown("**Navigation**")
     st.page_link("pages/1_macro_gate.py",       label="🌐 Macro Gate",        icon="🌐")
+    st.page_link("pages/6_scanner.py",          label="🛰️ Scanner",           icon="🛰️")
     st.page_link("pages/2_analyst_rankings.py", label="🔬 Analyst Rankings",  icon="🔬")
     st.page_link("pages/3_rank_deltas.py",      label="📈 Rank Deltas",       icon="📈")
     st.page_link("pages/4_backtests.py",        label="⏱  Backtests",         icon="⏱")
