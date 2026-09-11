@@ -59,6 +59,18 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     rows = [r for r in df.to_dict("records")
             if (r.get("trade") or {}).get("action") in ("BUY", "SELL/EXIT")]
 
+    # ── Edge gate: only arm setups with a measured positive edge on crypto ─────
+    # If a backtest validation exists, drop setups that failed it (PF ≤ 1). This
+    # is the institutional discipline: don't trade a setup with no proven edge.
+    from backtesting.crypto_validation import validated_labels
+    valid = validated_labels()
+    gated_out = []
+    if valid is not None:
+        kept = [r for r in rows if r.get("setup_label") in valid]
+        gated_out = sorted({r.get("setup_label") for r in rows
+                            if r.get("setup_label") not in valid})
+        rows = kept
+
     # Mean-reversion-weighted composite ranking.
     for r in rows:
         conv = r.get("conviction") or 0
@@ -119,4 +131,5 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
 
     log.info("scan_and_arm: %d candidates, armed top %d (cancelled %d prior)",
              len(rows), len(armed), cancelled)
-    return {"candidates": top, "armed": armed}
+    return {"candidates": top, "armed": armed,
+            "edge_gated": valid is not None, "gated_out_setups": gated_out}
