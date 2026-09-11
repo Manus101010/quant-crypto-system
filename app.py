@@ -22,8 +22,8 @@ with st.sidebar:
     st.divider()
     st.markdown("**Navigation**")
     st.page_link("pages/1_macro_gate.py", label="🌐 Macro Gate", icon="🌐")
-    st.page_link("pages/6_scanner.py",    label="🛰️ Scanner",     icon="🛰️")
-    st.page_link("pages/5_journal.py",    label="📓 Journal",     icon="📓")
+    st.page_link("pages/2_scanner.py",    label="🛰️ Scanner",     icon="🛰️")
+    st.page_link("pages/3_journal.py",    label="📓 Journal",     icon="📓")
     st.divider()
     st.caption("Signal-only · you execute manually")
 
