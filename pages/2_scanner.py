@@ -48,9 +48,19 @@ if run:
         res = run_scan_and_arm(universe_size=universe, top_n=top_n,
                                regime_score=regime_score, expiry_hours=expiry)
         st.session_state["scan_res"] = res
-    n = len(res["armed"])
-    st.success(f"Armed {n} triggers from {len(res['candidates'])} actionable setups. "
-               f"The monitor will alert you when a condition is met.")
+    if res.get("regime_blocked"):
+        st.warning(f"⛔ Regime is risk-off (Deployment Score {res.get('regime_score'):.0f} < 45) — "
+                   f"**nothing armed.** These setups only have edge in a risk-on regime. "
+                   f"Showing candidates for reference; run the Macro Gate and wait for it to improve.")
+    else:
+        n = len(res["armed"])
+        st.success(f"Armed {n} triggers from {len(res['candidates'])} actionable setups. "
+                   f"The monitor will alert you when a condition is met.")
+    if res.get("management"):
+        st.info(f"📐 {res['management']}  (this is how the backtested edge was actually captured — "
+                f"cut losers fast, let the few big winners run.)")
+    if res.get("gated_out_setups"):
+        st.caption("Excluded (no validated edge): " + ", ".join(res["gated_out_setups"]))
 
 res = st.session_state.get("scan_res")
 

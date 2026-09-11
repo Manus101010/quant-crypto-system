@@ -68,6 +68,7 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     if trg.get("target"): lines.append(f"Target: {_fmt_price(trg['target'])}")
     if trg.get("stop"):   lines.append(f"Stop: {_fmt_price(trg['stop'])}")
     if trg.get("rr"):     lines.append(f"R:R: {trg['rr']}")
+    lines.append("📐 Trail a wide ATR stop, let winners run (don't cap at target).")
     lines.append("\n<i>Signal only — review and execute manually.</i>")
     return "\n".join(lines)
 
