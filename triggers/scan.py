@@ -29,18 +29,23 @@ _RSI2_RECLAIM = 12.0      # RSI(2) level a MR long must turn back up through to 
 _MIN_DEPLOY_TO_ARM = 45.0 # macro Deployment Score below this = risk-off → don't arm
 
 
-def _management_note() -> str:
-    """The trade management the backtested edge requires (from the saved validation)."""
+def _management_params() -> dict | None:
+    """The validated trade-management config (stop_mult, target_r, trailing, max_hold)."""
     try:
         from backtesting.crypto_validation import load_validation
         v = load_validation() or {}
-        m = (v.get("meta", {}).get("params", {}) or {}).get("management")
-        if m:
-            trail = f"trail a {m['stop_mult']}×ATR stop" if m.get("trailing") else \
-                    f"{m['stop_mult']}×ATR stop, {m['target_r']}R target"
-            return f"Manage: {trail}, hold up to {m['max_hold']} days, let winners run."
+        return (v.get("meta", {}).get("params", {}) or {}).get("management")
     except Exception:
-        pass
+        return None
+
+
+def _management_note() -> str:
+    """The trade management the backtested edge requires (from the saved validation)."""
+    m = _management_params()
+    if m:
+        trail = f"trail a {m['stop_mult']}×ATR stop" if m.get("trailing") else \
+                f"{m['stop_mult']}×ATR stop, {m['target_r']}R target"
+        return f"Manage: {trail}, hold up to {m['max_hold']} days, let winners run."
     return "Manage: trail a wide ATR stop and let winners run (see Validation page)."
 
 
@@ -108,6 +113,7 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     cancelled = tdb.clear_active()
     now = datetime.datetime.utcnow()
     expires = (now + datetime.timedelta(hours=expiry_hours)).isoformat()
+    mgmt = _management_params()          # align live stop/target to the validated edge
 
     armed = []
     for r in top:
@@ -120,6 +126,20 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         # 20-day mean = Bollinger midline (from the scan's BB bands).
         bb_u, bb_l = r.get("bb_upper"), r.get("bb_lower")
         mean20 = (bb_u + bb_l) / 2 if (bb_u is not None and bb_l is not None) else ref
+
+        # ── Align stop/target to the VALIDATED management (not the equity-tuned
+        # trade_suggestion). The backtested edge = a wide ATR stop with winners
+        # left to run, so we set the stop from stop_mult×ATR and drop the fixed
+        # target (trailing). Without a validation, fall back to the suggestion.
+        atr = r.get("atr_14")
+        base_px = entry or ref
+        if mgmt and atr and base_px:
+            sm = mgmt.get("stop_mult", 3.5)
+            if direction == "long":
+                stop = round(base_px - sm * atr, 8)
+            else:
+                stop = round(base_px + sm * atr, 8)
+            target = None if mgmt.get("trailing") else target
 
         if cat == "mean_reversion" and direction == "long":
             # Multi-factor bounce confirmation (evaluated live by the monitor):
