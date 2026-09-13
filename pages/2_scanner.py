@@ -8,7 +8,6 @@ Signal only — you execute manually.
 """
 import re
 import streamlit as st
-import pandas as pd
 from config import DARK_THEME_CSS
 
 st.set_page_config(page_title="Scanner", layout="wide")
@@ -65,7 +64,16 @@ if run:
 
 res = st.session_state.get("scan_res")
 
-# ── Ranked candidates (cards) ──────────────────────────────────────────────────
+from triggers import db as tdb
+import json as _json
+import datetime as _dt
+
+_LONG = "#16c784"
+_SHORT = "#ea3943"
+_MUTE = "#8a8f98"
+
+
+# ── Formatting helpers ─────────────────────────────────────────────────────────
 def _price(s):
     """Pull the first dollar/number out of a trade string (e.g. 'Buy near $0.33 …')."""
     if s is None:
@@ -79,112 +87,150 @@ def _price(s):
 def _fmt(p) -> str:
     """Compact price formatting that stays readable across crypto's huge range."""
     p = _price(p)
-    if p is None:
+    if p is None or p == 0:
         return "—"
-    if p == 0:      return "—"
     if p < 0.01:    return f"${p:,.6f}"
     if p < 1:       return f"${p:,.4f}"
     if p < 100:     return f"${p:,.2f}"
     return f"${p:,.0f}"
 
 
-def _setup_card(r: dict) -> str:
-    t = r.get("trade") or {}
-    action = t.get("action")
-    is_long = action == "BUY"
-    accent = "#16c784" if is_long else "#ea3943"        # green long / red short
-    dir_lbl = "▲ LONG" if is_long else "▼ SHORT"
-    cat = (r.get("setup_category") or "").replace("_", " ").title()
-    comp = r.get("_composite")
-    rr = t.get("rr")
-    rr_txt = f"{rr}" if rr else "—"
-
-    def leg(label, val, color="#e6e6e6"):
-        return (f"<div style='flex:1;min-width:70px'>"
-                f"<div style='font-size:11px;color:#8a8f98;text-transform:uppercase;"
-                f"letter-spacing:.04em'>{label}</div>"
-                f"<div style='font-size:15px;font-weight:600;color:{color}'>{val}</div></div>")
-
-    legs = "".join([
-        leg("Entry", _fmt(t.get("entry"))),
-        leg("Target", _fmt(t.get("target")), "#16c784"),
-        leg("Stop", _fmt(t.get("stop")), "#ea3943"),
-        leg("R:R", rr_txt),
-    ])
-
-    return (
-        f"<div style='border:1px solid #2a2e39;border-left:4px solid {accent};"
-        f"border-radius:10px;padding:14px 16px;margin-bottom:12px;background:#161a25'>"
-        f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:2px'>"
-        f"<span style='font-size:20px;font-weight:700;color:#fff'>{r['ticker']}</span>"
-        f"<span style='background:{accent};color:#0d1017;font-weight:700;font-size:12px;"
-        f"padding:3px 10px;border-radius:6px'>{dir_lbl}</span></div>"
-        f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:12px'>"
-        f"<span style='color:#c9ccd3;font-size:13px'>{r.get('setup_label','')}</span>"
-        f"<span style='color:#8a8f98;font-size:12px'>{cat} · score {comp}</span></div>"
-        f"<div style='display:flex;gap:10px'>{legs}</div>"
-        f"</div>"
-    )
+def _expires_in(iso: str | None) -> str:
+    if not iso:
+        return ""
+    try:
+        exp = _dt.datetime.fromisoformat(iso)
+        secs = (exp - _dt.datetime.utcnow()).total_seconds()
+    except Exception:
+        return ""
+    if secs <= 0:
+        return "expired"
+    h = int(secs // 3600)
+    return f"expires in {h}h" if h else f"expires in {int(secs // 60)}m"
 
 
-if res and res["candidates"]:
-    st.subheader(f"Ranked Setups ({len(res['candidates'])})")
-    st.caption("Best setup at top. Green = long, red = short. The top ones get armed as triggers below.")
-    cols = st.columns(2)
-    for i, r in enumerate(res["candidates"]):
-        with cols[i % 2]:
-            st.markdown(_setup_card(r), unsafe_allow_html=True)
-
-# ── Armed triggers ────────────────────────────────────────────────────────────
-st.divider()
-st.subheader("Active Triggers")
-from triggers import db as tdb
-import json as _json
-
-
-def _cond_desc(t: dict) -> str:
-    """Human-readable multi-factor condition."""
+def _cond_plain(t: dict) -> str:
+    """Plain-English 'fires when' description of a trigger's condition."""
     try:
         c = _json.loads(t.get("condition_json") or "{}")
     except Exception:
         c = {}
     kind = c.get("kind")
     if kind == "mr_reversal":
-        return (f"RSI2 turns up ≥{c.get('rsi2_level',12):.0f} + green bar + "
-                f"price < mean ({c.get('mean',0):.4g}) + above stop")
+        return (f"the bounce confirms — RSI(2) turns back up through "
+                f"{c.get('rsi2_level',12):.0f} on a green bar while price is still below "
+                f"the {_fmt(c.get('mean'))} mean")
     if kind == "breakout":
-        return f"Close breaks > {c.get('level',0):.4g} + RSI14 < {c.get('rsi_max',80)} (invalidate < stop)"
+        return f"price closes above {_fmt(c.get('level'))} (invalidates below stop)"
     if kind == "breakdown":
-        return f"Close breaks < {c.get('level',0):.4g} + RSI14 > {c.get('rsi_min',20)} (invalidate > stop)"
-    return f"{t['condition_type']} @ {t['condition_value']}"
+        return f"price closes below {_fmt(c.get('level'))} (invalidates above stop)"
+    return f"{t.get('condition_type')} @ {t.get('condition_value')}"
 
 
+def _legs(entry, target, stop, rr) -> str:
+    def leg(label, val, color="#e6e6e6"):
+        return (f"<div style='flex:1;min-width:64px'>"
+                f"<div style='font-size:10px;color:{_MUTE};text-transform:uppercase;"
+                f"letter-spacing:.05em'>{label}</div>"
+                f"<div style='font-size:15px;font-weight:600;color:{color}'>{val}</div></div>")
+    # Trailing setups have no fixed target — say so instead of showing a bogus R:R.
+    trailing = _price(target) is None
+    tgt_txt = "trail" if trailing else _fmt(target)
+    rr_txt = "—" if trailing else (str(rr) if rr else "—")
+    return ("<div style='display:flex;gap:8px;margin-top:10px'>"
+            + leg("Entry", _fmt(entry))
+            + leg("Target", tgt_txt, _LONG)
+            + leg("Stop", _fmt(stop), _SHORT)
+            + leg("R:R", rr_txt)
+            + "</div>")
+
+
+def _card(symbol, is_long, setup, meta_right, legs_html="", footer="") -> str:
+    accent = _LONG if is_long else _SHORT
+    dir_lbl = "▲ LONG" if is_long else "▼ SHORT"
+    foot = (f"<div style='margin-top:10px;padding-top:9px;border-top:1px solid #23283400;"
+            f"border-top:1px solid #262b38;font-size:12px;color:#a9adb8;line-height:1.45'>"
+            f"{footer}</div>") if footer else ""
+    return (
+        f"<div style='border:1px solid #262b38;border-left:4px solid {accent};"
+        f"border-radius:12px;padding:14px 16px;margin-bottom:12px;background:#161a25'>"
+        f"<div style='display:flex;justify-content:space-between;align-items:center'>"
+        f"<span style='font-size:19px;font-weight:700;color:#fff'>{symbol}</span>"
+        f"<span style='background:{accent};color:#0d1017;font-weight:700;font-size:11px;"
+        f"padding:3px 9px;border-radius:6px'>{dir_lbl}</span></div>"
+        f"<div style='display:flex;justify-content:space-between;align-items:baseline;margin-top:3px'>"
+        f"<span style='color:#c9ccd3;font-size:13px'>{setup}</span>"
+        f"<span style='color:{_MUTE};font-size:11px'>{meta_right}</span></div>"
+        f"{legs_html}{foot}</div>"
+    )
+
+
+def _grid(cards: list[str], ncol: int = 2) -> None:
+    cols = st.columns(ncol)
+    for i, html in enumerate(cards):
+        with cols[i % ncol]:
+            st.markdown(html, unsafe_allow_html=True)
+
+
+# ── Post-scan: full ranked candidate list (ephemeral) ──────────────────────────
+if res and res.get("candidates"):
+    with st.expander(f"🎯 Last scan — {len(res['candidates'])} ranked candidates", expanded=False):
+        st.caption("Everything the scan surfaced, best first. The top ones become the live triggers below.")
+        cards = []
+        for r in res["candidates"]:
+            t = r.get("trade") or {}
+            cards.append(_card(
+                r["ticker"], t.get("action") == "BUY", r.get("setup_label", ""),
+                f"{(r.get('setup_category') or '').replace('_',' ').title()} · score {r.get('_composite')}",
+                _legs(t.get("entry"), t.get("target"), t.get("stop"), t.get("rr")),
+            ))
+        _grid(cards)
+
+# ── Watching now (persisted — the hero section) ────────────────────────────────
+st.divider()
 active = tdb.get_triggers("active")
-if active:
-    at = pd.DataFrame([{
-        "ID": t["id"], "Symbol": t["symbol"], "Setup": t["setup_label"],
-        "Dir": t["direction"], "Condition (all must hold)": _cond_desc(t),
-        "Composite": t["composite"], "Expires": (t.get("expires_at") or "")[:16],
-    } for t in active])
-    st.dataframe(at, use_container_width=True, hide_index=True)
-    if st.button("Cancel all active triggers"):
-        n = tdb.clear_active()
-        st.warning(f"Cancelled {n} triggers.")
-        st.rerun()
-else:
-    st.info("No active triggers. Run a scan to arm some.")
+fired = tdb.get_triggers("fired")[:12]
 
-# ── Recently fired ────────────────────────────────────────────────────────────
-fired = tdb.get_triggers("fired")[:15]
+hcol1, hcol2 = st.columns([3, 1])
+with hcol1:
+    st.subheader("📡 Watching now")
+with hcol2:
+    if active and st.button("Cancel all", use_container_width=True):
+        n = tdb.clear_active()
+        st.toast(f"Cancelled {n} triggers.")
+        st.rerun()
+
+if active:
+    st.caption(f"{len(active)} live trigger{'s' if len(active) != 1 else ''} — the monitor "
+               f"alerts your phone the moment one fires.")
+    cards = []
+    for t in active:
+        is_long = t["direction"] == "long"
+        cards.append(_card(
+            t["symbol"], is_long, t.get("setup_label", ""),
+            f"👁 {_expires_in(t.get('expires_at'))}",
+            _legs(t.get("entry"), t.get("target"), t.get("stop"), t.get("rr")),
+            footer=f"<b style='color:#c9ccd3'>Fires when</b> {_cond_plain(t)}",
+        ))
+    _grid(cards)
+else:
+    st.info("Nothing armed yet. Run a scan above to arm your best setups as live triggers.")
+
+# ── Recently fired (compact cards) ─────────────────────────────────────────────
 if fired:
     st.divider()
-    st.subheader("Recently Fired")
-    ft = pd.DataFrame([{
-        "Symbol": t["symbol"], "Setup": t["setup_label"], "Dir": t["direction"],
-        "Fired": (t.get("fired_at") or "")[:16], "At": t.get("fired_price"),
-        "Reason": t.get("note"),
-    } for t in fired])
-    st.dataframe(ft, use_container_width=True, hide_index=True)
+    st.subheader("✅ Recently fired")
+    cards = []
+    for t in fired:
+        is_long = t["direction"] == "long"
+        when = (t.get("fired_at") or "")[:16].replace("T", " ")
+        cards.append(_card(
+            t["symbol"], is_long, t.get("setup_label", ""),
+            when,
+            footer=f"Fired at <b style='color:#e6e6e6'>{_fmt(t.get('fired_price'))}</b> — "
+                   f"{t.get('note') or 'condition met'}",
+        ))
+    _grid(cards, ncol=3)
 
 st.divider()
 st.caption("Run the monitor on an always-on host: `python monitor.py --interval 120` "
