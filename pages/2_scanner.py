@@ -185,7 +185,7 @@ def _card(symbol, is_long, setup, meta_right, legs_html="", footer="") -> str:
                 f"<span style='font-size:12px;color:{_MUTE};font-weight:500'> chart ↗</span></a>")
     return (
         f"<div style='border:1px solid #262b38;border-left:4px solid {accent};"
-        f"border-radius:12px;padding:14px 16px;margin-bottom:12px;background:#161a25'>"
+        f"border-radius:12px;padding:14px 16px;background:#161a25'>"
         f"<div style='display:flex;justify-content:space-between;align-items:center'>"
         f"{sym_link}"
         f"<span style='background:{accent};color:#0d1017;font-weight:700;font-size:11px;"
@@ -197,11 +197,16 @@ def _card(symbol, is_long, setup, meta_right, legs_html="", footer="") -> str:
     )
 
 
-def _grid(cards: list[str], ncol: int = 2) -> None:
-    cols = st.columns(ncol)
-    for i, html in enumerate(cards):
-        with cols[i % ncol]:
-            st.markdown(html, unsafe_allow_html=True)
+def _grid(cards: list[str], minpx: int = 300) -> None:
+    """Responsive grid: as many columns as fit the browser (min card width minpx)."""
+    if not cards:
+        return
+    st.markdown(
+        f"<div style='display:grid;gap:12px;"
+        f"grid-template-columns:repeat(auto-fill,minmax({minpx}px,1fr))'>"
+        + "".join(cards) + "</div>",
+        unsafe_allow_html=True,
+    )
 
 
 # ── Post-scan: full ranked candidate list (ephemeral) ──────────────────────────
@@ -266,7 +271,7 @@ if fired:
             footer=f"Fired at <b style='color:#e6e6e6'>{_fmt(t.get('fired_price'))}</b> — "
                    f"{t.get('note') or 'condition met'}",
         ))
-    _grid(cards, ncol=3)
+    _grid(cards, minpx=260)
 
 st.divider()
 st.caption("Run the monitor on an always-on host: `python monitor.py --interval 120` "

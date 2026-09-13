@@ -93,5 +93,11 @@ DARK_THEME_CSS = """
     .rank-down { color: #f87171; font-weight: 700; }
     .rank-flat { color: #94a3b8; }
     hr { border-color: #30363d; }
+    /* Use the browser width: trim Streamlit's wide side-padding and cap content
+       at a comfortable width so it fills large monitors without stretching. */
+    .block-container, [data-testid="stMainBlockContainer"] {
+        max-width: 1500px;
+        padding-left: 2.5rem; padding-right: 2.5rem; padding-top: 2.5rem;
+    }
 </style>
 """
