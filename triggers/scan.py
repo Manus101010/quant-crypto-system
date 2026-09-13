@@ -30,19 +30,36 @@ _MIN_DEPLOY_TO_ARM = 45.0 # macro Deployment Score below this = risk-off → don
 _MAX_CANDIDATES = 60      # how many ranked setups to SHOW (we still only arm top_n)
 
 
-def _management_params() -> dict | None:
-    """The validated trade-management config (stop_mult, target_r, trailing, max_hold)."""
+def _management_params(setup_label: str | None = None) -> dict | None:
+    """
+    The validated trade-management config for a setup (stop_mult, target_r,
+    trailing, max_hold). Prefers the per-setup map saved by validate_per_setup;
+    falls back to the global management, then to the code default for the label.
+    """
     try:
         from backtesting.crypto_validation import load_validation
         v = load_validation() or {}
-        return (v.get("meta", {}).get("params", {}) or {}).get("management")
+        if setup_label:
+            per = (v.get("management_by_setup") or {}).get(setup_label)
+            if per:
+                return per
+        glob = (v.get("meta", {}).get("params", {}) or {}).get("management")
+        if glob and not v.get("management_by_setup"):
+            return glob
     except Exception:
-        return None
+        pass
+    if setup_label:
+        try:
+            from backtesting.crypto_optimize import management_for
+            return management_for(setup_label)
+        except Exception:
+            return None
+    return None
 
 
-def _management_note() -> str:
+def _management_note(setup_label: str | None = None) -> str:
     """The trade management the backtested edge requires (from the saved validation)."""
-    m = _management_params()
+    m = _management_params(setup_label)
     if m:
         if m.get("trailing"):
             return (f"Manage: trail a {m['stop_mult']}×ATR stop, hold up to "
@@ -123,14 +140,14 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     if regime_score is not None and regime_score < _MIN_DEPLOY_TO_ARM:
         return {"candidates": candidates, "armed": [], "edge_gated": valid is not None,
                 "gated_out_setups": gated_out, "regime_blocked": True,
-                "regime_score": regime_score, "management": _management_note(),
-                "actionable": len(rows)}
+                "regime_score": regime_score, "actionable": len(rows),
+                "management": "Exits are set per setup (breakouts trail; mean-reversion "
+                              "& momentum take a fixed target)."}
 
     # A fresh scan supersedes the previous armed set.
     cancelled = tdb.clear_active()
     now = datetime.datetime.utcnow()
     expires = (now + datetime.timedelta(hours=expiry_hours)).isoformat()
-    mgmt = _management_params()          # align live stop/target to the validated edge
 
     armed = []
     for r in top:
@@ -139,6 +156,7 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         direction = "long" if action == "BUY" else "short"
         cat = r.get("setup_category")
         ref = r.get("price")
+        mgmt = _management_params(r.get("setup_label"))   # per-setup validated exits
         entry, target, stop = _num(trade.get("entry")), _num(trade.get("target")), _num(trade.get("stop"))
         # 20-day mean = Bollinger midline (from the scan's BB bands).
         bb_u, bb_l = r.get("bb_upper"), r.get("bb_lower")
@@ -193,12 +211,14 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         armed.append({
             "id": tid, "symbol": r["ticker"], "setup_label": r.get("setup_label"),
             "category": cat, "direction": direction, "composite": r["_composite"],
-            "condition": desc,
+            "condition": desc, "management": _management_note(r.get("setup_label")),
         })
 
     log.info("scan_and_arm: %d candidates, armed top %d (cancelled %d prior)",
              len(rows), len(armed), cancelled)
     return {"candidates": candidates, "armed": armed,
             "edge_gated": valid is not None, "gated_out_setups": gated_out,
-            "regime_blocked": False, "management": _management_note(),
-            "actionable": len(rows)}
+            "regime_blocked": False, "actionable": len(rows),
+            "management": "Exits are set per setup (breakouts trail and let winners "
+                          "run; mean-reversion & momentum take a fixed target) — the "
+                          "backtested edge for each. See each trigger's plan."}

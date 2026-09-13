@@ -71,7 +71,8 @@ def run_crypto_validation(universe_size: int = 40, days: int = 600,
         if len(df) < _MIN_HISTORY + 5:
             continue
         used += 1
-        trades = _walk_ticker(df["close"], df["high"], df["low"], max_hold, step, cooldown)
+        vol = df["volume"] if "volume" in df.columns else None
+        trades = _walk_ticker(df["close"], df["high"], df["low"], max_hold, step, cooldown, vol)
         all_trades.extend(_apply_costs(trades, cost_pct))
 
     stats = _aggregate(all_trades)

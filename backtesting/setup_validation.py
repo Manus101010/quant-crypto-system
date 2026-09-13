@@ -59,6 +59,9 @@ ACTIONABLE_BUY_SETUPS = {
     "Confirmed Uptrend",
     "Pullback to SMA50",
     "Counter-Trend Bounce",
+    "Donchian Breakout (55d)",
+    "Volume Breakout",
+    "Squeeze Breakout",
 }
 
 # Minimum history before we start classifying a bar.
@@ -73,10 +76,12 @@ def _indicators_at(
     high: pd.Series,
     low: pd.Series,
     i: int,
+    volume: pd.Series | None = None,
 ) -> dict | None:
     """
     Compute the scanner's indicators using ONLY bars [0 .. i] (inclusive).
-    Returns None if not enough history.
+    Returns None if not enough history. When `volume` is given, also computes the
+    breakout/volume/squeeze features so the breakout setups can be validated.
     """
     if i < _MIN_HISTORY:
         return None
@@ -101,12 +106,18 @@ def _indicators_at(
     wil_r = _williams_r(s, 14)
     atr   = _atr(h, lo, s, 14) if len(h) and len(lo) else None
 
-    return {
+    out = {
         "price": price, "sma50": sma50, "sma200": sma200, "mom3m": mom3m,
         "rsi": rsi, "rsi2": rsi_2,
         "bb_upper": bb_upper, "bb_mid": bb_mid, "bb_lower": bb_lower, "bb_pct": bb_pct,
         "zscore": zsc, "williams_r": wil_r, "atr": atr,
+        "vol_ratio": None, "donch_hi20": None, "donch_hi55": None, "squeeze": None,
     }
+    if volume is not None:
+        from skills.scanner import breakout_signals
+        v = volume.iloc[: i + 1]
+        out.update(breakout_signals(s, h, v))
+    return out
 
 
 # ── Forward trade simulation ──────────────────────────────────────────────────
@@ -203,6 +214,7 @@ def _walk_ticker(
     max_hold: int,
     step: int,
     cooldown: int,
+    volume: pd.Series | None = None,
 ) -> list[dict]:
     """
     Walk one ticker bar-by-bar. Returns a list of simulated trade records.
@@ -215,6 +227,8 @@ def _walk_ticker(
     close = close.dropna()
     high  = high.reindex(close.index)
     low   = low.reindex(close.index)
+    if volume is not None:
+        volume = volume.reindex(close.index)
     n = len(close)
     if n < _MIN_HISTORY + 5:
         return []
@@ -224,7 +238,7 @@ def _walk_ticker(
     i = _MIN_HISTORY
     last_fire = -10_000
     while i < n - 1:
-        ind = _indicators_at(close, high, low, i)
+        ind = _indicators_at(close, high, low, i, volume)
         if ind is None:
             i += step
             continue
@@ -233,6 +247,8 @@ def _walk_ticker(
             ind["price"], ind["sma50"], ind["sma200"],
             ind["rsi"], ind["mom3m"],
             ind["bb_pct"], ind["zscore"], ind["williams_r"], ind["rsi2"],
+            vol_ratio=ind["vol_ratio"], donch_hi20=ind["donch_hi20"],
+            donch_hi55=ind["donch_hi55"], squeeze=ind["squeeze"],
         )
 
         if label in ACTIONABLE_BUY_SETUPS and (i - last_fire) >= cooldown:

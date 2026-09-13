@@ -68,16 +68,25 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     if trg.get("target"): lines.append(f"Target: {_fmt_price(trg['target'])}")
     if trg.get("stop"):   lines.append(f"Stop: {_fmt_price(trg['stop'])}")
     if trg.get("rr"):     lines.append(f"R:R: {trg['rr']}")
-    lines.append(f"📐 {_management_note()}")
+    lines.append(f"📐 {_management_note(trg.get('setup_label'))}")
     lines.append("\n<i>Signal only — review and execute manually.</i>")
     return "\n".join(lines)
 
 
-def _management_note() -> str:
-    """The trade management the current validated edge requires (from saved validation)."""
+def _management_note(setup_label: str | None = None) -> str:
+    """Per-setup trade management from the saved validation (breakouts trail; the
+    rest take a fixed target)."""
+    m = None
     try:
         from backtesting.crypto_validation import load_validation
-        m = ((load_validation() or {}).get("meta", {}).get("params", {}) or {}).get("management")
+        v = load_validation() or {}
+        if setup_label:
+            m = (v.get("management_by_setup") or {}).get(setup_label)
+        if not m and not v.get("management_by_setup"):
+            m = (v.get("meta", {}).get("params", {}) or {}).get("management")
+        if not m and setup_label:
+            from backtesting.crypto_optimize import management_for
+            m = management_for(setup_label)
     except Exception:
         m = None
     if not m:

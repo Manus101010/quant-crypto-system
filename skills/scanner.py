@@ -284,6 +284,25 @@ def trade_suggestion(
             "note":   "Not a short signal — a reminder that extended runs revert. Protect profits.",
         }
 
+    # ── Breakout entries (volume / Donchian / squeeze) ─────────────────────────
+    if setup_label in ("Donchian Breakout (55d)", "Volume Breakout", "Squeeze Breakout"):
+        stop   = _stop_below(2.5)
+        risk   = price - stop
+        target = price + risk * 3.0        # breakouts trade with a wide target / trail
+        entries = {
+            "Donchian Breakout (55d)": "Buy the close of the 55-day breakout — don't wait for a pullback",
+            "Volume Breakout":         "Buy the volume-confirmed breakout on the close",
+            "Squeeze Breakout":        "Buy the expansion out of the squeeze on the close",
+        }
+        return {
+            "action": "BUY",
+            "entry":  f"{entries[setup_label]} near {_fmt_p(price)}",
+            "target": f"{_fmt_p(target)} (3R) — or trail a 2.5× ATR stop and let it run",
+            "stop":   f"{_fmt_p(stop)} (2.5× ATR, {atr_note})",
+            "rr":     _rr(price, target, stop),
+            "note":   "Breakout: low win rate by design, but winners run. Cut it fast if it fails back into the range.",
+        }
+
     # ── Momentum entries ──────────────────────────────────────────────────────
     if setup_label == "Momentum Runner":
         stop      = max(_stop_below(2.5), sma50 * 0.985)
@@ -369,6 +388,39 @@ def trade_suggestion(
     }
 
 
+def breakout_signals(close, high, volume) -> dict:
+    """
+    Volume/breakout/squeeze features from series up to 'now' (last element = today).
+    Used to classify the trend-following setups (Donchian, volume spike, squeeze).
+      - donch_hi20/55: prior N-day high (EXCLUDING today) → today's close breaking
+        it is a fresh N-day breakout.
+      - vol_ratio: today's volume / 20-day average volume (participation).
+      - squeeze: today's Bollinger bandwidth in the bottom 20% of the last 60 days
+        (a volatility contraction that precedes expansion).
+    All values are None when there isn't enough history (setup simply won't fire).
+    """
+    import numpy as _np
+    out = {"vol_ratio": None, "donch_hi20": None, "donch_hi55": None, "squeeze": None}
+    n = len(close)
+    if len(high) >= 21:
+        out["donch_hi20"] = float(high.iloc[-21:-1].max())
+    if len(high) >= 56:
+        out["donch_hi55"] = float(high.iloc[-56:-1].max())
+    if volume is not None and len(volume) >= 20:
+        avg = float(volume.iloc[-20:].mean())
+        if avg > 0:
+            out["vol_ratio"] = float(volume.iloc[-1] / avg)
+    if n >= 80:
+        ma = close.rolling(20).mean()
+        sd = close.rolling(20).std()
+        bw = (4.0 * sd) / ma            # (upper-lower)/mid bandwidth, 2σ bands
+        recent = bw.iloc[-60:].dropna()
+        cur = bw.iloc[-1]
+        if len(recent) > 20 and cur == cur:   # cur not NaN
+            out["squeeze"] = bool(cur <= recent.quantile(0.20))
+    return out
+
+
 # ── Setup classifier (momentum + mean reversion) ──────────────────────────────
 
 def classify_setup(
@@ -378,6 +430,10 @@ def classify_setup(
     zscore: float | None = None,
     williams_r: float | None = None,
     rsi2: float | None = None,
+    vol_ratio: float | None = None,
+    donch_hi20: float | None = None,
+    donch_hi55: float | None = None,
+    squeeze: bool | None = None,
 ) -> tuple[str, str, str]:
     """
     Returns (label, plain-English description, category).
@@ -483,6 +539,42 @@ def classify_setup(
             "mean_reversion",
         )
 
+    # ══ BREAKOUT / VOLUME setups (proven trend-following) ═════════════════
+    # Checked before the generic momentum labels so a coin printing a fresh
+    # breakout is tagged as such instead of collapsing into "Momentum Runner".
+    breakout20 = donch_hi20 is not None and price >= donch_hi20
+    breakout55 = donch_hi55 is not None and price >= donch_hi55
+    high_vol   = vol_ratio is not None and vol_ratio >= 2.0
+    good_vol   = vol_ratio is not None and vol_ratio >= 1.5
+
+    # Turtle-style 55-day breakout in an uptrend — the classic crypto trend entry.
+    if breakout55 and above_200 and rsi < 82:
+        return (
+            "Donchian Breakout (55d)",
+            f"Price closed at a fresh 55-day high ({_fmt_p(price)}) while above the "
+            f"200-day trend — the Turtle breakout. Crypto trends routinely extend "
+            f"30–50% past a 55-day breakout. Enter on the close, trail the stop, let it run.",
+            "momentum",
+        )
+    # Volatility squeeze → expansion: coiled range breaks out on real volume.
+    if squeeze and breakout20 and good_vol and above_200:
+        return (
+            "Squeeze Breakout",
+            f"Volatility had contracted to a multi-week low (a squeeze) and price just "
+            f"broke to a 20-day high on {vol_ratio:.1f}× average volume. Compression → "
+            f"expansion: these coiled breakouts tend to run once they release.",
+            "momentum",
+        )
+    # Volume-confirmed 20-day breakout: participation behind the move.
+    if breakout20 and high_vol and above_200:
+        return (
+            "Volume Breakout",
+            f"Fresh 20-day high on {vol_ratio:.1f}× average volume — real participation "
+            f"behind the move (not a low-liquidity drift). Breakouts confirmed by a "
+            f"volume spike historically show materially better follow-through.",
+            "momentum",
+        )
+
     # ── Momentum setups ───────────────────────────────────────────────────
     if above_50 and above_200 and golden_cross and mom3m > 10 and rsi < 78:
         return (
@@ -538,6 +630,9 @@ def classify_setup(
 _SETUP_BASE: dict[str, float] = {
     "RSI-2 Pullback (Connors)":    85,   # empirical 69% win, PF 2.07 (n=339) — premier setup, confirmed
     "Oversold in Uptrend":         80,   # thin (n=20, untrusted) — kept at literature prior
+    "Donchian Breakout (55d)":     72,   # Turtle 55d breakout — trend-following, provisional until crypto-validated
+    "Volume Breakout":             70,   # 20d high + 2x volume — provisional until crypto-validated
+    "Squeeze Breakout":            70,   # volatility contraction → expansion — provisional until crypto-validated
     "Momentum Runner":             71,   # was 78; empirical 52% win, PF 1.56 (n=1224) — overrated
     "BB Bounce Setup":             71,   # was 74; empirical 64% win, PF 1.59 (n=132)
     "Williams %R Oversold":        73,   # was 70; empirical 76% win, PF 1.65 (n=180) — vindicated
@@ -772,8 +867,11 @@ def _run(tickers: list[str], criteria: ScanCriteria,
             if criteria.min_momentum_3m is not None and mom3m < criteria.min_momentum_3m:
                 passes = False
 
+            bo = breakout_signals(s, h, v)
             setup_label, setup_desc, setup_cat = classify_setup(
                 price, sma50, sma200, rsi, mom3m, bb_pct, zsc, wil_r, rsi_2,
+                vol_ratio=bo["vol_ratio"], donch_hi20=bo["donch_hi20"],
+                donch_hi55=bo["donch_hi55"], squeeze=bo["squeeze"],
             )
 
             # Format price sensibly across stocks and micro-cap crypto
@@ -893,8 +991,12 @@ def _run_from_bybit(bybit_data: dict, tickers: list[str], criteria: ScanCriteria
             if criteria.min_momentum_3m is not None and mom3m < criteria.min_momentum_3m:
                 passes = False
 
+            vol_series = df["volume"].dropna() if "volume" in df.columns else v_usd
+            bo = breakout_signals(s, h, vol_series)
             setup_label, setup_desc, setup_cat = classify_setup(
                 price, sma50, sma200, rsi, mom3m, bb_pct, zsc, wil_r, rsi_2,
+                vol_ratio=bo["vol_ratio"], donch_hi20=bo["donch_hi20"],
+                donch_hi55=bo["donch_hi55"], squeeze=bo["squeeze"],
             )
 
             if price < 0.01:

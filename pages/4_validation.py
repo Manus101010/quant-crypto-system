@@ -10,9 +10,9 @@ import streamlit as st
 import pandas as pd
 from config import DARK_THEME_CSS
 from backtesting.crypto_validation import (
-    run_crypto_validation, save_validation, load_validation,
-    _MIN_EDGE_PF, _MIN_EDGE_N,
+    save_validation, load_validation, _MIN_EDGE_PF, _MIN_EDGE_N,
 )
+from backtesting.crypto_optimize import validate_per_setup
 
 st.set_page_config(page_title="Validation", layout="wide")
 st.markdown(DARK_THEME_CSS, unsafe_allow_html=True)
@@ -41,11 +41,13 @@ with c4:
 
 if run:
     where = "the MEXC universe" if is_mexc else f"top {universe} coins"
-    with st.spinner(f"Backtesting setups over {where}, {days}d … "
+    with st.spinner(f"Backtesting setups over {where}, {days}d, per-setup management … "
                     f"({'a few minutes' if is_mexc else '~30-60s'})"):
-        res = run_crypto_validation(universe_size=universe, days=days, cost_pct=cost,
-                                    source="mexc" if is_mexc else "top_mcap")
-        save_validation(res)            # persist → the scanner's edge gate reads this
+        # validate_per_setup simulates each setup under its own validated exits
+        # (breakouts trail; mean-reversion/momentum take a fixed target) and saves
+        # the per-setup management map the scanner arms from.
+        res = validate_per_setup(universe_size=universe, days=days, cost_pct=cost,
+                                 source="mexc" if is_mexc else "top_mcap")
         st.session_state["val_res"] = res
     st.success(f"Validated {res['meta']['total_trades']} trades across "
                f"{res['meta']['coins_with_data']} coins. Scanner will now only arm the "
@@ -59,20 +61,23 @@ if not res:
 
 stats = res["stats"]
 validated = set(res.get("validated", []))
+mgmt_map = res.get("management_by_setup", {})
 
 st.divider()
 st.subheader("Per-Setup Edge (net of cost)")
 rows = []
 for label, s in sorted(stats.items(), key=lambda x: -(x[1].get("n") or 0)):
     pf = s.get("profit_factor")
+    m = mgmt_map.get(label, {})
+    mgmt_txt = ("trail (let run)" if m.get("trailing")
+                else f"{m.get('target_r')}R target" if m else "—")
     rows.append({
         "Setup": label,
         "Trades": s["n"],
         "Win %": round(s["win_rate"] * 100, 0),
         "Profit Factor": pf if pf is not None else "∞",
         "Expectancy (R)": s["expectancy_r"],
-        "Avg Win %": s["avg_win"],
-        "Avg Loss %": s["avg_loss"],
+        "Exit (if tradeable)": mgmt_txt,
         "Tradeable": "✅ yes" if label in validated else "❌ no edge",
     })
 df = pd.DataFrame(rows)

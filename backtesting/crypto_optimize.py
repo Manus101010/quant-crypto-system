@@ -24,6 +24,31 @@ from utils.logger import get_logger
 
 log = get_logger(__name__)
 
+# ── Per-setup management ──────────────────────────────────────────────────────
+# Validation showed management must match the setup TYPE: breakouts need to let
+# winners run (a trailing wide stop, no fixed target); mean-reversion and
+# continuation entries do better cutting to a fixed target. A single global
+# config actively kills one or the other, so each setup carries its own.
+_TRAIL = {"name": "trail 3.5×ATR / 60b", "stop_mult": 3.5, "target_r": 99,
+          "trailing": True, "max_hold": 60}
+_TIGHT = {"name": "tight 2.0×ATR / 3R / 15b", "stop_mult": 2.0, "target_r": 3.0,
+          "trailing": False, "max_hold": 15}
+
+SETUP_MANAGEMENT = {
+    # Fresh breakouts → let winners run.
+    "Donchian Breakout (55d)": _TRAIL,
+    "Volume Breakout":         _TRAIL,
+    "Squeeze Breakout":        _TRAIL,
+    # Everything else (mean-reversion + continuation) → tight fixed target.
+}
+DEFAULT_MANAGEMENT = _TIGHT
+
+
+def management_for(label: str) -> dict:
+    """The validated trade-management config for a given setup label."""
+    return SETUP_MANAGEMENT.get(label, DEFAULT_MANAGEMENT)
+
+
 # Management configs to sweep (200-SMA filter for MR is always on).
 CONFIGS = [
     {"name": "baseline 2.0×ATR / 2R / 20b",  "stop_mult": 2.0, "target_r": 2.0, "trailing": False, "max_hold": 20},
@@ -72,16 +97,18 @@ def _simulate(close, high, low, i, ind, cfg) -> dict | None:
             "r_mult": (exit_p - entry) / risk, "bars_held": k, "reason": reason}
 
 
-def _signals(close, high, low) -> list[tuple[int, dict]]:
+def _signals(close, high, low, volume=None) -> list[tuple[int, dict]]:
     """Precompute actionable BUY signal bars once (the expensive indicator pass)."""
     out = []
     for i in range(_MIN_HISTORY, len(close) - 1):
-        ind = _indicators_at(close, high, low, i)
+        ind = _indicators_at(close, high, low, i, volume)
         if ind is None:
             continue
         label, _d, cat = classify_setup(
             ind["price"], ind["sma50"], ind["sma200"], ind["rsi"], ind["mom3m"],
             ind["bb_pct"], ind["zscore"], ind["williams_r"], ind["rsi2"],
+            vol_ratio=ind["vol_ratio"], donch_hi20=ind["donch_hi20"],
+            donch_hi55=ind["donch_hi55"], squeeze=ind["squeeze"],
         )
         if label not in ACTIONABLE_BUY_SETUPS:
             continue
@@ -135,7 +162,8 @@ def optimize(universe_size: int = 40, days: int = 600,
         if len(df) < _MIN_HISTORY + 20:
             continue
         close, high, low = df["close"], df["high"], df["low"]
-        sigs = _signals(close, high, low)
+        vol = df["volume"] if "volume" in df.columns else None
+        sigs = _signals(close, high, low, vol)
         split = int(len(close) * train_frac)
         prepared.append((close, high, low, sigs, split))
 
@@ -172,7 +200,8 @@ def apply_config(cfg: dict, universe_size: int = 40, days: int = 600,
         if len(df) < _MIN_HISTORY + 20:
             continue
         close, high, low = df["close"], df["high"], df["low"]
-        for i, ind in _signals(close, high, low):
+        vol = df["volume"] if "volume" in df.columns else None
+        for i, ind in _signals(close, high, low, vol):
             t = _simulate(close, high, low, i, ind, cfg)
             if t is not None:
                 trades.append(t)
@@ -187,4 +216,51 @@ def apply_config(cfg: dict, universe_size: int = 40, days: int = 600,
                  "params": {"days": days, "cost_pct": cost_pct, "management": cfg}},
     }
     save_validation(res)
+    return res
+
+
+def validate_per_setup(universe_size: int = 40, days: int = 600,
+                       cost_pct: float = 0.36, min_n: int = 25,
+                       source: str = "top_mcap", max_coins: int = 500) -> dict:
+    """
+    Full-history validation where EACH setup is simulated under its own management
+    (SETUP_MANAGEMENT / DEFAULT_MANAGEMENT) — breakouts trailing, the rest tight.
+    Saves per-setup stats AND the per-setup management map so the scanner arms
+    each trigger with the exits that were actually backtested for that setup.
+    """
+    tickers, exchange = _universe(source, universe_size, max_coins)
+    data = get_ohlcv_batch(tickers, timeframe="1d", limit=days, exchange=exchange)
+    by_setup: dict[str, list] = {}
+    for sym, df in data.items():
+        if len(df) < _MIN_HISTORY + 20:
+            continue
+        close, high, low = df["close"], df["high"], df["low"]
+        vol = df["volume"] if "volume" in df.columns else None
+        for i, ind in _signals(close, high, low, vol):
+            label = ind["_label"]
+            t = _simulate(close, high, low, i, ind, management_for(label))
+            if t is not None:
+                by_setup.setdefault(label, []).append(t)
+
+    all_trades = []
+    for label, tr in by_setup.items():
+        by_setup[label] = _apply_costs(tr, cost_pct)
+        all_trades.extend(by_setup[label])
+    stats = _aggregate(all_trades)
+    validated = sorted(validated_setups(stats, min_n=min_n))
+    # Per-setup management for the setups that passed (what the scanner will use).
+    mgmt_by_setup = {label: management_for(label) for label in validated}
+    res = {
+        "stats": stats,
+        "recommended": recommend_base_scores(stats, min_n=min_n),
+        "validated": validated,
+        "management_by_setup": mgmt_by_setup,
+        "meta": {"universe_requested": len(tickers), "coins_with_data": len(data),
+                 "total_trades": len(all_trades), "source": source,
+                 "per_setup_management": True,
+                 "params": {"days": days, "cost_pct": cost_pct,
+                            "management": DEFAULT_MANAGEMENT}},
+    }
+    save_validation(res)
+    log.info("validate_per_setup: %d trades, validated %s", len(all_trades), validated)
     return res
