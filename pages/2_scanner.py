@@ -25,16 +25,31 @@ st.markdown(
 st.divider()
 
 # ── Controls ──────────────────────────────────────────────────────────────────
-c1, c2, c3, c4 = st.columns([1, 1, 1, 1.4])
+c1, c2, c3 = st.columns([1.4, 1, 1])
 with c1:
-    universe = st.selectbox("Universe (top by mcap)", [50, 100, 200, 300, 500], index=1)
+    source_lbl = st.selectbox(
+        "Universe",
+        ["Top by market cap", "MEXC — all pairs"],
+        index=0,
+        help="MEXC scans every tradeable USDT spot pair on MEXC (thousands of "
+             "coins). Slower — a few minutes — but the widest net.",
+    )
+    is_mexc = source_lbl.startswith("MEXC")
+    universe = 100
+    if not is_mexc:
+        universe = st.selectbox("Top by mcap", [50, 100, 200, 300, 500], index=1)
 with c2:
     top_n = st.slider("Arm top N", 3, 25, 10)
+    min_vol_m = st.selectbox("Min 24h volume", [0.0, 0.5, 1.0, 5.0, 10.0], index=2,
+                             format_func=lambda v: "off" if v == 0 else f"${v:g}M")
 with c3:
     expiry = st.selectbox("Trigger expiry (h)", [24, 48, 72, 168], index=1)
-with c4:
     st.write("")
-    run = st.button("🛰️ Run Scan & Arm Triggers", type="primary", use_container_width=True)
+    run = st.button("🛰️ Run Scan & Arm", type="primary", use_container_width=True)
+
+if is_mexc:
+    st.caption("🌐 MEXC full-universe scan: thousands of pairs, candles pinned to MEXC. "
+               "First run takes a few minutes; keep a volume floor on to stay tradeable.")
 
 # Pull the latest macro deployment score to bias conviction by regime (if run).
 regime_score = None
@@ -43,10 +58,14 @@ if mr:
     regime_score = mr.get("deployment_score")
 
 if run:
-    with st.spinner(f"Scanning top {universe} coins via ccxt … (~20-40s)"):
+    spin = ("Scanning all MEXC pairs via ccxt … (this can take a few minutes)"
+            if is_mexc else f"Scanning top {universe} coins via ccxt … (~20-40s)")
+    with st.spinner(spin):
         from triggers.scan import run_scan_and_arm
         res = run_scan_and_arm(universe_size=universe, top_n=top_n,
-                               regime_score=regime_score, expiry_hours=expiry)
+                               regime_score=regime_score, expiry_hours=expiry,
+                               min_vol_usd_m=min_vol_m,
+                               source="mexc" if is_mexc else "top_mcap")
         st.session_state["scan_res"] = res
     if res.get("regime_blocked"):
         st.warning(f"⛔ Regime is risk-off (Deployment Score {res.get('regime_score'):.0f} < 45) — "

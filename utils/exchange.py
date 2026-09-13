@@ -25,7 +25,9 @@ except ImportError:                       # keep import-safe if ccxt missing
     CCXT_AVAILABLE = False
 
 # Spot exchanges for OHLC, tried in order. All serve public candles keyless.
-_SPOT_CHAIN = ["binance", "bybit", "okx", "kraken", "coinbase"]
+# mexc last: it lists thousands of thin pairs many other venues don't, so it's
+# the catch-all that lets MEXC-only coins resolve for the monitor.
+_SPOT_CHAIN = ["binance", "bybit", "okx", "kraken", "coinbase", "mexc"]
 # Perp/swap venues for funding rates (linear USDT perps).
 _PERP_CHAIN = ["binance", "bybit", "okx"]
 _MAX_WORKERS = 8
@@ -66,6 +68,53 @@ def to_ccxt_symbol(sym: str) -> str:
     if s.endswith("USD"):
         return f"{s[:-3]}/USDT"
     return f"{s}/USDT"
+
+
+_market_cache: dict[str, tuple[float, list[str]]] = {}   # exchange -> (ts, tickers)
+_MARKET_TTL = 3600
+
+# Leveraged/synthetic token suffixes to skip (e.g. BTC3L, ETH3S, XRPUP).
+_LEV_SUFFIXES = ("3L", "3S", "4L", "4S", "5L", "5S", "UP", "DOWN", "BULL", "BEAR")
+
+
+def list_spot_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
+    """
+    Every active spot BASE/QUOTE pair on `exchange`, returned as app tickers
+    ('BASE-USD'), with stablecoins and leveraged/synthetic tokens removed.
+    Cached 1h. Empty list if the venue can't be loaded.
+    """
+    now = time.time()
+    key = f"{exchange}:{quote}"
+    if key in _market_cache and now - _market_cache[key][0] < _MARKET_TTL:
+        return _market_cache[key][1]
+
+    ex = _client(exchange)
+    if ex is None:
+        return []
+    try:
+        markets = ex.load_markets()
+    except Exception as exc:                # noqa: BLE001
+        log.warning("exchange: load_markets(%s) failed — %s", exchange, exc)
+        return []
+
+    from utils.crypto_universe import _BLOCKLIST
+    seen, out = set(), []
+    for m in markets.values():
+        if not (m.get("spot") and m.get("active")):
+            continue
+        if m.get("quote") != quote:
+            continue
+        base = str(m.get("base", "")).upper()
+        if not base or base in seen or base in _BLOCKLIST:
+            continue
+        if base.endswith(_LEV_SUFFIXES):
+            continue
+        seen.add(base)
+        out.append(f"{base}-USD")
+    out.sort()
+    _market_cache[key] = (now, out)
+    log.info("exchange: %s has %d tradeable %s spot pairs", exchange, len(out), quote)
+    return out
 
 
 def get_ohlcv(symbol: str, timeframe: str = "1d", limit: int = 400,

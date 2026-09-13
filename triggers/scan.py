@@ -61,18 +61,30 @@ def _num(s) -> float | None:
 def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
                      regime_score: float | None = None,
                      expiry_hours: int = 48,
-                     min_vol_usd_m: float = 1.0) -> dict:
+                     min_vol_usd_m: float = 1.0,
+                     source: str = "top_mcap") -> dict:
     """
     Scan, rank (MR-weighted), and arm the top-N triggers. Replaces any previously
     active triggers (a fresh scan supersedes the last). Returns:
         {"candidates": [...ranked rows...], "armed": [...trigger summaries...]}
+
+    `source`: "top_mcap" (CoinGecko top-N by market cap, default) or "mexc"
+    (every tradeable MEXC USDT spot pair — thousands of coins, candles pinned to
+    MEXC). A volume floor (`min_vol_usd_m`) keeps the MEXC universe tradeable.
     """
-    tickers = get_top_crypto(universe_size)
+    if source == "mexc":
+        from utils.exchange import list_spot_symbols
+        tickers = list_spot_symbols("mexc")
+        exchange = "mexc"
+    else:
+        tickers = get_top_crypto(universe_size)
+        exchange = None
     df = run_crypto_scan(
         tickers=tickers,
         criteria=ScanCriteria(min_price=0.0, above_sma200=False,
                               above_sma50=False, min_volume_usd_m=min_vol_usd_m),
         regime_score=regime_score,
+        exchange=exchange,
     )
     if df.empty:
         return {"candidates": [], "armed": []}
