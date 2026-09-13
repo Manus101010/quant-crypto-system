@@ -78,11 +78,46 @@ def _num(s) -> float | None:
     return float(m.group().replace(",", "")) if m else None
 
 
+def _diversify(rows: list[dict], n: int, max_per_setup: int | None) -> list[dict]:
+    """
+    Pick the top-`n` rows (already sorted best-first) while capping how many of any
+    single setup can be included, so the result is a SPREAD across setup types
+    rather than 10 of whatever setup is most common today. Fills round-robin: the
+    best of each setup first, then the next-best of each, etc. If the cap can't
+    fill n (few setup types today), the remaining slots fall back to best-first.
+    """
+    if not max_per_setup or max_per_setup <= 0:
+        return rows[:n]
+    from collections import defaultdict
+    buckets: dict[str, list] = defaultdict(list)
+    for r in rows:
+        buckets[r.get("setup_label")].append(r)
+    picked, used = [], defaultdict(int)
+    # Round-robin passes across setup buckets (each already best-first).
+    for _pass in range(max_per_setup):
+        for label, bucket in buckets.items():
+            if used[label] < len(bucket) and _pass < max_per_setup:
+                picked.append(bucket[_pass])
+                used[label] += 1
+    picked.sort(key=lambda r: -r.get("_composite", 0))
+    picked = picked[:n]
+    # Backfill if the cap left us short of n (not enough distinct setups).
+    if len(picked) < n:
+        chosen = {id(r) for r in picked}
+        for r in rows:
+            if id(r) not in chosen:
+                picked.append(r)
+                if len(picked) >= n:
+                    break
+    return picked
+
+
 def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
                      regime_score: float | None = None,
                      expiry_hours: int = 48,
                      min_vol_usd_m: float = 1.0,
-                     source: str = "top_mcap") -> dict:
+                     source: str = "top_mcap",
+                     max_per_setup: int | None = 4) -> dict:
     """
     Scan, rank (MR-weighted), and arm the top-N triggers. Replaces any previously
     active triggers (a fresh scan supersedes the last). Returns:
@@ -91,6 +126,8 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     `source`: "top_mcap" (CoinGecko top-N by market cap, default) or "mexc"
     (every tradeable MEXC USDT spot pair — thousands of coins, candles pinned to
     MEXC). A volume floor (`min_vol_usd_m`) keeps the MEXC universe tradeable.
+    `max_per_setup`: cap how many of any one setup can be armed, so the armed set
+    is diverse (None/0 = no cap).
     """
     if source == "mexc":
         from utils.exchange import list_spot_symbols
@@ -130,8 +167,10 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         boost = _MR_BOOST if r.get("setup_category") == "mean_reversion" else 1.0
         r["_composite"] = round(conv * boost, 1)
     rows.sort(key=lambda r: -r["_composite"])
-    top = rows[:top_n]                      # armed as live triggers
-    candidates = rows[:_MAX_CANDIDATES]     # shown to the user (superset of `top`)
+    # Diversify: cap any single setup so the armed set is a spread across setup
+    # types, not 10 of whatever setup is most common in today's market.
+    top = _diversify(rows, top_n, max_per_setup)     # armed as live triggers
+    candidates = rows[:_MAX_CANDIDATES]              # full ranked list shown to the user
 
     # ── Regime gate: the setups' edge is regime-dependent (strong in trend,
     # weak in chop/bear per the backtest), so only ARM in a risk-on regime.

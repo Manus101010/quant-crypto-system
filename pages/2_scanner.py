@@ -44,7 +44,10 @@ with c2:
                              format_func=lambda v: "off" if v == 0 else f"${v:g}M")
 with c3:
     expiry = st.selectbox("Trigger expiry (h)", [24, 48, 72, 168], index=1)
-    st.write("")
+    diversify = st.checkbox("Diversify setups", value=True,
+                            help="Cap how many of any one setup can be armed so the "
+                                 "watchlist is a spread across strategy types, not 10 "
+                                 "of whatever setup is most common today.")
     run = st.button("🛰️ Run Scan & Arm", type="primary", use_container_width=True)
 
 if is_mexc:
@@ -65,7 +68,8 @@ if run:
         res = run_scan_and_arm(universe_size=universe, top_n=top_n,
                                regime_score=regime_score, expiry_hours=expiry,
                                min_vol_usd_m=min_vol_m,
-                               source="mexc" if is_mexc else "top_mcap")
+                               source="mexc" if is_mexc else "top_mcap",
+                               max_per_setup=(max(2, top_n // 3) if diversify else None))
         st.session_state["scan_res"] = res
     if res.get("regime_blocked"):
         st.warning(f"⛔ Regime is risk-off (Deployment Score {res.get('regime_score'):.0f} < 45) — "
