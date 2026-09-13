@@ -95,6 +95,13 @@ def _fmt(p) -> str:
     return f"${p:,.0f}"
 
 
+def _tv_url(symbol: str) -> str:
+    """TradingView chart link. 'ZEC-USD' → BASE 'ZEC' → USDT pair TV resolves to
+    the most liquid listing. Opens the full chart in a new tab."""
+    base = re.split(r"[-/]", str(symbol))[0].upper()
+    return f"https://www.tradingview.com/chart/?symbol={base}USDT"
+
+
 def _expires_in(iso: str | None) -> str:
     if not iso:
         return ""
@@ -148,14 +155,18 @@ def _legs(entry, target, stop, rr) -> str:
 def _card(symbol, is_long, setup, meta_right, legs_html="", footer="") -> str:
     accent = _LONG if is_long else _SHORT
     dir_lbl = "▲ LONG" if is_long else "▼ SHORT"
-    foot = (f"<div style='margin-top:10px;padding-top:9px;border-top:1px solid #23283400;"
+    foot = (f"<div style='margin-top:10px;padding-top:9px;"
             f"border-top:1px solid #262b38;font-size:12px;color:#a9adb8;line-height:1.45'>"
             f"{footer}</div>") if footer else ""
+    sym_link = (f"<a href='{_tv_url(symbol)}' target='_blank' style='font-size:19px;"
+                f"font-weight:700;color:#fff;text-decoration:none' "
+                f"title='Open {symbol} on TradingView'>{symbol}"
+                f"<span style='font-size:12px;color:{_MUTE};font-weight:500'> chart ↗</span></a>")
     return (
         f"<div style='border:1px solid #262b38;border-left:4px solid {accent};"
         f"border-radius:12px;padding:14px 16px;margin-bottom:12px;background:#161a25'>"
         f"<div style='display:flex;justify-content:space-between;align-items:center'>"
-        f"<span style='font-size:19px;font-weight:700;color:#fff'>{symbol}</span>"
+        f"{sym_link}"
         f"<span style='background:{accent};color:#0d1017;font-weight:700;font-size:11px;"
         f"padding:3px 9px;border-radius:6px'>{dir_lbl}</span></div>"
         f"<div style='display:flex;justify-content:space-between;align-items:baseline;margin-top:3px'>"
