@@ -73,7 +73,9 @@ if run:
                    f"Showing candidates for reference; run the Macro Gate and wait for it to improve.")
     else:
         n = len(res["armed"])
-        st.success(f"Armed {n} triggers from {len(res['candidates'])} actionable setups. "
+        found = res.get("actionable", len(res["candidates"]))
+        st.success(f"Found {found} valid setup{'s' if found != 1 else ''} in the universe "
+                   f"today — armed the top {n} as triggers. "
                    f"The monitor will alert you when a condition is met.")
     if res.get("management"):
         st.info(f"📐 {res['management']}  (this is how the backtested edge was actually captured — "
@@ -204,8 +206,12 @@ def _grid(cards: list[str], ncol: int = 2) -> None:
 
 # ── Post-scan: full ranked candidate list (ephemeral) ──────────────────────────
 if res and res.get("candidates"):
-    with st.expander(f"🎯 Last scan — {len(res['candidates'])} ranked candidates", expanded=False):
-        st.caption("Everything the scan surfaced, best first. The top ones become the live triggers below.")
+    n_found = res.get("actionable", len(res["candidates"]))
+    with st.expander(f"🎯 Last scan — {n_found} valid setup{'s' if n_found != 1 else ''} "
+                     f"(showing {len(res['candidates'])})", expanded=True):
+        st.caption("Every setup that passed the edge gate today, best first — only a handful of "
+                   "coins are ever in a valid, tradeable setup at once. The top ones are armed as "
+                   "live triggers below.")
         cards = []
         for r in res["candidates"]:
             t = r.get("trade") or {}

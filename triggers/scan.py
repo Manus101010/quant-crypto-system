@@ -27,6 +27,7 @@ log = get_logger(__name__)
 _MR_BOOST = 1.15          # mean-reversion setups get a 15% composite edge
 _RSI2_RECLAIM = 12.0      # RSI(2) level a MR long must turn back up through to confirm
 _MIN_DEPLOY_TO_ARM = 45.0 # macro Deployment Score below this = risk-off → don't arm
+_MAX_CANDIDATES = 60      # how many ranked setups to SHOW (we still only arm top_n)
 
 
 def _management_params() -> dict | None:
@@ -110,16 +111,18 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         boost = _MR_BOOST if r.get("setup_category") == "mean_reversion" else 1.0
         r["_composite"] = round(conv * boost, 1)
     rows.sort(key=lambda r: -r["_composite"])
-    top = rows[:top_n]
+    top = rows[:top_n]                      # armed as live triggers
+    candidates = rows[:_MAX_CANDIDATES]     # shown to the user (superset of `top`)
 
     # ── Regime gate: the setups' edge is regime-dependent (strong in trend,
     # weak in chop/bear per the backtest), so only ARM in a risk-on regime.
     # Below the threshold we still show candidates but arm nothing and keep any
     # existing triggers untouched. The macro Deployment Score is the filter.
     if regime_score is not None and regime_score < _MIN_DEPLOY_TO_ARM:
-        return {"candidates": top, "armed": [], "edge_gated": valid is not None,
+        return {"candidates": candidates, "armed": [], "edge_gated": valid is not None,
                 "gated_out_setups": gated_out, "regime_blocked": True,
-                "regime_score": regime_score, "management": _management_note()}
+                "regime_score": regime_score, "management": _management_note(),
+                "actionable": len(rows)}
 
     # A fresh scan supersedes the previous armed set.
     cancelled = tdb.clear_active()
@@ -188,6 +191,7 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
 
     log.info("scan_and_arm: %d candidates, armed top %d (cancelled %d prior)",
              len(rows), len(armed), cancelled)
-    return {"candidates": top, "armed": armed,
+    return {"candidates": candidates, "armed": armed,
             "edge_gated": valid is not None, "gated_out_setups": gated_out,
-            "regime_blocked": False, "management": _management_note()}
+            "regime_blocked": False, "management": _management_note(),
+            "actionable": len(rows)}
