@@ -29,7 +29,7 @@ c1, c2, c3 = st.columns([1.4, 1, 1])
 with c1:
     source_lbl = st.selectbox(
         "Universe",
-        ["Top by market cap", "MEXC — all pairs"],
+        ["MEXC — all pairs", "Top by market cap"],
         index=0,
         help="MEXC scans every tradeable USDT spot pair on MEXC (thousands of "
              "coins). Slower — a few minutes — but the widest net.",
