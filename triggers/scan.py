@@ -44,10 +44,12 @@ def _management_note() -> str:
     """The trade management the backtested edge requires (from the saved validation)."""
     m = _management_params()
     if m:
-        trail = f"trail a {m['stop_mult']}×ATR stop" if m.get("trailing") else \
-                f"{m['stop_mult']}×ATR stop, {m['target_r']}R target"
-        return f"Manage: {trail}, hold up to {m['max_hold']} days, let winners run."
-    return "Manage: trail a wide ATR stop and let winners run (see Validation page)."
+        if m.get("trailing"):
+            return (f"Manage: trail a {m['stop_mult']}×ATR stop, hold up to "
+                    f"{m['max_hold']} days, let winners run.")
+        return (f"Manage: {m['stop_mult']}×ATR stop, take profit at {m['target_r']}R, "
+                f"hold up to {m['max_hold']} days.")
+    return "Manage per the Validation page."
 
 
 def _num(s) -> float | None:
@@ -143,18 +145,23 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         mean20 = (bb_u + bb_l) / 2 if (bb_u is not None and bb_l is not None) else ref
 
         # ── Align stop/target to the VALIDATED management (not the equity-tuned
-        # trade_suggestion). The backtested edge = a wide ATR stop with winners
-        # left to run, so we set the stop from stop_mult×ATR and drop the fixed
-        # target (trailing). Without a validation, fall back to the suggestion.
+        # trade_suggestion): stop = stop_mult×ATR; if the validated config trails,
+        # drop the fixed target, otherwise set target = target_r × risk so the
+        # live suggestion matches exactly what was backtested. Without a
+        # validation, fall back to the suggestion.
         atr = r.get("atr_14")
         base_px = entry or ref
         if mgmt and atr and base_px:
             sm = mgmt.get("stop_mult", 3.5)
+            risk = sm * atr
             if direction == "long":
-                stop = round(base_px - sm * atr, 8)
+                stop = round(base_px - risk, 8)
+                target = None if mgmt.get("trailing") else \
+                    round(base_px + mgmt.get("target_r", 3.0) * risk, 8)
             else:
-                stop = round(base_px + sm * atr, 8)
-            target = None if mgmt.get("trailing") else target
+                stop = round(base_px + risk, 8)
+                target = None if mgmt.get("trailing") else \
+                    round(base_px - mgmt.get("target_r", 3.0) * risk, 8)
 
         if cat == "mean_reversion" and direction == "long":
             # Multi-factor bounce confirmation (evaluated live by the monitor):

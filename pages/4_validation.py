@@ -21,9 +21,16 @@ st.title("🔬 Setup Validation")
 st.caption("Walk-forward backtest of the scanner's setups on crypto, net of fees + slippage. "
            f"A setup is *tradeable* only if profit factor > {_MIN_EDGE_PF} over ≥ {_MIN_EDGE_N} trades.")
 
-c1, c2, c3, c4 = st.columns([1, 1, 1, 1.4])
+c1, c2, c3, c4 = st.columns([1.3, 1, 1, 1.4])
 with c1:
-    universe = st.selectbox("Universe (top by mcap)", [20, 40, 60, 100], index=1)
+    src_lbl = st.selectbox("Universe", ["MEXC — all pairs", "Top by market cap"], index=0,
+                           help="Validate on the same universe you scan. MEXC uses the real "
+                                "MEXC spot population (capped for runtime); top-by-mcap uses "
+                                "the largest coins only.")
+    is_mexc = src_lbl.startswith("MEXC")
+    universe = 40
+    if not is_mexc:
+        universe = st.selectbox("Top by mcap", [20, 40, 60, 100], index=1)
 with c2:
     days = st.selectbox("History (days)", [400, 600, 800, 1000], index=1)
 with c3:
@@ -33,8 +40,11 @@ with c4:
     run = st.button("🔬 Run Validation", type="primary", use_container_width=True)
 
 if run:
-    with st.spinner(f"Backtesting setups over top {universe} coins, {days}d … (~30-60s)"):
-        res = run_crypto_validation(universe_size=universe, days=days, cost_pct=cost)
+    where = "the MEXC universe" if is_mexc else f"top {universe} coins"
+    with st.spinner(f"Backtesting setups over {where}, {days}d … "
+                    f"({'a few minutes' if is_mexc else '~30-60s'})"):
+        res = run_crypto_validation(universe_size=universe, days=days, cost_pct=cost,
+                                    source="mexc" if is_mexc else "top_mcap")
         save_validation(res)            # persist → the scanner's edge gate reads this
         st.session_state["val_res"] = res
     st.success(f"Validated {res['meta']['total_trades']} trades across "

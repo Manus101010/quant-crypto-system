@@ -68,9 +68,24 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     if trg.get("target"): lines.append(f"Target: {_fmt_price(trg['target'])}")
     if trg.get("stop"):   lines.append(f"Stop: {_fmt_price(trg['stop'])}")
     if trg.get("rr"):     lines.append(f"R:R: {trg['rr']}")
-    lines.append("📐 Trail a wide ATR stop, let winners run (don't cap at target).")
+    lines.append(f"📐 {_management_note()}")
     lines.append("\n<i>Signal only — review and execute manually.</i>")
     return "\n".join(lines)
+
+
+def _management_note() -> str:
+    """The trade management the current validated edge requires (from saved validation)."""
+    try:
+        from backtesting.crypto_validation import load_validation
+        m = ((load_validation() or {}).get("meta", {}).get("params", {}) or {}).get("management")
+    except Exception:
+        m = None
+    if not m:
+        return "Manage per the Validation page."
+    if m.get("trailing"):
+        return f"Trail a {m['stop_mult']}×ATR stop, let winners run (hold ≤{m['max_hold']}d)."
+    return (f"{m['stop_mult']}×ATR stop, take profit at {m['target_r']}R "
+            f"(hold ≤{m['max_hold']}d).")
 
 
 def _indicators(df: pd.DataFrame) -> dict | None:

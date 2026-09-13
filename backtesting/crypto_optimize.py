@@ -109,13 +109,25 @@ def _pool(trades: list[dict]) -> dict:
             "win": round(sum(t["win"] for t in trades) / len(trades) * 100, 1)}
 
 
+def _universe(source: str, universe_size: int, max_coins: int) -> tuple[list[str], str | None]:
+    """Resolve the backtest universe. 'mexc' = MEXC's tradeable USDT spot pairs
+    (candles pinned to MEXC); otherwise CoinGecko top-N by market cap."""
+    if source == "mexc":
+        from utils.exchange import list_spot_symbols
+        return list_spot_symbols("mexc")[:max_coins], "mexc"
+    return get_top_crypto(universe_size), None
+
+
 def optimize(universe_size: int = 40, days: int = 600,
-             cost_pct: float = 0.36, train_frac: float = 0.7) -> dict:
+             cost_pct: float = 0.36, train_frac: float = 0.7,
+             source: str = "top_mcap", max_coins: int = 500) -> dict:
     """
     Sweep management configs. Returns configs ranked by out-of-sample (test) PF.
+    `source`: "top_mcap" (default) or "mexc" (validate on the real MEXC universe,
+    capped at `max_coins` for tractable runtime).
     """
-    tickers = get_top_crypto(universe_size)
-    data = get_ohlcv_batch(tickers, timeframe="1d", limit=days)
+    tickers, exchange = _universe(source, universe_size, max_coins)
+    data = get_ohlcv_batch(tickers, timeframe="1d", limit=days, exchange=exchange)
 
     # Precompute signals + train/test split index per coin.
     prepared = []
@@ -142,18 +154,19 @@ def optimize(universe_size: int = 40, days: int = 600,
 
     results.sort(key=lambda r: -r["test"]["pf"])
     log.info("optimize: best test PF %.2f (%s)", results[0]["test"]["pf"], results[0]["config"]["name"])
-    return {"results": results, "meta": {"coins": len(prepared),
+    return {"results": results, "meta": {"coins": len(prepared), "source": source,
             "days": days, "cost_pct": cost_pct, "train_frac": train_frac}}
 
 
 def apply_config(cfg: dict, universe_size: int = 40, days: int = 600,
-                 cost_pct: float = 0.36, min_n: int = 25) -> dict:
+                 cost_pct: float = 0.36, min_n: int = 25,
+                 source: str = "top_mcap", max_coins: int = 500) -> dict:
     """
     Re-run full validation under `cfg` (all history), per setup, and SAVE it so
     the scanner's edge gate uses the optimized management. Returns the validation.
     """
-    tickers = get_top_crypto(universe_size)
-    data = get_ohlcv_batch(tickers, timeframe="1d", limit=days)
+    tickers, exchange = _universe(source, universe_size, max_coins)
+    data = get_ohlcv_batch(tickers, timeframe="1d", limit=days, exchange=exchange)
     trades = []
     for sym, df in data.items():
         if len(df) < _MIN_HISTORY + 20:
@@ -170,7 +183,7 @@ def apply_config(cfg: dict, universe_size: int = 40, days: int = 600,
         "recommended": recommend_base_scores(stats, min_n=min_n),
         "validated": sorted(validated_setups(stats, min_n=min_n)),
         "meta": {"universe_requested": len(tickers), "coins_with_data": len(data),
-                 "total_trades": len(trades),
+                 "total_trades": len(trades), "source": source,
                  "params": {"days": days, "cost_pct": cost_pct, "management": cfg}},
     }
     save_validation(res)

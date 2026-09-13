@@ -51,14 +51,19 @@ def _apply_costs(trades: list[dict], cost_pct: float) -> list[dict]:
 
 def run_crypto_validation(universe_size: int = 40, days: int = 600,
                           max_hold: int = 20, step: int = 1, cooldown: int = 5,
-                          cost_pct: float = _COST_PCT, min_n: int = 30) -> dict:
+                          cost_pct: float = _COST_PCT, min_n: int = 30,
+                          source: str = "top_mcap", max_coins: int = 500) -> dict:
     """
-    Walk-forward validate the scanner setups over the top-`universe_size` coins.
-    Returns {"stats": {...}, "recommended": {...}, "meta": {...}} where stats are
-    NET of `cost_pct` per round trip.
+    Walk-forward validate the scanner setups over the chosen universe.
+    `source`: "top_mcap" (top-`universe_size` by market cap) or "mexc" (the real
+    MEXC USDT spot universe, capped at `max_coins`). Stats are NET of `cost_pct`.
     """
-    tickers = get_top_crypto(universe_size)
-    data = get_ohlcv_batch(tickers, timeframe="1d", limit=days)
+    if source == "mexc":
+        from utils.exchange import list_spot_symbols
+        tickers, exchange = list_spot_symbols("mexc")[:max_coins], "mexc"
+    else:
+        tickers, exchange = get_top_crypto(universe_size), None
+    data = get_ohlcv_batch(tickers, timeframe="1d", limit=days, exchange=exchange)
 
     all_trades: list[dict] = []
     used = 0
@@ -81,6 +86,7 @@ def run_crypto_validation(universe_size: int = 40, days: int = 600,
             "universe_requested": len(tickers),
             "coins_with_data": used,
             "total_trades": len(all_trades),
+            "source": source,
             "params": {"days": days, "max_hold": max_hold, "step": step,
                        "cooldown": cooldown, "cost_pct": cost_pct},
         },
