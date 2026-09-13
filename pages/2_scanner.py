@@ -6,6 +6,7 @@ momentum setups, ranked by an MR-weighted composite. The top-N are armed as
 triggers; the standalone monitor.py watches them and pushes Telegram alerts.
 Signal only — you execute manually.
 """
+import re
 import streamlit as st
 import pandas as pd
 from config import DARK_THEME_CSS
@@ -64,24 +65,75 @@ if run:
 
 res = st.session_state.get("scan_res")
 
-# ── Ranked candidates ─────────────────────────────────────────────────────────
+# ── Ranked candidates (cards) ──────────────────────────────────────────────────
+def _price(s):
+    """Pull the first dollar/number out of a trade string (e.g. 'Buy near $0.33 …')."""
+    if s is None:
+        return None
+    if isinstance(s, (int, float)):
+        return float(s)
+    m = re.search(r"[-+]?\d[\d,]*\.?\d*", str(s).replace("$", ""))
+    return float(m.group().replace(",", "")) if m else None
+
+
+def _fmt(p) -> str:
+    """Compact price formatting that stays readable across crypto's huge range."""
+    p = _price(p)
+    if p is None:
+        return "—"
+    if p == 0:      return "—"
+    if p < 0.01:    return f"${p:,.6f}"
+    if p < 1:       return f"${p:,.4f}"
+    if p < 100:     return f"${p:,.2f}"
+    return f"${p:,.0f}"
+
+
+def _setup_card(r: dict) -> str:
+    t = r.get("trade") or {}
+    action = t.get("action")
+    is_long = action == "BUY"
+    accent = "#16c784" if is_long else "#ea3943"        # green long / red short
+    dir_lbl = "▲ LONG" if is_long else "▼ SHORT"
+    cat = (r.get("setup_category") or "").replace("_", " ").title()
+    comp = r.get("_composite")
+    rr = t.get("rr")
+    rr_txt = f"{rr}" if rr else "—"
+
+    def leg(label, val, color="#e6e6e6"):
+        return (f"<div style='flex:1;min-width:70px'>"
+                f"<div style='font-size:11px;color:#8a8f98;text-transform:uppercase;"
+                f"letter-spacing:.04em'>{label}</div>"
+                f"<div style='font-size:15px;font-weight:600;color:{color}'>{val}</div></div>")
+
+    legs = "".join([
+        leg("Entry", _fmt(t.get("entry"))),
+        leg("Target", _fmt(t.get("target")), "#16c784"),
+        leg("Stop", _fmt(t.get("stop")), "#ea3943"),
+        leg("R:R", rr_txt),
+    ])
+
+    return (
+        f"<div style='border:1px solid #2a2e39;border-left:4px solid {accent};"
+        f"border-radius:10px;padding:14px 16px;margin-bottom:12px;background:#161a25'>"
+        f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:2px'>"
+        f"<span style='font-size:20px;font-weight:700;color:#fff'>{r['ticker']}</span>"
+        f"<span style='background:{accent};color:#0d1017;font-weight:700;font-size:12px;"
+        f"padding:3px 10px;border-radius:6px'>{dir_lbl}</span></div>"
+        f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:12px'>"
+        f"<span style='color:#c9ccd3;font-size:13px'>{r.get('setup_label','')}</span>"
+        f"<span style='color:#8a8f98;font-size:12px'>{cat} · score {comp}</span></div>"
+        f"<div style='display:flex;gap:10px'>{legs}</div>"
+        f"</div>"
+    )
+
+
 if res and res["candidates"]:
-    st.subheader("Ranked Setups")
-    rows = []
-    for r in res["candidates"]:
-        t = r.get("trade") or {}
-        rows.append({
-            "Symbol": r["ticker"],
-            "Setup": r.get("setup_label"),
-            "Type": (r.get("setup_category") or "").replace("_", " "),
-            "Composite": r.get("_composite"),
-            "Action": t.get("action"),
-            "Entry": t.get("entry"),
-            "Target": t.get("target"),
-            "Stop": t.get("stop"),
-            "R:R": t.get("rr"),
-        })
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    st.subheader(f"Ranked Setups ({len(res['candidates'])})")
+    st.caption("Best setup at top. Green = long, red = short. The top ones get armed as triggers below.")
+    cols = st.columns(2)
+    for i, r in enumerate(res["candidates"]):
+        with cols[i % 2]:
+            st.markdown(_setup_card(r), unsafe_allow_html=True)
 
 # ── Armed triggers ────────────────────────────────────────────────────────────
 st.divider()
