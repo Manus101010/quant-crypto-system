@@ -198,7 +198,67 @@ def _legs(entry, target, stop, rr) -> str:
             + "</div>")
 
 
-def _card(symbol, is_long, setup, meta_right, legs_html="", footer="") -> str:
+@st.cache_data(ttl=300, show_spinner=False)
+def _candles_for(symbols: tuple[str, ...], bars: int = 45) -> dict:
+    """Recent daily candles for the displayed symbols (cached 5m). Read-only ccxt."""
+    if not symbols:
+        return {}
+    from utils import exchange
+    out = {}
+    data = exchange.get_ohlcv_batch(list(symbols), timeframe="1d", limit=bars + 5)
+    for sym, df in data.items():
+        d = df.tail(bars)
+        out[sym] = [(float(o), float(h), float(l), float(c))
+                    for o, h, l, c in zip(d["open"], d["high"], d["low"], d["close"])]
+    return out
+
+
+def _svg_chart(candles, entry, stop, target, is_long, w=300, h=120) -> str:
+    """Inline candlestick chart with entry/stop/target mapped as horizontal lines."""
+    if not candles or len(candles) < 3:
+        return ""
+    entry, stop, target = _price(entry), _price(stop), _price(target)
+    highs = [c[1] for c in candles]
+    lows  = [c[2] for c in candles]
+    levels = [x for x in (entry, stop, target) if x]
+    lo = min(min(lows), *levels) if levels else min(lows)
+    hi = max(max(highs), *levels) if levels else max(highs)
+    if hi <= lo:
+        return ""
+    pad = (hi - lo) * 0.06
+    lo -= pad; hi += pad
+    span = hi - lo
+
+    def y(p): return h - (p - lo) / span * h
+    n = len(candles)
+    cw = w / n
+    parts = []
+    for i, (o, hh, ll, c) in enumerate(candles):
+        x = i * cw + cw / 2
+        col = "#16c784" if c >= o else "#ea3943"
+        parts.append(f"<line x1='{x:.1f}' y1='{y(hh):.1f}' x2='{x:.1f}' y2='{y(ll):.1f}' "
+                     f"stroke='{col}' stroke-width='1'/>")
+        oy, cy = y(o), y(c)
+        top, bh = min(oy, cy), max(abs(oy - cy), 1)
+        parts.append(f"<rect x='{x - cw*0.3:.1f}' y='{top:.1f}' width='{cw*0.6:.1f}' "
+                     f"height='{bh:.1f}' fill='{col}'/>")
+
+    def hline(p, col, label):
+        yy = y(p)
+        return (f"<line x1='0' y1='{yy:.1f}' x2='{w}' y2='{yy:.1f}' stroke='{col}' "
+                f"stroke-width='1' stroke-dasharray='4 3' opacity='0.9'/>"
+                f"<rect x='0' y='{yy-8:.1f}' width='30' height='11' fill='{col}' opacity='0.85'/>"
+                f"<text x='2' y='{yy:.1f}' fill='#0d1017' font-size='9' font-weight='700'>{label}</text>")
+    over = ""
+    if entry:  over += hline(entry, "#e6e6e6", "entry")
+    if target: over += hline(target, _LONG, "tgt")
+    if stop:   over += hline(stop, _SHORT, "stop")
+    return (f"<svg viewBox='0 0 {w} {h}' width='100%' height='{h}' preserveAspectRatio='none' "
+            f"style='display:block;margin:10px 0 2px;background:#0d1017;border-radius:6px'>"
+            f"{''.join(parts)}{over}</svg>")
+
+
+def _card(symbol, is_long, setup, meta_right, legs_html="", footer="", chart_svg="") -> str:
     accent = _LONG if is_long else _SHORT
     dir_lbl = "▲ LONG" if is_long else "▼ SHORT"
     foot = (f"<div style='margin-top:10px;padding-top:9px;"
@@ -218,7 +278,7 @@ def _card(symbol, is_long, setup, meta_right, legs_html="", footer="") -> str:
         f"<div style='display:flex;justify-content:space-between;align-items:baseline;margin-top:3px'>"
         f"<span style='color:#c9ccd3;font-size:13px'>{setup}</span>"
         f"<span style='color:{_MUTE};font-size:11px'>{meta_right}</span></div>"
-        f"{legs_html}{foot}</div>"
+        f"{chart_svg}{legs_html}{foot}</div>"
     )
 
 
@@ -242,13 +302,17 @@ if res and res.get("candidates"):
         st.caption("Every setup that passed the edge gate today, best first — only a handful of "
                    "coins are ever in a valid, tradeable setup at once. The top ones are armed as "
                    "live triggers below.")
+        cand_candles = _candles_for(tuple(r["ticker"] for r in res["candidates"]))
         cards = []
         for r in res["candidates"]:
             t = r.get("trade") or {}
+            is_long = t.get("action") == "BUY"
             cards.append(_card(
-                r["ticker"], t.get("action") == "BUY", r.get("setup_label", ""),
+                r["ticker"], is_long, r.get("setup_label", ""),
                 f"{(r.get('setup_category') or '').replace('_',' ').title()} · score {r.get('_composite')}",
                 _legs(t.get("entry"), t.get("target"), t.get("stop"), t.get("rr")),
+                chart_svg=_svg_chart(cand_candles.get(r["ticker"]), t.get("entry"),
+                                     t.get("stop"), t.get("target"), is_long),
             ))
         _grid(cards)
 
@@ -269,6 +333,7 @@ with hcol2:
 if active:
     st.caption(f"{len(active)} live trigger{'s' if len(active) != 1 else ''} — the monitor "
                f"alerts your phone the moment one fires.")
+    act_candles = _candles_for(tuple(t["symbol"] for t in active))
     cards = []
     for t in active:
         is_long = t["direction"] == "long"
@@ -277,6 +342,8 @@ if active:
             f"👁 {_expires_in(t.get('expires_at'))}",
             _legs(t.get("entry"), t.get("target"), t.get("stop"), t.get("rr")),
             footer=f"<b style='color:#c9ccd3'>Fires when</b> {_cond_plain(t)}",
+            chart_svg=_svg_chart(act_candles.get(t["symbol"]), t.get("entry"),
+                                 t.get("stop"), t.get("target"), is_long),
         ))
     _grid(cards)
 else:
