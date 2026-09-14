@@ -284,6 +284,20 @@ def trade_suggestion(
             "note":   "Not a short signal — a reminder that extended runs revert. Protect profits.",
         }
 
+    # ── Relative strength leader (momentum leg) ─────────────────────────────────
+    if setup_label == "Relative Strength Leader":
+        stop   = max(_stop_below(2.5), sma50 * 0.985)
+        risk   = price - stop
+        target = price + risk * 3.0
+        return {
+            "action": "BUY",
+            "entry":  f"Buy strength near {_fmt_p(price)} or add on a dip to SMA50 ({_fmt_p(sma50)})",
+            "target": f"{_fmt_p(target)} (3R) — or trail a 2.5× ATR stop and let it run",
+            "stop":   f"{_fmt_p(stop)} (2.5× ATR or below SMA50, {atr_note})",
+            "rr":     _rr(price, target, stop),
+            "note":   "Leader outperforming BTC. Momentum leg — trend-follow, cut fast if it loses the SMA50.",
+        }
+
     # ── Breakout entries (volume / Donchian / squeeze) ─────────────────────────
     if setup_label in ("Donchian Breakout (55d)", "Volume Breakout", "Squeeze Breakout"):
         stop   = _stop_below(2.5)
@@ -388,24 +402,33 @@ def trade_suggestion(
     }
 
 
-def breakout_signals(close, high, volume) -> dict:
+def breakout_signals(close, high, volume, low=None) -> dict:
     """
     Volume/breakout/squeeze features from series up to 'now' (last element = today).
-    Used to classify the trend-following setups (Donchian, volume spike, squeeze).
+    Used to classify trend-following (Donchian, volume spike, squeeze) AND the
+    tightened mean-reversion range-low/high checks.
       - donch_hi20/55: prior N-day high (EXCLUDING today) → today's close breaking
         it is a fresh N-day breakout.
+      - donch_lo20/55: prior N-day low (EXCLUDING today) → 'price at an actual
+        range low/high' for the mean-reversion stretch checks.
       - vol_ratio: today's volume / 20-day average volume (participation).
       - squeeze: today's Bollinger bandwidth in the bottom 20% of the last 60 days
         (a volatility contraction that precedes expansion).
     All values are None when there isn't enough history (setup simply won't fire).
     """
     import numpy as _np
-    out = {"vol_ratio": None, "donch_hi20": None, "donch_hi55": None, "squeeze": None}
+    out = {"vol_ratio": None, "donch_hi20": None, "donch_hi55": None,
+           "donch_lo20": None, "donch_lo55": None, "squeeze": None}
     n = len(close)
     if len(high) >= 21:
         out["donch_hi20"] = float(high.iloc[-21:-1].max())
     if len(high) >= 56:
         out["donch_hi55"] = float(high.iloc[-56:-1].max())
+    _low = low if low is not None else close
+    if len(_low) >= 21:
+        out["donch_lo20"] = float(_low.iloc[-21:-1].min())
+    if len(_low) >= 56:
+        out["donch_lo55"] = float(_low.iloc[-56:-1].min())
     if volume is not None and len(volume) >= 20:
         avg = float(volume.iloc[-20:].mean())
         if avg > 0:
@@ -433,7 +456,9 @@ def classify_setup(
     vol_ratio: float | None = None,
     donch_hi20: float | None = None,
     donch_hi55: float | None = None,
+    donch_lo20: float | None = None,
     squeeze: bool | None = None,
+    rel_strength: float | None = None,
 ) -> tuple[str, str, str]:
     """
     Returns (label, plain-English description, category).
@@ -487,45 +512,35 @@ def classify_setup(
             "neutral",
         )
 
-    # ── PREMIER mean-reversion: Connors RSI-2 pullback in an uptrend ──────
-    # RSI(2) < 10 while above the 200-SMA → ~75% historical bounce rate.
-    if rsi2 is not None and rsi2 < 10 and above_200:
+    # ══ TIGHTENED MEAN-REVERSION STRETCH ══════════════════════════════════
+    # A mild dip below the mean matched almost everything, so an MR long now
+    # requires a REAL stretch — ALL of: RSI(14) floor, z-score ≥2σ below the
+    # mean, price at an actual 20-day range low, and volume confirmation — on
+    # top of the setup's own primary trigger and the Connors 200-SMA rule.
+    _z_ok     = zscore is not None and zscore <= -2.0
+    _rsi14_ok = rsi <= 25
+    _rangelo_ok = donch_lo20 is not None and price <= donch_lo20 * 1.03
+    _vol_ok   = vol_ratio is not None and vol_ratio >= 1.5
+    mr_stretch = _z_ok and _rsi14_ok and _rangelo_ok and _vol_ok
+
+    # ── PREMIER mean-reversion: Connors RSI-2 washout in an uptrend ───────
+    if rsi2 is not None and rsi2 <= 5 and above_200 and mr_stretch:
         return (
             "RSI-2 Pullback (Connors)",
-            f"RSI(2) at {rsi2:.0f} — an extreme short-term washout — while price holds "
-            "above its 200-day uptrend. This is Larry Connors' highest-probability "
-            "mean-reversion trigger (~75% historical bounce rate). Exit when RSI(2) "
-            "crosses back above 65 or price tags the 5/10-day average.",
+            f"RSI(2) {rsi2:.0f} washout with a real stretch — RSI(14) {rsi:.0f}≤25, "
+            f"z-score {zscore:.1f}≤−2, at the 20-day low on {vol_ratio:.1f}× volume — "
+            "while above the 200-day uptrend. Connors' highest-probability bounce. "
+            "Exit when RSI(2) crosses back above 65 or price tags the 5/10-day mean.",
             "mean_reversion",
         )
 
-    # ── Oversold dip within a confirmed uptrend (RSI-14 variant) ─────────
-    if rsi < 35 and above_200:
-        return (
-            "Oversold in Uptrend",
-            f"RSI {rsi:.0f} oversold while above the 200-day trend. Classic "
-            "buy-the-dip: the long-term uptrend provides a tailwind for the bounce. "
-            "One of the highest-probability swing setups.",
-            "mean_reversion",
-        )
-
-    # ── BB Bounce: near lower band, uptrend intact ───────────────────────
-    if (bb_pct is not None and bb_pct <= 0.15) and above_200 and rsi < 50:
-        return (
-            "BB Bounce Setup",
-            f"Price is near the lower Bollinger Band (BB%={bb_pct:.2f}) while the "
-            "200-day uptrend is intact. Mean reversion entry: price tends to drift "
-            f"back toward the 20-day average. RSI {rsi:.0f} confirms not overbought.",
-            "mean_reversion",
-        )
-
-    # ── Williams %R deep oversold, uptrend intact ────────────────────────
-    if williams_r is not None and williams_r <= -85 and above_200:
+    # ── Williams %R deep oversold with the same stretch gate ─────────────
+    if williams_r is not None and williams_r <= -85 and above_200 and mr_stretch:
         return (
             "Williams %R Oversold",
-            f"Williams %%R at {williams_r:.0f} — deeply oversold on a 14-day lookback — "
-            "with price above the 200-day trend line. A swing-trader mean-reversion "
-            "setup confirmed by the longer-term uptrend.",
+            f"Williams %%R {williams_r:.0f} deeply oversold with a real stretch "
+            f"(RSI {rsi:.0f}≤25, z {zscore:.1f}≤−2, 20-day low, {vol_ratio:.1f}× vol) "
+            "above the 200-day trend. Swing mean-reversion; exit as %R clears −20.",
             "mean_reversion",
         )
 
@@ -572,6 +587,19 @@ def classify_setup(
             f"Fresh 20-day high on {vol_ratio:.1f}× average volume — real participation "
             f"behind the move (not a low-liquidity drift). Breakouts confirmed by a "
             f"volume spike historically show materially better follow-through.",
+            "momentum",
+        )
+
+    # ── Relative strength leader (momentum leg vs BTC) ───────────────────
+    # Coin outperforming BTC by ≥15% over 30d, in an uptrend, not yet stretched.
+    # A leader can qualify even in a weak tape — the BTC regime stamp warns,
+    # it does not filter these out.
+    if rel_strength is not None and rel_strength >= 15.0 and above_200 and rsi < 78:
+        return (
+            "Relative Strength Leader",
+            f"Outperforming BTC by {rel_strength:+.0f}% over 30 days while above its "
+            "200-day trend — a market leader, not just a coin riding beta. Momentum "
+            "leg: buy strength, trail the stop.",
             "momentum",
         )
 
@@ -630,6 +658,7 @@ def classify_setup(
 _SETUP_BASE: dict[str, float] = {
     "RSI-2 Pullback (Connors)":    85,   # empirical 69% win, PF 2.07 (n=339) — premier setup, confirmed
     "Oversold in Uptrend":         80,   # thin (n=20, untrusted) — kept at literature prior
+    "Relative Strength Leader":    72,   # outperforming BTC by ≥15%/30d — momentum leg, provisional until crypto-validated
     "Donchian Breakout (55d)":     72,   # Turtle 55d breakout — trend-following, provisional until crypto-validated
     "Volume Breakout":             70,   # 20d high + 2x volume — provisional until crypto-validated
     "Squeeze Breakout":            70,   # volatility contraction → expansion — provisional until crypto-validated
@@ -867,11 +896,12 @@ def _run(tickers: list[str], criteria: ScanCriteria,
             if criteria.min_momentum_3m is not None and mom3m < criteria.min_momentum_3m:
                 passes = False
 
-            bo = breakout_signals(s, h, v)
+            bo = breakout_signals(s, h, v, lo)
             setup_label, setup_desc, setup_cat = classify_setup(
                 price, sma50, sma200, rsi, mom3m, bb_pct, zsc, wil_r, rsi_2,
                 vol_ratio=bo["vol_ratio"], donch_hi20=bo["donch_hi20"],
-                donch_hi55=bo["donch_hi55"], squeeze=bo["squeeze"],
+                donch_hi55=bo["donch_hi55"], donch_lo20=bo["donch_lo20"],
+                squeeze=bo["squeeze"],
             )
 
             # Format price sensibly across stocks and micro-cap crypto
@@ -941,6 +971,12 @@ def _run_from_bybit(bybit_data: dict, tickers: list[str], criteria: ScanCriteria
                     regime_score: float | None = None) -> pd.DataFrame:
     """Scanner core that consumes pre-fetched Bybit DataFrames instead of yfinance."""
     log.info("Scanning %d Bybit tickers …", len(bybit_data))
+    # BTC 30-day return once per scan (cached) → relative-strength leg.
+    try:
+        from utils.btc_regime import btc_return
+        btc_ret_30 = btc_return(30)
+    except Exception:                              # noqa: BLE001
+        btc_ret_30 = None
     results = []
     for ticker in tickers:
         if ticker not in bybit_data:
@@ -992,11 +1028,16 @@ def _run_from_bybit(bybit_data: dict, tickers: list[str], criteria: ScanCriteria
                 passes = False
 
             vol_series = df["volume"].dropna() if "volume" in df.columns else v_usd
-            bo = breakout_signals(s, h, vol_series)
+            bo = breakout_signals(s, h, vol_series, lo)
+            rel_strength = None
+            if btc_ret_30 is not None and len(s) >= 31:
+                coin_ret_30 = (price / float(s.iloc[-31]) - 1) * 100
+                rel_strength = coin_ret_30 - btc_ret_30
             setup_label, setup_desc, setup_cat = classify_setup(
                 price, sma50, sma200, rsi, mom3m, bb_pct, zsc, wil_r, rsi_2,
                 vol_ratio=bo["vol_ratio"], donch_hi20=bo["donch_hi20"],
-                donch_hi55=bo["donch_hi55"], squeeze=bo["squeeze"],
+                donch_hi55=bo["donch_hi55"], donch_lo20=bo["donch_lo20"],
+                squeeze=bo["squeeze"], rel_strength=rel_strength,
             )
 
             if price < 0.01:

@@ -35,10 +35,11 @@ _TIGHT = {"name": "tight 2.0×ATR / 3R / 15b", "stop_mult": 2.0, "target_r": 3.0
           "trailing": False, "max_hold": 15}
 
 SETUP_MANAGEMENT = {
-    # Fresh breakouts → let winners run.
-    "Donchian Breakout (55d)": _TRAIL,
-    "Volume Breakout":         _TRAIL,
-    "Squeeze Breakout":        _TRAIL,
+    # Fresh breakouts + leaders → let winners run.
+    "Donchian Breakout (55d)":   _TRAIL,
+    "Volume Breakout":           _TRAIL,
+    "Squeeze Breakout":          _TRAIL,
+    "Relative Strength Leader":  _TRAIL,
     # Everything else (mean-reversion + continuation) → tight fixed target.
 }
 DEFAULT_MANAGEMENT = _TIGHT
@@ -97,18 +98,21 @@ def _simulate(close, high, low, i, ind, cfg) -> dict | None:
             "r_mult": (exit_p - entry) / risk, "bars_held": k, "reason": reason}
 
 
-def _signals(close, high, low, volume=None) -> list[tuple[int, dict]]:
+def _signals(close, high, low, volume=None, btc_close=None) -> list[tuple[int, dict]]:
     """Precompute actionable BUY signal bars once (the expensive indicator pass)."""
+    if btc_close is not None:
+        btc_close = btc_close.reindex(close.index).ffill()
     out = []
     for i in range(_MIN_HISTORY, len(close) - 1):
-        ind = _indicators_at(close, high, low, i, volume)
+        ind = _indicators_at(close, high, low, i, volume, btc_close)
         if ind is None:
             continue
         label, _d, cat = classify_setup(
             ind["price"], ind["sma50"], ind["sma200"], ind["rsi"], ind["mom3m"],
             ind["bb_pct"], ind["zscore"], ind["williams_r"], ind["rsi2"],
             vol_ratio=ind["vol_ratio"], donch_hi20=ind["donch_hi20"],
-            donch_hi55=ind["donch_hi55"], squeeze=ind["squeeze"],
+            donch_hi55=ind["donch_hi55"], donch_lo20=ind["donch_lo20"],
+            squeeze=ind["squeeze"], rel_strength=ind["rel_strength"],
         )
         if label not in ACTIONABLE_BUY_SETUPS:
             continue
@@ -136,6 +140,24 @@ def _pool(trades: list[dict]) -> dict:
             "win": round(sum(t["win"] for t in trades) / len(trades) * 100, 1)}
 
 
+def _btc_close(days: int, exchange: str | None = None):
+    """
+    BTC daily closes for the relative-strength leg. BTC is fungible across venues,
+    so use the full fallback CHAIN (never a single pinned exchange) — a one-venue
+    hiccup must not silently zero the whole relative-strength leg.
+    """
+    from utils.exchange import get_ohlcv
+    for _try in range(3):
+        try:
+            df = get_ohlcv("BTC-USD", "1d", limit=days)   # exchange=None → fallback chain
+            if not df.empty and len(df) >= 60:
+                return df["close"]
+        except Exception:                          # noqa: BLE001
+            pass
+    log.warning("_btc_close: BTC fetch failed after retries — rel-strength leg disabled this run")
+    return None
+
+
 def _universe(source: str, universe_size: int, max_coins: int) -> tuple[list[str], str | None]:
     """Resolve the backtest universe. 'mexc' = MEXC's tradeable USDT spot pairs
     (candles pinned to MEXC); otherwise CoinGecko top-N by market cap."""
@@ -155,6 +177,7 @@ def optimize(universe_size: int = 40, days: int = 600,
     """
     tickers, exchange = _universe(source, universe_size, max_coins)
     data = get_ohlcv_batch(tickers, timeframe="1d", limit=days, exchange=exchange)
+    btc = _btc_close(days, exchange)
 
     # Precompute signals + train/test split index per coin.
     prepared = []
@@ -163,7 +186,7 @@ def optimize(universe_size: int = 40, days: int = 600,
             continue
         close, high, low = df["close"], df["high"], df["low"]
         vol = df["volume"] if "volume" in df.columns else None
-        sigs = _signals(close, high, low, vol)
+        sigs = _signals(close, high, low, vol, btc)
         split = int(len(close) * train_frac)
         prepared.append((close, high, low, sigs, split))
 
@@ -195,13 +218,14 @@ def apply_config(cfg: dict, universe_size: int = 40, days: int = 600,
     """
     tickers, exchange = _universe(source, universe_size, max_coins)
     data = get_ohlcv_batch(tickers, timeframe="1d", limit=days, exchange=exchange)
+    btc = _btc_close(days, exchange)
     trades = []
     for sym, df in data.items():
         if len(df) < _MIN_HISTORY + 20:
             continue
         close, high, low = df["close"], df["high"], df["low"]
         vol = df["volume"] if "volume" in df.columns else None
-        for i, ind in _signals(close, high, low, vol):
+        for i, ind in _signals(close, high, low, vol, btc):
             t = _simulate(close, high, low, i, ind, cfg)
             if t is not None:
                 trades.append(t)
@@ -230,13 +254,14 @@ def validate_per_setup(universe_size: int = 40, days: int = 600,
     """
     tickers, exchange = _universe(source, universe_size, max_coins)
     data = get_ohlcv_batch(tickers, timeframe="1d", limit=days, exchange=exchange)
+    btc = _btc_close(days, exchange)
     by_setup: dict[str, list] = {}
     for sym, df in data.items():
         if len(df) < _MIN_HISTORY + 20:
             continue
         close, high, low = df["close"], df["high"], df["low"]
         vol = df["volume"] if "volume" in df.columns else None
-        for i, ind in _signals(close, high, low, vol):
+        for i, ind in _signals(close, high, low, vol, btc):
             label = ind["_label"]
             t = _simulate(close, high, low, i, ind, management_for(label))
             if t is not None:

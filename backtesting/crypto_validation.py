@@ -64,6 +64,18 @@ def run_crypto_validation(universe_size: int = 40, days: int = 600,
     else:
         tickers, exchange = get_top_crypto(universe_size), None
     data = get_ohlcv_batch(tickers, timeframe="1d", limit=days, exchange=exchange)
+    # BTC via the fallback chain (fungible across venues) so a one-venue hiccup
+    # never silently disables the relative-strength leg.
+    btc_close = None
+    from utils.exchange import get_ohlcv
+    for _try in range(3):
+        try:
+            _btc = get_ohlcv("BTC-USD", "1d", limit=days)
+            if not _btc.empty and len(_btc) >= 60:
+                btc_close = _btc["close"]
+                break
+        except Exception:                          # noqa: BLE001
+            pass
 
     all_trades: list[dict] = []
     used = 0
@@ -72,7 +84,8 @@ def run_crypto_validation(universe_size: int = 40, days: int = 600,
             continue
         used += 1
         vol = df["volume"] if "volume" in df.columns else None
-        trades = _walk_ticker(df["close"], df["high"], df["low"], max_hold, step, cooldown, vol)
+        trades = _walk_ticker(df["close"], df["high"], df["low"], max_hold, step,
+                              cooldown, vol, btc_close)
         all_trades.extend(_apply_costs(trades, cost_pct))
 
     stats = _aggregate(all_trades)

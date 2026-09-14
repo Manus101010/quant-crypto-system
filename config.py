@@ -41,6 +41,12 @@ DEPLOY_THRESHOLDS = {
     "avoid":        0,
 }
 
+# ── BTC regime veto hooks (v1 = WARNING only; both default off) ────────────────
+# When flipped True later, the monitor will refuse to FIRE the relevant direction
+# while BTC is in the adverse regime. Left off so the regime read is advisory.
+BTC_REGIME_VETO      = False   # True → don't fire LONGS while BTC is RISK-OFF
+SHORT_VETO_IN_RISK_ON = False  # True → don't fire SHORTS while BTC is RISK-ON
+
 # Analyst blender weights
 QUANT_WEIGHT = 0.60
 CLAUDE_WEIGHT = 0.40

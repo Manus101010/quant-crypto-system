@@ -24,7 +24,7 @@ from utils.logger import get_logger
 
 log = get_logger(__name__)
 
-_MR_BOOST = 1.15          # mean-reversion setups get a 15% composite edge
+_MR_BOOST = 1.0           # NEUTRAL — setup types compete on measured edge, not a thumb on the scale
 _RSI2_RECLAIM = 12.0      # RSI(2) level a MR long must turn back up through to confirm
 _MIN_DEPLOY_TO_ARM = 45.0 # macro Deployment Score below this = risk-off → don't arm
 _MAX_CANDIDATES = 60      # how many ranked setups to SHOW (we still only arm top_n)
@@ -78,37 +78,69 @@ def _num(s) -> float | None:
     return float(m.group().replace(",", "")) if m else None
 
 
+def _setup_key(r: dict) -> tuple:
+    """Cap key = setup type AND direction (a long and short of the same setup are
+    different types for capping — matters once shorts are added)."""
+    return (r.get("setup_label"), r.get("direction") or "long")
+
+
 def _diversify(rows: list[dict], n: int, max_per_setup: int | None) -> list[dict]:
     """
-    Pick the top-`n` rows (already sorted best-first) while capping how many of any
-    single setup can be included, so the result is a SPREAD across setup types
-    rather than 10 of whatever setup is most common today. Fills round-robin: the
-    best of each setup first, then the next-best of each, etc. If the cap can't
-    fill n (few setup types today), the remaining slots fall back to best-first.
+    Build the armed set (rows already sorted best-first) with three rules:
+
+      1. DEDUPE BY SYMBOL — one trigger per coin, keep its highest-composite setup.
+      2. PER-SETUP CAP — round-robin across setup types (best of each first), no
+         type exceeds `max_per_setup`, so the set is a spread not 20 copies.
+      3. HARD 50% CEILING — no single setup type may ever exceed half of `n`, even
+         via backfill. When only one type is firing we LEAVE SLOTS EMPTY rather
+         than fake diversity — that is deliberate, not a bug.
     """
+    from collections import defaultdict
+
+    # 1) Dedupe by symbol (rows are best-first, so first seen = highest composite).
+    seen_sym, deduped = set(), []
+    for r in rows:
+        sym = r.get("ticker") or r.get("symbol")
+        if sym in seen_sym:
+            continue
+        seen_sym.add(sym)
+        deduped.append(r)
+    rows = deduped
+
     if not max_per_setup or max_per_setup <= 0:
         return rows[:n]
-    from collections import defaultdict
-    buckets: dict[str, list] = defaultdict(list)
+
+    ceiling = max(1, n // 2)                 # hard: no type past 50% of slots
+    cap = min(max_per_setup, ceiling)
+
+    buckets: dict[tuple, list] = defaultdict(list)
     for r in rows:
-        buckets[r.get("setup_label")].append(r)
+        buckets[_setup_key(r)].append(r)
+
     picked, used = [], defaultdict(int)
-    # Round-robin passes across setup buckets (each already best-first).
-    for _pass in range(max_per_setup):
-        for label, bucket in buckets.items():
-            if used[label] < len(bucket) and _pass < max_per_setup:
+    # Round-robin passes, best-of-each-type first, up to the per-setup cap.
+    for _pass in range(cap):
+        for key, bucket in buckets.items():
+            if _pass < len(bucket):
                 picked.append(bucket[_pass])
-                used[label] += 1
+                used[key] += 1
     picked.sort(key=lambda r: -r.get("_composite", 0))
     picked = picked[:n]
-    # Backfill if the cap left us short of n (not enough distinct setups).
+
+    # Backfill toward n, but NEVER push a type past the 50% ceiling. If we run out
+    # of eligible rows, the remaining slots stay EMPTY (no faked variety).
     if len(picked) < n:
         chosen = {id(r) for r in picked}
         for r in rows:
-            if id(r) not in chosen:
-                picked.append(r)
-                if len(picked) >= n:
-                    break
+            if len(picked) >= n:
+                break
+            if id(r) in chosen:
+                continue
+            key = _setup_key(r)
+            if used[key] >= ceiling:
+                continue
+            picked.append(r)
+            used[key] += 1
     return picked
 
 

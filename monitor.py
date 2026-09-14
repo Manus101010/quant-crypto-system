@@ -56,7 +56,11 @@ def _fmt_price(p) -> str:
 
 
 def _alert_text(trg: dict, price: float, reason: str) -> str:
-    arrow = "🟢 LONG" if trg.get("direction") == "long" else "🔴 SHORT"
+    direction = trg.get("direction") or "long"
+    if direction == "short":
+        arrow = "🔴 SHORT  (MEXC futures/perp)"
+    else:
+        arrow = "🟢 LONG  (spot)"
     cat = (trg.get("setup_category") or "").replace("_", " ")
     lines = [
         f"⚡ <b>{trg['symbol']}</b> — {trg.get('setup_label','setup')}",
@@ -69,6 +73,14 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     if trg.get("stop"):   lines.append(f"Stop: {_fmt_price(trg['stop'])}")
     if trg.get("rr"):     lines.append(f"R:R: {trg['rr']}")
     lines.append(f"📐 {_management_note(trg.get('setup_label'))}")
+    # Direction-aware BTC regime stamp (WARNING, never a veto in v1).
+    try:
+        from utils import btc_regime
+        reg = btc_regime.get_btc_regime()
+        stamp = btc_regime.stamp_for(reg["label"], direction)
+        lines.append(f"🧭 BTC {reg['label']} — {reg.get('detail','')}  {stamp}")
+    except Exception as exc:                       # noqa: BLE001 — never block an alert
+        log.debug("btc_regime stamp failed: %s", exc)
     lines.append("\n<i>Signal only — review and execute manually.</i>")
     return "\n".join(lines)
 
@@ -168,6 +180,30 @@ def _evaluate(trg: dict, ind: dict) -> tuple[str, str]:
     return ("wait", "")
 
 
+def _regime_vetoes(trg: dict) -> bool:
+    """
+    Whether the BTC regime veto hooks (config, both default off) block this fire.
+    Longs vetoed while RISK-OFF (BTC_REGIME_VETO); shorts vetoed while RISK-ON
+    (SHORT_VETO_IN_RISK_ON). v1 has both off → always returns False.
+    """
+    import config
+    long_veto = getattr(config, "BTC_REGIME_VETO", False)
+    short_veto = getattr(config, "SHORT_VETO_IN_RISK_ON", False)
+    if not (long_veto or short_veto):
+        return False
+    try:
+        from utils import btc_regime
+        label = btc_regime.get_btc_regime()["label"]
+    except Exception:                             # noqa: BLE001
+        return False
+    d = trg.get("direction") or "long"
+    if d == "long" and long_veto and label == btc_regime.RISK_OFF:
+        return True
+    if d == "short" and short_veto and label == btc_regime.RISK_ON:
+        return True
+    return False
+
+
 def poll_once() -> dict:
     """One evaluation pass over all active triggers. Returns a summary."""
     now_iso = datetime.datetime.utcnow().isoformat()
@@ -189,6 +225,11 @@ def poll_once() -> dict:
         if ind is None:
             continue
         verdict, reason = _evaluate(t, ind)
+        if verdict == "fire" and _regime_vetoes(t):
+            # Veto hooks (both default off): skip firing in the adverse regime.
+            log.info("VETOED #%d %s — BTC regime veto (%s)", t["id"], t["symbol"],
+                     t.get("direction"))
+            continue
         if verdict == "fire":
             text = _alert_text(t, ind["price"], reason)
             delivered = telegram.send_message(text)
@@ -212,6 +253,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="QuantCore trigger monitor")
     ap.add_argument("--interval", type=int, default=180, help="poll seconds (min 60)")
     ap.add_argument("--once", action="store_true", help="single pass then exit")
+    ap.add_argument("--heartbeat-telegram-hours", type=float, default=0.0,
+                    help="send a 'still alive' Telegram every N hours (0 = off)")
     args = ap.parse_args()
     interval = max(args.interval, _MIN_INTERVAL)
 
@@ -224,14 +267,26 @@ def main() -> None:
         log.info("monitor: single pass — %s", poll_once())
         return
 
-    log.info("monitor: starting, poll every %ds. Ctrl-C to stop.", interval)
-    telegram.send_message("🟢 <b>Monitor started</b> — watching your armed triggers.")
+    n_active = len(tdb.get_triggers("active"))
+    log.info("monitor: starting, poll every %ds, %d active triggers. Ctrl-C to stop.",
+             interval, n_active)
+    telegram.send_message(f"🟢 <b>Monitor started</b> — watching {n_active} armed "
+                          f"trigger(s), polling every {interval}s.")
+    hb_secs = args.heartbeat_telegram_hours * 3600
+    last_hb = time.time()
     try:
         while True:
             try:
                 s = poll_once()
-                if s["fired"]:
-                    log.info("poll: %d active, %d fired", s["active"], s["fired"])
+                # Heartbeat: ONE line every poll, so a quiet loop is distinguishable
+                # from a dead one (this is what "nothing is watching" rules out).
+                log.info("poll %s UTC · %d active · %d fired · %d invalidated",
+                         datetime.datetime.utcnow().strftime("%H:%M:%S"),
+                         s["active"], s["fired"], s["invalidated"])
+                if hb_secs and time.time() - last_hb >= hb_secs:
+                    telegram.send_message(f"💓 <b>Monitor alive</b> — {s['active']} "
+                                          f"active trigger(s), still watching.")
+                    last_hb = time.time()
             except Exception as exc:                # noqa: BLE001 — keep the loop alive
                 log.error("poll error: %s", exc)
             time.sleep(interval)

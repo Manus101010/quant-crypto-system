@@ -62,6 +62,7 @@ ACTIONABLE_BUY_SETUPS = {
     "Donchian Breakout (55d)",
     "Volume Breakout",
     "Squeeze Breakout",
+    "Relative Strength Leader",
 }
 
 # Minimum history before we start classifying a bar.
@@ -77,11 +78,13 @@ def _indicators_at(
     low: pd.Series,
     i: int,
     volume: pd.Series | None = None,
+    btc_close: pd.Series | None = None,
 ) -> dict | None:
     """
     Compute the scanner's indicators using ONLY bars [0 .. i] (inclusive).
     Returns None if not enough history. When `volume` is given, also computes the
-    breakout/volume/squeeze features so the breakout setups can be validated.
+    breakout/volume/squeeze features; when `btc_close` (aligned to `close`) is
+    given, computes 30d relative strength vs BTC so that leg can be validated.
     """
     if i < _MIN_HISTORY:
         return None
@@ -111,12 +114,19 @@ def _indicators_at(
         "rsi": rsi, "rsi2": rsi_2,
         "bb_upper": bb_upper, "bb_mid": bb_mid, "bb_lower": bb_lower, "bb_pct": bb_pct,
         "zscore": zsc, "williams_r": wil_r, "atr": atr,
-        "vol_ratio": None, "donch_hi20": None, "donch_hi55": None, "squeeze": None,
+        "vol_ratio": None, "donch_hi20": None, "donch_hi55": None,
+        "donch_lo20": None, "squeeze": None, "rel_strength": None,
     }
     if volume is not None:
         from skills.scanner import breakout_signals
         v = volume.iloc[: i + 1]
-        out.update(breakout_signals(s, h, v))
+        out.update(breakout_signals(s, h, v, lo))
+    if btc_close is not None and i >= 30:
+        b_now, b_prev = btc_close.iloc[i], btc_close.iloc[i - 30]
+        if b_now == b_now and b_prev and b_prev == b_prev and base63:
+            coin_ret = (price / float(s.iloc[-31]) - 1) * 100 if len(s) >= 31 else 0.0
+            btc_ret = (float(b_now) / float(b_prev) - 1) * 100
+            out["rel_strength"] = coin_ret - btc_ret
     return out
 
 
@@ -215,6 +225,7 @@ def _walk_ticker(
     step: int,
     cooldown: int,
     volume: pd.Series | None = None,
+    btc_close: pd.Series | None = None,
 ) -> list[dict]:
     """
     Walk one ticker bar-by-bar. Returns a list of simulated trade records.
@@ -223,12 +234,15 @@ def _walk_ticker(
     `cooldown` : after firing a trade, skip this many bars before re-evaluating
                  the same setup pipeline (avoids stacking near-identical signals
                  on consecutive bars).
+    `btc_close`: BTC daily closes for the relative-strength leg (aligned here).
     """
     close = close.dropna()
     high  = high.reindex(close.index)
     low   = low.reindex(close.index)
     if volume is not None:
         volume = volume.reindex(close.index)
+    if btc_close is not None:
+        btc_close = btc_close.reindex(close.index).ffill()
     n = len(close)
     if n < _MIN_HISTORY + 5:
         return []
@@ -238,7 +252,7 @@ def _walk_ticker(
     i = _MIN_HISTORY
     last_fire = -10_000
     while i < n - 1:
-        ind = _indicators_at(close, high, low, i, volume)
+        ind = _indicators_at(close, high, low, i, volume, btc_close)
         if ind is None:
             i += step
             continue
@@ -248,7 +262,8 @@ def _walk_ticker(
             ind["rsi"], ind["mom3m"],
             ind["bb_pct"], ind["zscore"], ind["williams_r"], ind["rsi2"],
             vol_ratio=ind["vol_ratio"], donch_hi20=ind["donch_hi20"],
-            donch_hi55=ind["donch_hi55"], squeeze=ind["squeeze"],
+            donch_hi55=ind["donch_hi55"], donch_lo20=ind["donch_lo20"],
+            squeeze=ind["squeeze"], rel_strength=ind["rel_strength"],
         )
 
         if label in ACTIONABLE_BUY_SETUPS and (i - last_fire) >= cooldown:

@@ -14,14 +14,35 @@ st.set_page_config(page_title="Scanner", layout="wide")
 st.markdown(DARK_THEME_CSS, unsafe_allow_html=True)
 
 st.title("🛰️ Crypto Scanner")
-st.caption("Scan liquid pairs → rank setups (mean-reversion weighted) → arm triggers → "
-           "monitor alerts your phone. *Signal only; you execute.*")
+st.caption("Scan liquid pairs → rank setups (all types compete) → arm a diversified set of "
+           "triggers → monitor alerts your phone. *Signal only; you execute.*")
 
 from utils import telegram
 tg_ok = telegram.is_configured()
 st.markdown(
     f"**Telegram:** {'🟢 connected' if tg_ok else '🔴 not configured — set TELEGRAM_* in .env'}"
 )
+
+# ── BTC regime gate banner (advisory; direction-aware stamp on alerts) ──────────
+try:
+    from utils import btc_regime
+    _reg = btc_regime.get_btc_regime()
+    _colors = {"RISK-ON": "#16c784", "NEUTRAL": "#c9a227", "RISK-OFF": "#ea3943"}
+    _c = _colors.get(_reg["label"], "#8a8f98")
+    st.markdown(
+        f"<div style='border:1px solid #262b38;border-left:5px solid {_c};"
+        f"border-radius:10px;padding:10px 14px;margin:6px 0;background:#161a25'>"
+        f"<span style='font-size:13px;color:#8a8f98'>BTC REGIME</span> &nbsp; "
+        f"<span style='font-size:17px;font-weight:700;color:{_c}'>{_reg['label']}</span>"
+        f"<span style='color:#a9adb8;font-size:13px'> &nbsp;— {_reg.get('detail','')}</span>"
+        f"<div style='font-size:12px;color:#8a8f98;margin-top:4px'>"
+        f"Longs: RISK-OFF is caution. Shorts: RISK-ON is caution. "
+        f"Advisory only — alerts are stamped, not blocked.</div></div>",
+        unsafe_allow_html=True,
+    )
+except Exception as _e:
+    st.caption(f"BTC regime unavailable: {_e}")
+
 st.divider()
 
 # ── Controls ──────────────────────────────────────────────────────────────────
