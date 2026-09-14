@@ -173,6 +173,10 @@ def _cond_plain(t: dict) -> str:
         return (f"the bounce confirms — RSI(2) turns back up through "
                 f"{c.get('rsi2_level',12):.0f} on a green bar while price is still below "
                 f"the {_fmt(c.get('mean'))} mean")
+    if kind == "mr_reversal_short":
+        return (f"the bounce rolls over — RSI(2) turns back down through "
+                f"{c.get('rsi2_level',88):.0f} on a red bar while price is still above "
+                f"the {_fmt(c.get('mean'))} mean")
     if kind == "breakout":
         return f"price closes above {_fmt(c.get('level'))} (invalidates below stop)"
     if kind == "breakdown":

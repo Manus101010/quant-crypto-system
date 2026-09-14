@@ -210,6 +210,32 @@ def trade_suggestion(
 
     atr_note = f"≈{_fmt_p(atr)} ATR" if atr else "fixed %"
 
+    def _stop_above(mult: float, floor_pct: float = 0.03) -> float:
+        if atr and atr > 0:
+            return price + mult * atr
+        return price * (1 + floor_pct)
+
+    # ══ SHORT entries (MEXC futures/perp — stop ABOVE, target BELOW) ═══════════
+    _SHORT_TRAIL = {"Breakdown Short (55d low)", "Relative Weakness Short"}
+    _SHORT_TIGHT = {"MR Short (overbought in downtrend)", "Williams %R Overbought Short"}
+    if setup_label in _SHORT_TRAIL or setup_label in _SHORT_TIGHT:
+        stop = _stop_above(2.0 if setup_label in _SHORT_TIGHT else 2.5)
+        risk = stop - price
+        if setup_label in _SHORT_TIGHT:
+            target = price - 3.0 * risk
+            tgt_txt = f"{_fmt_p(target)} (3R)"
+        else:
+            target = price - 3.0 * risk
+            tgt_txt = f"{_fmt_p(target)} (3R) — or trail a 2.5× ATR stop and let it run"
+        return {
+            "action": "SELL",           # SHORT — a futures/perp action, not a spot sell
+            "entry":  f"Short near {_fmt_p(price)} on the close",
+            "target": tgt_txt,
+            "stop":   f"{_fmt_p(stop)} ({'2.0' if setup_label in _SHORT_TIGHT else '2.5'}× ATR above, {atr_note})",
+            "rr":     _rr(price, target, stop),
+            "note":   "SHORT on MEXC futures/perp — signal only, you place it. Cover fast if it reclaims the stop.",
+        }
+
     # ── PREMIER: Connors RSI-2 pullback ───────────────────────────────────────
     if setup_label == "RSI-2 Pullback (Connors)":
         target = bb_mid if bb_mid else (sma50 if sma50 > price else price * 1.05)
@@ -457,6 +483,7 @@ def classify_setup(
     donch_hi20: float | None = None,
     donch_hi55: float | None = None,
     donch_lo20: float | None = None,
+    donch_lo55: float | None = None,
     squeeze: bool | None = None,
     rel_strength: float | None = None,
 ) -> tuple[str, str, str]:
@@ -632,6 +659,54 @@ def classify_setup(
             "Buy-the-dip zone as long as the 200-day holds.",
             "momentum",
         )
+    # ══ SHORT setups (below the 200-SMA — a downtrend) ════════════════════
+    # Mirror of the long legs, inverted. Signal-only: these are MEXC futures/
+    # perp shorts you place manually. Gated by the edge gate like everything
+    # else — a short with no measured edge will not arm.
+    below_200 = price < sma200
+    if below_200:
+        # Shared overbought stretch (inverse of the long MR stretch).
+        _sz  = zscore is not None and zscore >= 2.0
+        _sr  = rsi >= 75
+        _shi = donch_hi20 is not None and price >= donch_hi20 * 0.97
+        _sv  = vol_ratio is not None and vol_ratio >= 1.5
+        short_stretch = _sz and _sr and _shi and _sv
+
+        # Breakdown short: fresh 55-day low in a downtrend / death cross.
+        if donch_lo55 is not None and price <= donch_lo55 and (sma50 < sma200):
+            return (
+                "Breakdown Short (55d low)",
+                f"Fresh 55-day low ({_fmt_p(price)}) with a death cross (50<200-SMA). "
+                "Trend breakdown — short continuation, trail the stop.",
+                "momentum",
+            )
+        # MR short (Connors inverted): overbought bounce inside a downtrend.
+        if rsi2 is not None and rsi2 >= 95 and short_stretch:
+            return (
+                "MR Short (overbought in downtrend)",
+                f"RSI(2) {rsi2:.0f} overbought with a real stretch (RSI {rsi:.0f}≥75, "
+                f"z {zscore:.1f}≥+2, at the 20-day high, {vol_ratio:.1f}× vol) BELOW the "
+                "200-day trend. Fade the bounce in a downtrend — Connors inverted.",
+                "mean_reversion",
+            )
+        # Williams %R overbought short.
+        if williams_r is not None and williams_r >= -15 and short_stretch:
+            return (
+                "Williams %R Overbought Short",
+                f"Williams %%R {williams_r:.0f} overbought with a stretch (RSI {rsi:.0f}≥75, "
+                f"z {zscore:.1f}≥+2, 20-day high, {vol_ratio:.1f}× vol) below the 200-day "
+                "trend. Fade the overbought bounce.",
+                "mean_reversion",
+            )
+        # Relative-weakness short: underperforming BTC, downtrend, not fully washed.
+        if rel_strength is not None and rel_strength <= -15.0 and rsi >= 30:
+            return (
+                "Relative Weakness Short",
+                f"Underperforming BTC by {rel_strength:+.0f}% over 30 days, below its "
+                "200-day trend, not yet fully washed out (RSI≥30). Short the laggard.",
+                "momentum",
+            )
+
     if above_200:
         return (
             "Building Base",
@@ -659,6 +734,11 @@ _SETUP_BASE: dict[str, float] = {
     "RSI-2 Pullback (Connors)":    85,   # empirical 69% win, PF 2.07 (n=339) — premier setup, confirmed
     "Oversold in Uptrend":         80,   # thin (n=20, untrusted) — kept at literature prior
     "Relative Strength Leader":    72,   # outperforming BTC by ≥15%/30d — momentum leg, provisional until crypto-validated
+    # ── Short setups (provisional; gated by the edge gate, arm only if validated) ──
+    "Breakdown Short (55d low)":         68,
+    "MR Short (overbought in downtrend)": 66,
+    "Williams %R Overbought Short":      66,
+    "Relative Weakness Short":           66,
     "Donchian Breakout (55d)":     72,   # Turtle 55d breakout — trend-following, provisional until crypto-validated
     "Volume Breakout":             70,   # 20d high + 2x volume — provisional until crypto-validated
     "Squeeze Breakout":            70,   # volatility contraction → expansion — provisional until crypto-validated
@@ -901,7 +981,7 @@ def _run(tickers: list[str], criteria: ScanCriteria,
                 price, sma50, sma200, rsi, mom3m, bb_pct, zsc, wil_r, rsi_2,
                 vol_ratio=bo["vol_ratio"], donch_hi20=bo["donch_hi20"],
                 donch_hi55=bo["donch_hi55"], donch_lo20=bo["donch_lo20"],
-                squeeze=bo["squeeze"],
+                donch_lo55=bo["donch_lo55"], squeeze=bo["squeeze"],
             )
 
             # Format price sensibly across stocks and micro-cap crypto
@@ -1037,7 +1117,8 @@ def _run_from_bybit(bybit_data: dict, tickers: list[str], criteria: ScanCriteria
                 price, sma50, sma200, rsi, mom3m, bb_pct, zsc, wil_r, rsi_2,
                 vol_ratio=bo["vol_ratio"], donch_hi20=bo["donch_hi20"],
                 donch_hi55=bo["donch_hi55"], donch_lo20=bo["donch_lo20"],
-                squeeze=bo["squeeze"], rel_strength=rel_strength,
+                donch_lo55=bo["donch_lo55"], squeeze=bo["squeeze"],
+                rel_strength=rel_strength,
             )
 
             if price < 0.01:

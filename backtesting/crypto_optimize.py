@@ -40,7 +40,19 @@ SETUP_MANAGEMENT = {
     "Volume Breakout":           _TRAIL,
     "Squeeze Breakout":          _TRAIL,
     "Relative Strength Leader":  _TRAIL,
+    # Shorts mirror the longs: breakdown/rel-weakness trail; MR/Williams tight.
+    "Breakdown Short (55d low)":          _TRAIL,
+    "Relative Weakness Short":            _TRAIL,
+    "MR Short (overbought in downtrend)": _TIGHT,
+    "Williams %R Overbought Short":       _TIGHT,
     # Everything else (mean-reversion + continuation) → tight fixed target.
+}
+
+# Setup labels that are SHORTS (direction = short) — used by the backtest to
+# simulate them inverted and by the scanner to arm them as futures/perp signals.
+SHORT_SETUPS = {
+    "Breakdown Short (55d low)", "Relative Weakness Short",
+    "MR Short (overbought in downtrend)", "Williams %R Overbought Short",
 }
 DEFAULT_MANAGEMENT = _TIGHT
 
@@ -62,40 +74,72 @@ CONFIGS = [
 
 
 def _simulate(close, high, low, i, ind, cfg) -> dict | None:
-    """Simulate one trade forward from bar i under a management config."""
+    """
+    Simulate one trade forward from bar i under a management config. Longs and
+    shorts (label in SHORT_SETUPS): a short's stop is ABOVE entry, target BELOW,
+    the trailing stop ratchets DOWN, and P&L is inverted.
+    """
     atr = ind.get("atr")
     entry = ind["price"]
     if not atr or atr <= 0:
         return None
-    stop = entry - cfg["stop_mult"] * atr
-    risk = entry - stop
-    if risk <= 0:
-        return None
-    target = entry + cfg["target_r"] * risk
+    is_short = ind.get("_label") in SHORT_SETUPS
     n = len(close)
-    trail = stop
     exit_p, reason, k = None, "time", 0
-    for k in range(1, cfg["max_hold"] + 1):
-        j = i + k
-        if j >= n:
-            k -= 1
-            break
-        hi, lo, cl = float(high.iloc[j]), float(low.iloc[j]), float(close.iloc[j])
-        cur_stop = trail if cfg["trailing"] else stop
-        if lo <= cur_stop:                    # stop checked first (conservative)
-            exit_p, reason = cur_stop, "stop"; break
-        if hi >= target:
-            exit_p, reason = target, "target"; break
-        if cfg["trailing"]:
-            new_stop = cl - cfg["stop_mult"] * atr
-            if new_stop > trail:
-                trail = new_stop
-    if exit_p is None:
-        j = min(i + max(k, 1), n - 1)
-        exit_p = float(close.iloc[j])
-    ret_pct = (exit_p / entry - 1) * 100
+
+    if not is_short:
+        stop = entry - cfg["stop_mult"] * atr
+        risk = entry - stop
+        if risk <= 0:
+            return None
+        target = entry + cfg["target_r"] * risk
+        trail = stop
+        for k in range(1, cfg["max_hold"] + 1):
+            j = i + k
+            if j >= n:
+                k -= 1; break
+            hi, lo, cl = float(high.iloc[j]), float(low.iloc[j]), float(close.iloc[j])
+            cur_stop = trail if cfg["trailing"] else stop
+            if lo <= cur_stop:
+                exit_p, reason = cur_stop, "stop"; break
+            if hi >= target:
+                exit_p, reason = target, "target"; break
+            if cfg["trailing"]:
+                new_stop = cl - cfg["stop_mult"] * atr
+                if new_stop > trail:
+                    trail = new_stop
+        if exit_p is None:
+            exit_p = float(close.iloc[min(i + max(k, 1), n - 1)])
+        ret_pct = (exit_p / entry - 1) * 100
+        r_mult = (exit_p - entry) / risk
+    else:
+        stop = entry + cfg["stop_mult"] * atr        # stop ABOVE for a short
+        risk = stop - entry
+        if risk <= 0:
+            return None
+        target = entry - cfg["target_r"] * risk
+        trail = stop
+        for k in range(1, cfg["max_hold"] + 1):
+            j = i + k
+            if j >= n:
+                k -= 1; break
+            hi, lo, cl = float(high.iloc[j]), float(low.iloc[j]), float(close.iloc[j])
+            cur_stop = trail if cfg["trailing"] else stop
+            if hi >= cur_stop:                        # stop hit (price rose)
+                exit_p, reason = cur_stop, "stop"; break
+            if lo <= target:                          # target hit (price fell)
+                exit_p, reason = target, "target"; break
+            if cfg["trailing"]:
+                new_stop = cl + cfg["stop_mult"] * atr
+                if new_stop < trail:
+                    trail = new_stop
+        if exit_p is None:
+            exit_p = float(close.iloc[min(i + max(k, 1), n - 1)])
+        ret_pct = (entry / exit_p - 1) * 100          # short P&L
+        r_mult = (entry - exit_p) / risk
+
     return {"setup": ind["_label"], "win": ret_pct > 0, "ret_pct": ret_pct,
-            "r_mult": (exit_p - entry) / risk, "bars_held": k, "reason": reason}
+            "r_mult": r_mult, "bars_held": k, "reason": reason}
 
 
 def _signals(close, high, low, volume=None, btc_close=None) -> list[tuple[int, dict]]:
@@ -112,17 +156,20 @@ def _signals(close, high, low, volume=None, btc_close=None) -> list[tuple[int, d
             ind["bb_pct"], ind["zscore"], ind["williams_r"], ind["rsi2"],
             vol_ratio=ind["vol_ratio"], donch_hi20=ind["donch_hi20"],
             donch_hi55=ind["donch_hi55"], donch_lo20=ind["donch_lo20"],
-            squeeze=ind["squeeze"], rel_strength=ind["rel_strength"],
+            donch_lo55=ind["donch_lo55"], squeeze=ind["squeeze"],
+            rel_strength=ind["rel_strength"],
         )
-        if label not in ACTIONABLE_BUY_SETUPS:
+        is_short = label in SHORT_SETUPS
+        if label not in ACTIONABLE_BUY_SETUPS and not is_short:
             continue
-        # Connors rule: MR only above the 200-SMA.
-        if cat == "mean_reversion" and not (ind["price"] > ind["sma200"]):
+        # Connors rule: MR LONG only above the 200-SMA (shorts are below by design).
+        if not is_short and cat == "mean_reversion" and not (ind["price"] > ind["sma200"]):
             continue
         ts = trade_suggestion(label, ind["price"], ind["sma50"], ind["sma200"],
                               ind["bb_upper"], ind["bb_mid"], ind["bb_lower"],
                               ind["rsi"], ind["mom3m"], ind["atr"])
-        if ts.get("action") != "BUY":
+        want = "SELL" if is_short else "BUY"
+        if ts.get("action") != want:
             continue
         ind = dict(ind); ind["_label"] = label
         out.append((i, ind))

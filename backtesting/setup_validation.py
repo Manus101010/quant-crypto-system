@@ -115,7 +115,7 @@ def _indicators_at(
         "bb_upper": bb_upper, "bb_mid": bb_mid, "bb_lower": bb_lower, "bb_pct": bb_pct,
         "zscore": zsc, "williams_r": wil_r, "atr": atr,
         "vol_ratio": None, "donch_hi20": None, "donch_hi55": None,
-        "donch_lo20": None, "squeeze": None, "rel_strength": None,
+        "donch_lo20": None, "donch_lo55": None, "squeeze": None, "rel_strength": None,
     }
     if volume is not None:
         from skills.scanner import breakout_signals
@@ -263,7 +263,8 @@ def _walk_ticker(
             ind["bb_pct"], ind["zscore"], ind["williams_r"], ind["rsi2"],
             vol_ratio=ind["vol_ratio"], donch_hi20=ind["donch_hi20"],
             donch_hi55=ind["donch_hi55"], donch_lo20=ind["donch_lo20"],
-            squeeze=ind["squeeze"], rel_strength=ind["rel_strength"],
+            donch_lo55=ind["donch_lo55"], squeeze=ind["squeeze"],
+            rel_strength=ind["rel_strength"],
         )
 
         if label in ACTIONABLE_BUY_SETUPS and (i - last_fire) >= cooldown:

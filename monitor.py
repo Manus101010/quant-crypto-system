@@ -153,6 +153,22 @@ def _evaluate(trg: dict, ind: dict) -> tuple[str, str]:
                             f"below mean {_fmt_price(mean)}")
         return ("wait", "")
 
+    if kind == "mr_reversal_short":
+        # Overbought bounce rolls over (SHORT): RSI(2) turns back DOWN through the
+        # level + red bar + still above the mean + below the stop. Stop is ABOVE.
+        if stop and price >= stop:
+            return ("invalidate", f"stop {_fmt_price(stop)} hit before the roll-over")
+        lvl = cond.get("rsi2_level", 88.0)
+        mean = cond.get("mean")
+        turned    = ind["rsi2_prev"] > lvl >= ind["rsi2_now"]      # RSI(2) turning down
+        red       = price < prev                                    # price confirming down
+        above_mean = mean is None or price > mean                   # still stretched up
+        below_stop = stop is None or price < stop
+        if turned and red and above_mean and below_stop:
+            return ("fire", f"RSI2 {ind['rsi2_prev']:.0f}→{ind['rsi2_now']:.0f}↓, red bar, "
+                            f"above mean {_fmt_price(mean)}")
+        return ("wait", "")
+
     if kind == "breakout":
         if stop and price <= stop:
             return ("invalidate", f"stop {_fmt_price(stop)} hit before breakout")

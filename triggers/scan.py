@@ -26,6 +26,7 @@ log = get_logger(__name__)
 
 _MR_BOOST = 1.0           # NEUTRAL — setup types compete on measured edge, not a thumb on the scale
 _RSI2_RECLAIM = 12.0      # RSI(2) level a MR long must turn back up through to confirm
+_RSI2_FADE = 88.0         # RSI(2) level a MR short must turn back down through to confirm
 _MIN_DEPLOY_TO_ARM = 45.0 # macro Deployment Score below this = risk-off → don't arm
 _MAX_CANDIDATES = 60      # how many ranked setups to SHOW (we still only arm top_n)
 
@@ -178,8 +179,17 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     if df.empty:
         return {"candidates": [], "armed": []}
 
-    rows = [r for r in df.to_dict("records")
-            if (r.get("trade") or {}).get("action") in ("BUY", "SELL/EXIT")]
+    # BUY = long entry, SELL = short entry (MEXC futures/perp). SELL/EXIT is a
+    # take-profit flag on an open long, not an entry — excluded.
+    rows = []
+    for r in df.to_dict("records"):
+        action = (r.get("trade") or {}).get("action")
+        if action == "BUY":
+            r["direction"] = "long"
+            rows.append(r)
+        elif action == "SELL":
+            r["direction"] = "short"
+            rows.append(r)
 
     # ── Edge gate: only arm setups with a measured positive edge on crypto ─────
     # If a backtest validation exists, drop setups that failed it (PF ≤ 1). This
@@ -260,6 +270,13 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
             cond = {"kind": "mr_reversal", "rsi2_level": _RSI2_RECLAIM,
                     "mean": mean20, "stop": stop}
             desc = f"RSI2↑{_RSI2_RECLAIM:.0f} + green bar + price<mean({mean20:.4g}) + >stop"
+        elif cat == "mean_reversion" and direction == "short":
+            # Overbought bounce rolls over: RSI(2) turns back DOWN through the
+            # level + red bar + still above the mean + below the stop.
+            ctype, cval = "mr_reversal_short", _RSI2_FADE
+            cond = {"kind": "mr_reversal_short", "rsi2_level": _RSI2_FADE,
+                    "mean": mean20, "stop": stop}
+            desc = f"RSI2↓{_RSI2_FADE:.0f} + red bar + price>mean({mean20:.4g}) + <stop"
         elif direction == "long":
             level = entry if (entry and ref and entry > ref) else (ref or entry) * 1.005
             ctype, cval = "breakout_long", level
