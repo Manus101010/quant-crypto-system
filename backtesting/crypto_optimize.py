@@ -295,12 +295,16 @@ def apply_config(cfg: dict, universe_size: int = 40, days: int = 600,
 
 def validate_per_setup(universe_size: int = 40, days: int = 600,
                        cost_pct: float = 0.36, min_n: int = 25,
-                       source: str = "top_mcap", max_coins: int = 500) -> dict:
+                       source: str = "top_mcap", max_coins: int = 500,
+                       save: bool = True) -> dict:
     """
     Full-history validation where EACH setup is simulated under its own management
     (SETUP_MANAGEMENT / DEFAULT_MANAGEMENT) — breakouts trailing, the rest tight.
-    Saves per-setup stats AND the per-setup management map so the scanner arms
-    each trigger with the exits that were actually backtested for that setup.
+    Returns per-setup stats AND the per-setup management map. With `save=True`
+    (the baseline/manual path) it overwrites the validation JSON, ARMING whatever
+    passes. The scheduled revalidation job calls it with `save=False` — it wants
+    fresh stats only and applies the asymmetric decay rules itself, never
+    auto-arming.
     """
     tickers, exchange = _universe(source, universe_size, max_coins)
     data = get_ohlcv_batch(tickers, timeframe="1d", limit=days, exchange=exchange)
@@ -336,6 +340,8 @@ def validate_per_setup(universe_size: int = 40, days: int = 600,
                  "params": {"days": days, "cost_pct": cost_pct,
                             "management": DEFAULT_MANAGEMENT}},
     }
-    save_validation(res)
-    log.info("validate_per_setup: %d trades, validated %s", len(all_trades), validated)
+    if save:
+        save_validation(res)
+    log.info("validate_per_setup: %d trades, validated %s (saved=%s)",
+             len(all_trades), validated, save)
     return res

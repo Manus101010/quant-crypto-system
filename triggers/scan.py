@@ -198,6 +198,10 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     valid = validated_labels()
     gated_out = []
     if valid is not None:
+        # Subtract setups auto-deactivated by the revalidation job (edge decayed).
+        # They stop arming NEW triggers; existing armed triggers are left alone.
+        deactivated = tdb.get_deactivated()
+        valid = valid - deactivated
         kept = [r for r in rows if r.get("setup_label") in valid]
         gated_out = sorted({r.get("setup_label") for r in rows
                             if r.get("setup_label") not in valid})

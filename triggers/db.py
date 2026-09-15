@@ -40,6 +40,32 @@ CREATE TABLE IF NOT EXISTS triggers (
     note           TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_triggers_status ON triggers(status);
+
+-- Per-setup edge-decay time series, appended by the scheduled revalidation job
+-- (revalidate.py). One row per setup per run — makes decay visible over time.
+CREATE TABLE IF NOT EXISTS setup_edge_history (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_at      TEXT NOT NULL,        -- ISO UTC of the revalidation run
+    setup_label TEXT NOT NULL,
+    direction   TEXT,                 -- long | short
+    pf          REAL,                 -- profit factor this run (net of cost)
+    n           INTEGER,              -- trade count this run
+    win_rate    REAL,
+    band        TEXT,                 -- established | provisional | below_floor
+    action      TEXT                  -- kept | warned | deactivated | review_newly_passing
+);
+CREATE INDEX IF NOT EXISTS idx_edge_hist_setup ON setup_edge_history(setup_label, run_at);
+
+-- Auto-deactivation overlay: setups the revalidation job disabled on decay. The
+-- scanner's edge gate subtracts these from the validated set, so they stop
+-- arming NEW triggers. Removed only by an explicit manual reactivate.
+CREATE TABLE IF NOT EXISTS setup_deactivations (
+    setup_label    TEXT PRIMARY KEY,
+    deactivated_at TEXT NOT NULL,
+    pf_at          REAL,
+    n_at           INTEGER,
+    reason         TEXT
+);
 """
 
 _COLS = [
@@ -156,3 +182,72 @@ def clear_active() -> int:
 def delete_trigger(trigger_id: int) -> None:
     with _conn() as con:
         con.execute("DELETE FROM triggers WHERE id=?", (trigger_id,))
+
+
+# ── Edge-revalidation history + deactivation overlay ──────────────────────────
+
+def add_edge_history(rows: list[dict]) -> None:
+    """Append per-setup revalidation results (one dict per setup)."""
+    if not rows:
+        return
+    with _conn() as con:
+        con.executemany(
+            """INSERT INTO setup_edge_history
+               (run_at, setup_label, direction, pf, n, win_rate, band, action)
+               VALUES (:run_at, :setup_label, :direction, :pf, :n, :win_rate, :band, :action)""",
+            rows,
+        )
+
+
+def get_edge_history(setup_label: str | None = None, limit: int = 500) -> list[dict]:
+    where = "WHERE setup_label=?" if setup_label else ""
+    params = (setup_label,) if setup_label else ()
+    with _conn() as con:
+        rows = con.execute(
+            f"SELECT * FROM setup_edge_history {where} ORDER BY run_at DESC, id DESC LIMIT ?",
+            (*params, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def last_edge_action(setup_label: str) -> str | None:
+    """Most recent recorded action for a setup (for the 2-consecutive-run rule)."""
+    with _conn() as con:
+        r = con.execute(
+            "SELECT action FROM setup_edge_history WHERE setup_label=? "
+            "ORDER BY run_at DESC, id DESC LIMIT 1",
+            (setup_label,),
+        ).fetchone()
+    return r["action"] if r else None
+
+
+def deactivate_setup(setup_label: str, pf: float | None, n: int | None,
+                     reason: str = "edge decayed") -> None:
+    with _conn() as con:
+        con.execute(
+            "INSERT INTO setup_deactivations (setup_label, deactivated_at, pf_at, n_at, reason) "
+            "VALUES (?,?,?,?,?) "
+            "ON CONFLICT(setup_label) DO UPDATE SET deactivated_at=excluded.deactivated_at, "
+            "pf_at=excluded.pf_at, n_at=excluded.n_at, reason=excluded.reason",
+            (setup_label, datetime.utcnow().isoformat(), pf, n, reason),
+        )
+
+
+def reactivate_setup(setup_label: str) -> None:
+    """Manual re-arm: remove a setup from the deactivation overlay."""
+    with _conn() as con:
+        con.execute("DELETE FROM setup_deactivations WHERE setup_label=?", (setup_label,))
+
+
+def get_deactivated() -> set[str]:
+    with _conn() as con:
+        rows = con.execute("SELECT setup_label FROM setup_deactivations").fetchall()
+    return {r["setup_label"] for r in rows}
+
+
+def get_deactivations() -> list[dict]:
+    with _conn() as con:
+        rows = con.execute(
+            "SELECT * FROM setup_deactivations ORDER BY deactivated_at DESC"
+        ).fetchall()
+    return [dict(r) for r in rows]
