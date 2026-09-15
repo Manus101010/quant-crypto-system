@@ -135,7 +135,10 @@ def _simulate(close, high, low, i, ind, cfg) -> dict | None:
                     trail = new_stop
         if exit_p is None:
             exit_p = float(close.iloc[min(i + max(k, 1), n - 1)])
-        ret_pct = (entry / exit_p - 1) * 100          # short P&L
+        # Short return on notional = (entry - exit)/entry, capped at +100% (price
+        # to zero). NOT (entry/exit - 1), which is unbounded and inflates PF when
+        # a coin crashes toward zero.
+        ret_pct = (entry - exit_p) / entry * 100
         r_mult = (entry - exit_p) / risk
 
     return {"setup": ind["_label"], "win": ret_pct > 0, "ret_pct": ret_pct,
