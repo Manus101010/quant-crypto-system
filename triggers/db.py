@@ -66,6 +66,14 @@ CREATE TABLE IF NOT EXISTS setup_deactivations (
     n_at           INTEGER,
     reason         TEXT
 );
+
+-- Personal watchlist driving the scheduled Morning Brief. Signal-only; a coin
+-- here is just something you want a daily read on, nothing is armed from it.
+CREATE TABLE IF NOT EXISTS watchlist (
+    symbol     TEXT PRIMARY KEY,        -- e.g. SOL-USD
+    added_at   TEXT NOT NULL,
+    note       TEXT
+);
 """
 
 _COLS = [
@@ -249,5 +257,39 @@ def get_deactivations() -> list[dict]:
     with _conn() as con:
         rows = con.execute(
             "SELECT * FROM setup_deactivations ORDER BY deactivated_at DESC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ── Personal watchlist (drives the Morning Brief) ─────────────────────────────
+
+def add_watch(symbol: str, note: str | None = None) -> None:
+    with _conn() as con:
+        con.execute(
+            "INSERT INTO watchlist (symbol, added_at, note) VALUES (?,?,?) "
+            "ON CONFLICT(symbol) DO UPDATE SET note=COALESCE(excluded.note, note)",
+            (symbol.upper(), datetime.utcnow().isoformat(), note),
+        )
+
+
+def remove_watch(symbol: str) -> None:
+    with _conn() as con:
+        con.execute("DELETE FROM watchlist WHERE symbol=?", (symbol.upper(),))
+
+
+def get_watchlist() -> list[dict]:
+    with _conn() as con:
+        rows = con.execute("SELECT * FROM watchlist ORDER BY added_at").fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_triggers_since(iso_cutoff: str, statuses=("fired", "invalidated", "expired")) -> list[dict]:
+    """Triggers that changed to one of `statuses` since `iso_cutoff` (for the brief)."""
+    qmarks = ",".join("?" * len(statuses))
+    with _conn() as con:
+        rows = con.execute(
+            f"SELECT * FROM triggers WHERE status IN ({qmarks}) "
+            f"AND COALESCE(fired_at, created_at) >= ? ORDER BY COALESCE(fired_at, created_at) DESC",
+            (*statuses, iso_cutoff),
         ).fetchall()
     return [dict(r) for r in rows]

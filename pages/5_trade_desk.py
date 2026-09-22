@@ -158,12 +158,16 @@ st.caption("Deep read on ONE coin before a manual trade. Raw ccxt OHLC, all indi
            "computed in code. *Signal-only — grid params are a starting suggestion you set "
            "on MEXC yourself; nothing here places or controls an order.*")
 
-c1, c2 = st.columns([3, 1])
+c1, c2, c3 = st.columns([3, 1, 1])
 with c1:
     raw = st.text_input("Coin symbol (MEXC)", value="", placeholder="e.g. SOL, WIF, PEPE").strip()
 with c2:
     st.write("")
     go = st.button("🔎 Read", type="primary", use_container_width=True)
+with c3:
+    st.write("")
+    watch = st.button("⭐ Watch", use_container_width=True,
+                      help="Add this coin to the Morning Brief watchlist")
 
 if not raw:
     st.info("Enter a coin symbol to run the desk read.")
@@ -172,6 +176,26 @@ if not raw:
 symbol = raw.upper()
 if "/" not in symbol and not symbol.endswith("-USD"):
     symbol = f"{symbol}-USD"
+
+from triggers import db as tdb
+if watch:
+    tdb.add_watch(symbol)
+    st.toast(f"⭐ {symbol} added to the Morning Brief watchlist.")
+
+# Watchlist manager (drives morning_brief.py).
+_wl = [w["symbol"] for w in tdb.get_watchlist()]
+with st.expander(f"⭐ Watchlist ({len(_wl)}) — drives the daily Morning Brief", expanded=False):
+    if _wl:
+        for sym_w in _wl:
+            wc1, wc2 = st.columns([4, 1])
+            wc1.caption(sym_w)
+            if wc2.button("Remove", key=f"rm_{sym_w}", use_container_width=True):
+                tdb.remove_watch(sym_w)
+                st.rerun()
+    else:
+        st.caption("Empty. Use ⭐ Watch above to add the coin you're reading.")
+    st.caption("The brief (`morning_brief.py`, daily via `run_morning_brief.sh`) reads these each "
+               "morning: price, 24h, and a flag when one is within 3% of its 20-day high/low.")
 
 daily = _load(symbol, "1d", _TF_LIMIT["1d"])
 if daily is None:
