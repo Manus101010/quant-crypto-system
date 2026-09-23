@@ -184,20 +184,36 @@ def _cond_plain(t: dict) -> str:
     return f"{t.get('condition_type')} @ {t.get('condition_value')}"
 
 
+_WIDE_STOP_PCT = 25.0     # stops beyond this = size down hard or skip
+
+
+def _stop_pct(entry, stop) -> float | None:
+    e, s = _price(entry), _price(stop)
+    if not e or not s or e == 0:
+        return None
+    return abs(e - s) / e * 100
+
+
 def _legs(entry, target, stop, rr) -> str:
-    def leg(label, val, color="#e6e6e6"):
+    def leg(label, val, color="#e6e6e6", sub=""):
+        sub_html = (f"<div style='font-size:10px;color:{_MUTE};margin-top:1px'>{sub}</div>"
+                    if sub else "")
         return (f"<div style='flex:1;min-width:64px'>"
                 f"<div style='font-size:10px;color:{_MUTE};text-transform:uppercase;"
                 f"letter-spacing:.05em'>{label}</div>"
-                f"<div style='font-size:15px;font-weight:600;color:{color}'>{val}</div></div>")
+                f"<div style='font-size:15px;font-weight:600;color:{color}'>{val}</div>"
+                f"{sub_html}</div>")
     # Trailing setups have no fixed target — say so instead of showing a bogus R:R.
     trailing = _price(target) is None
     tgt_txt = "trail" if trailing else _fmt(target)
     rr_txt = "—" if trailing else (str(rr) if rr else "—")
+    sp = _stop_pct(entry, stop)
+    stop_sub = f"−{sp:.0f}%" if sp is not None else ""
+    stop_color = "#f59e0b" if (sp is not None and sp >= _WIDE_STOP_PCT) else _SHORT
     return ("<div style='display:flex;gap:8px;margin-top:10px'>"
             + leg("Entry", _fmt(entry))
             + leg("Target", tgt_txt, _LONG)
-            + leg("Stop", _fmt(stop), _SHORT)
+            + leg("Stop", _fmt(stop), stop_color, stop_sub)
             + leg("R:R", rr_txt)
             + "</div>")
 
@@ -209,7 +225,10 @@ def _candles_for(symbols: tuple[str, ...], bars: int = 45) -> dict:
         return {}
     from utils import exchange
     out = {}
-    data = exchange.get_ohlcv_batch(list(symbols), timeframe="1d", limit=bars + 5)
+    # Pin to MEXC: the watched coins come from the MEXC scan and many are MEXC-only
+    # microcaps the default fallback chain can't resolve (blank tiles otherwise).
+    data = exchange.get_ohlcv_batch(list(symbols), timeframe="1d", limit=bars + 5,
+                                    exchange="mexc")
     for sym, df in data.items():
         d = df.tail(bars)
         out[sym] = [(float(o), float(h), float(l), float(c))
