@@ -215,7 +215,14 @@ def _size_hint(entry, stop, risk_usd) -> str:
     pos_usd = risk_usd / (sp / 100)
     e = _price(entry)
     units = pos_usd / e if e else None
-    unit_txt = f" ≈ {units:,.4g} coins" if units else ""
+    if units is None:
+        unit_txt = ""
+    elif units >= 1000:
+        unit_txt = f" ≈ {units:,.0f} coins"
+    elif units >= 1:
+        unit_txt = f" ≈ {units:,.1f} coins"
+    else:
+        unit_txt = f" ≈ {units:.4g} coins"
     return (f"<div style='margin-top:8px;font-size:12px;color:#c9ccd3'>"
             f"💰 Risk ${risk_usd:g} → position <b>${pos_usd:,.0f}</b>{unit_txt} "
             f"<span style='color:#8a8f98'>(stop −{sp:.0f}%)</span></div>")
