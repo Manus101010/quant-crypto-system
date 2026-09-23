@@ -150,7 +150,8 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
                      expiry_hours: int = 48,
                      min_vol_usd_m: float = 1.0,
                      source: str = "top_mcap",
-                     max_per_setup: int | None = 4) -> dict:
+                     max_per_setup: int | None = 4,
+                     max_stop_pct: float | None = 40.0) -> dict:
     """
     Scan, rank (MR-weighted), and arm the top-N triggers. Replaces any previously
     active triggers (a fresh scan supersedes the last). Returns:
@@ -235,6 +236,7 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     expires = (now + datetime.timedelta(hours=expiry_hours)).isoformat()
 
     armed = []
+    wide_stop_excluded = []
     for r in top:
         trade = r.get("trade") or {}
         action = trade.get("action")
@@ -265,6 +267,14 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
                 stop = round(base_px + risk, 8)
                 target = None if mgmt.get("trailing") else \
                     round(base_px - mgmt.get("target_r", 3.0) * risk, 8)
+
+        # ── Max-stop risk gate: a stop this far from entry is a huge single-trade
+        # loss on a full-size position (hyper-vol microcaps). Don't arm it.
+        if max_stop_pct and base_px and stop:
+            stop_pct = abs(base_px - stop) / base_px * 100
+            if stop_pct > max_stop_pct:
+                wide_stop_excluded.append(f"{r['ticker']} (−{stop_pct:.0f}%)")
+                continue
 
         if cat == "mean_reversion" and direction == "long":
             # Multi-factor bounce confirmation (evaluated live by the monitor):
@@ -311,6 +321,7 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     return {"candidates": candidates, "armed": armed,
             "edge_gated": valid is not None, "gated_out_setups": gated_out,
             "regime_blocked": False, "actionable": len(rows),
+            "wide_stop_excluded": wide_stop_excluded,
             "management": "Exits are set per setup (breakouts trail and let winners "
                           "run; mean-reversion & momentum take a fixed target) — the "
                           "backtested edge for each. See each trigger's plan."}

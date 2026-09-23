@@ -63,12 +63,21 @@ with c2:
     top_n = st.slider("Arm top N", 3, 25, 10)
     min_vol_m = st.selectbox("Min 24h volume", [0.0, 0.5, 1.0, 5.0, 10.0], index=2,
                              format_func=lambda v: "off" if v == 0 else f"${v:g}M")
+    risk_usd = st.number_input("Risk / trade ($)", min_value=0, max_value=100000,
+                               value=st.session_state.get("risk_usd", 50), step=10,
+                               help="Dollars you're willing to lose if the stop hits. "
+                                    "Tiles show the position size that risks exactly this — "
+                                    "the point of a wide ATR stop is a SMALL position.")
+    st.session_state["risk_usd"] = risk_usd
 with c3:
     expiry = st.selectbox("Trigger expiry (h)", [24, 48, 72, 168], index=1)
+    max_stop_lbl = st.selectbox("Max stop distance", ["off", "25%", "40%", "60%"], index=2,
+                                help="Don't arm setups whose stop is further than this from "
+                                     "entry — a full-size position there is a huge single loss.")
+    max_stop_pct = None if max_stop_lbl == "off" else float(max_stop_lbl.rstrip("%"))
     diversify = st.checkbox("Diversify setups", value=True,
                             help="Cap how many of any one setup can be armed so the "
-                                 "watchlist is a spread across strategy types, not 10 "
-                                 "of whatever setup is most common today.")
+                                 "watchlist is a spread across strategy types.")
     run = st.button("🛰️ Run Scan & Arm", type="primary", use_container_width=True)
 
 if is_mexc:
@@ -90,7 +99,8 @@ if run:
                                regime_score=regime_score, expiry_hours=expiry,
                                min_vol_usd_m=min_vol_m,
                                source="mexc" if is_mexc else "top_mcap",
-                               max_per_setup=(max(2, top_n // 3) if diversify else None))
+                               max_per_setup=(max(2, top_n // 3) if diversify else None),
+                               max_stop_pct=max_stop_pct)
         st.session_state["scan_res"] = res
     if res.get("regime_blocked"):
         st.warning(f"⛔ Regime is risk-off (Deployment Score {res.get('regime_score'):.0f} < 45) — "
@@ -107,6 +117,8 @@ if run:
                 f"cut losers fast, let the few big winners run.)")
     if res.get("gated_out_setups"):
         st.caption("Excluded (no validated edge): " + ", ".join(res["gated_out_setups"]))
+    if res.get("wide_stop_excluded"):
+        st.caption("🛡️ Excluded (stop too wide to risk): " + ", ".join(res["wide_stop_excluded"]))
 
 res = st.session_state.get("scan_res")
 
@@ -192,6 +204,21 @@ def _stop_pct(entry, stop) -> float | None:
     if not e or not s or e == 0:
         return None
     return abs(e - s) / e * 100
+
+
+def _size_hint(entry, stop, risk_usd) -> str:
+    """Position size that risks exactly `risk_usd` given this stop distance —
+    the whole point of a wide ATR stop is a correspondingly SMALL position."""
+    sp = _stop_pct(entry, stop)
+    if not sp or sp <= 0 or not risk_usd:
+        return ""
+    pos_usd = risk_usd / (sp / 100)
+    e = _price(entry)
+    units = pos_usd / e if e else None
+    unit_txt = f" ≈ {units:,.4g} coins" if units else ""
+    return (f"<div style='margin-top:8px;font-size:12px;color:#c9ccd3'>"
+            f"💰 Risk ${risk_usd:g} → position <b>${pos_usd:,.0f}</b>{unit_txt} "
+            f"<span style='color:#8a8f98'>(stop −{sp:.0f}%)</span></div>")
 
 
 def _legs(entry, target, stop, rr) -> str:
@@ -326,6 +353,7 @@ if res and res.get("candidates"):
                    "coins are ever in a valid, tradeable setup at once. The top ones are armed as "
                    "live triggers below.")
         cand_candles = _candles_for(tuple(r["ticker"] for r in res["candidates"]))
+        _risk = st.session_state.get("risk_usd", 50)
         cards = []
         for r in res["candidates"]:
             t = r.get("trade") or {}
@@ -334,6 +362,7 @@ if res and res.get("candidates"):
                 r["ticker"], is_long, r.get("setup_label", ""),
                 f"{(r.get('setup_category') or '').replace('_',' ').title()} · score {r.get('_composite')}",
                 _legs(t.get("entry"), t.get("target"), t.get("stop"), t.get("rr")),
+                footer=_size_hint(t.get("entry"), t.get("stop"), _risk),
                 chart_svg=_svg_chart(cand_candles.get(r["ticker"]), t.get("entry"),
                                      t.get("stop"), t.get("target"), is_long),
             ))
@@ -357,6 +386,7 @@ if active:
     st.caption(f"{len(active)} live trigger{'s' if len(active) != 1 else ''} — the monitor "
                f"alerts your phone the moment one fires.")
     act_candles = _candles_for(tuple(t["symbol"] for t in active))
+    _risk = st.session_state.get("risk_usd", 50)
     cards = []
     for t in active:
         is_long = t["direction"] == "long"
@@ -364,7 +394,8 @@ if active:
             t["symbol"], is_long, t.get("setup_label", ""),
             f"👁 {_expires_in(t.get('expires_at'))}",
             _legs(t.get("entry"), t.get("target"), t.get("stop"), t.get("rr")),
-            footer=f"<b style='color:#c9ccd3'>Fires when</b> {_cond_plain(t)}",
+            footer=f"<b style='color:#c9ccd3'>Fires when</b> {_cond_plain(t)}"
+                   + _size_hint(t.get("entry"), t.get("stop"), _risk),
             chart_svg=_svg_chart(act_candles.get(t["symbol"]), t.get("entry"),
                                  t.get("stop"), t.get("target"), is_long),
         ))
