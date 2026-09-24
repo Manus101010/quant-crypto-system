@@ -268,6 +268,12 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
                 target = None if mgmt.get("trailing") else \
                     round(base_px - mgmt.get("target_r", 3.0) * risk, 8)
 
+        # ── Nonsense-stop guard (always on, even with the max-stop gate off): a
+        # 3.5×ATR stop on a hyper-vol coin can land below zero — no real level.
+        if direction == "long" and stop is not None and stop <= 0:
+            wide_stop_excluded.append(f"{r['ticker']} (stop ≤ 0)")
+            continue
+
         # ── Max-stop risk gate: a stop this far from entry is a huge single-trade
         # loss on a full-size position (hyper-vol microcaps). Don't arm it.
         if max_stop_pct and base_px and stop:
