@@ -43,11 +43,31 @@ def send_message(text: str, *, parse_mode: str = "HTML",
         r = requests.post(url, json=payload, timeout=_TIMEOUT)
         if r.status_code != 200:
             log.warning("telegram: sendMessage %d — %s", r.status_code, r.text[:200])
+            # Safety net: a stray '<'/'>' in a dynamic value can break HTML parsing
+            # (400 "can't parse entities"). Never lose an alert over formatting —
+            # retry once as plain text with the markup stripped.
+            if r.status_code == 400 and parse_mode:
+                plain = _strip_tags(text)
+                r2 = requests.post(url, json={
+                    "chat_id": TELEGRAM_CHAT_ID, "text": plain,
+                    "disable_web_page_preview": disable_preview,
+                }, timeout=_TIMEOUT)
+                if r2.status_code == 200:
+                    log.info("telegram: delivered as plain text after HTML parse error")
+                    return True
+                log.warning("telegram: plain-text retry %d — %s", r2.status_code, r2.text[:200])
             return False
         return True
     except Exception as exc:                       # noqa: BLE001 — never raise into caller
         log.warning("telegram: send failed — %s", exc)
         return False
+
+
+def _strip_tags(text: str) -> str:
+    """Remove the small HTML subset we use (<b>…</b> etc.) and unescape entities,
+    so a message that failed HTML parsing still reads cleanly as plain text."""
+    import re, html
+    return html.unescape(re.sub(r"</?[a-zA-Z][^>]*>", "", text))
 
 
 def send_test() -> bool:

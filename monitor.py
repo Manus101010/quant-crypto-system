@@ -174,7 +174,7 @@ def _evaluate(trg: dict, ind: dict) -> tuple[str, str]:
             return ("invalidate", f"stop {_fmt_price(stop)} hit before breakout")
         lvl, rmax = cond.get("level"), cond.get("rsi_max", 80)
         if lvl is not None and price >= lvl and ind["rsi14_now"] < rmax:
-            return ("fire", f"broke {_fmt_price(lvl)}, RSI14 {ind['rsi14_now']:.0f} (<{rmax})")
+            return ("fire", f"broke {_fmt_price(lvl)}, RSI14 {ind['rsi14_now']:.0f} (&lt;{rmax})")
         return ("wait", "")
 
     if kind == "breakdown":
@@ -182,7 +182,7 @@ def _evaluate(trg: dict, ind: dict) -> tuple[str, str]:
             return ("invalidate", f"stop {_fmt_price(stop)} hit")
         lvl, rmin = cond.get("level"), cond.get("rsi_min", 20)
         if lvl is not None and price <= lvl and ind["rsi14_now"] > rmin:
-            return ("fire", f"broke {_fmt_price(lvl)} down, RSI14 {ind['rsi14_now']:.0f} (>{rmin})")
+            return ("fire", f"broke {_fmt_price(lvl)} down, RSI14 {ind['rsi14_now']:.0f} (&gt;{rmin})")
         return ("wait", "")
 
     # ── Legacy single-factor fallback (older triggers) ────────────────────────
