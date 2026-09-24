@@ -11,16 +11,32 @@ DATA_DIR.mkdir(exist_ok=True)
 DB_PATH = DATA_DIR / "trading.db"
 CACHE_PATH = DATA_DIR / "analyst_cache.db"
 
-ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
-FRED_API_KEY: str = os.getenv("FRED_API_KEY", "")
-TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
+def _secret(key: str, default: str = "") -> str:
+    """Config value from the environment first (.env locally, secrets in GitHub
+    Actions), then Streamlit Cloud's st.secrets. This one helper lets the exact
+    same code run locally, in the Actions cron, and on Streamlit Community Cloud
+    — where secrets arrive via st.secrets, not os.environ. Streamlit is imported
+    lazily and guarded, so the monitor/brief never pay for it."""
+    v = os.getenv(key, "")
+    if v:
+        return v
+    try:
+        import streamlit as st            # only present/needed on the UI host
+        return str(st.secrets.get(key, default))
+    except Exception:
+        return default
+
+
+ANTHROPIC_API_KEY: str = _secret("ANTHROPIC_API_KEY")
+FRED_API_KEY: str = _secret("FRED_API_KEY")
+TELEGRAM_BOT_TOKEN: str = _secret("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID: str = _secret("TELEGRAM_CHAT_ID")
 
 # Supabase (shared state for cloud/laptop). When both are set, the triggers/
 # watchlist store uses Supabase instead of the local SQLite file — this is what
 # lets GitHub Actions run the monitor 24/7 against the same data the app writes.
-SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+SUPABASE_URL: str = _secret("SUPABASE_URL")
+SUPABASE_KEY: str = _secret("SUPABASE_KEY")
 
 CLAUDE_MODEL = "claude-sonnet-4-6"
 
