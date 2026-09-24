@@ -16,3 +16,4 @@ pyarrow>=25.0.0   # 24.x ships a broken dylib on Python 3.14; 25.0.1+ works
 ta>=0.11.0
 rich>=13.7.0
 ccxt>=4.5.0
+supabase>=2.0.0

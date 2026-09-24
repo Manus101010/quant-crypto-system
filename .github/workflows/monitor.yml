@@ -1,0 +1,40 @@
+name: Monitor (trigger alerts)
+
+# Runs the monitor as a single pass against the shared Supabase state, then
+# exits — GitHub Actions can't hold a long polling loop, so we cron it instead.
+# This is what makes alerts fire with the laptop off. Signal-only: reads public
+# market data via ccxt, writes trigger state to Supabase, sends Telegram alerts.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # every 15 minutes (UTC). GitHub may delay under load.
+  workflow_dispatch:          # lets you run it manually from the Actions tab
+
+concurrency:
+  group: monitor              # never overlap two monitor runs
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Poll once
+        env:
+          SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+          FRED_API_KEY:       ${{ secrets.FRED_API_KEY }}
+        run: python monitor.py --once

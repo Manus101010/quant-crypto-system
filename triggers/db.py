@@ -293,3 +293,32 @@ def get_triggers_since(iso_cutoff: str, statuses=("fired", "invalidated", "expir
             (*statuses, iso_cutoff),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── Backend switch: use Supabase when configured (shared cloud/laptop state) ───
+# When SUPABASE_URL + SUPABASE_KEY are set, rebind every public function above to
+# the Supabase implementation so the whole app (and GitHub Actions) share one DB.
+# Otherwise the local SQLite functions defined above remain in effect.
+from config import SUPABASE_URL as _SU, SUPABASE_KEY as _SK  # noqa: E402
+if _SU and _SK:
+    from triggers import supastore as _supa  # noqa: E402
+    init_db = _supa.init_db
+    add_trigger = _supa.add_trigger
+    get_triggers = _supa.get_triggers
+    active_symbols = _supa.active_symbols
+    mark_fired = _supa.mark_fired
+    set_status = _supa.set_status
+    expire_stale = _supa.expire_stale
+    clear_active = _supa.clear_active
+    delete_trigger = _supa.delete_trigger
+    add_edge_history = _supa.add_edge_history
+    get_edge_history = _supa.get_edge_history
+    last_edge_action = _supa.last_edge_action
+    deactivate_setup = _supa.deactivate_setup
+    reactivate_setup = _supa.reactivate_setup
+    get_deactivated = _supa.get_deactivated
+    get_deactivations = _supa.get_deactivations
+    add_watch = _supa.add_watch
+    remove_watch = _supa.remove_watch
+    get_watchlist = _supa.get_watchlist
+    get_triggers_since = _supa.get_triggers_since

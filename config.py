@@ -16,6 +16,12 @@ FRED_API_KEY: str = os.getenv("FRED_API_KEY", "")
 TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
 
+# Supabase (shared state for cloud/laptop). When both are set, the triggers/
+# watchlist store uses Supabase instead of the local SQLite file — this is what
+# lets GitHub Actions run the monitor 24/7 against the same data the app writes.
+SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+
 CLAUDE_MODEL = "claude-sonnet-4-6"
 
 # Crypto macro-gate signal weights (normalised automatically by the aggregator).
