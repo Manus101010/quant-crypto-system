@@ -20,6 +20,7 @@ import datetime
 from triggers import db as tdb
 from skills.scanner import run_crypto_scan, ScanCriteria
 from utils.crypto_universe import get_top_crypto
+from utils import exchange as _xch
 from utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -29,6 +30,18 @@ _RSI2_RECLAIM = 12.0      # RSI(2) level a MR long must turn back up through to 
 _RSI2_FADE = 88.0         # RSI(2) level a MR short must turn back down through to confirm
 _MIN_DEPLOY_TO_ARM = 45.0 # macro Deployment Score below this = risk-off → don't arm
 _MAX_CANDIDATES = 60      # how many ranked setups to SHOW (we still only arm top_n)
+
+# Funding-crowding extremes, per 8h funding interval. Baseline is ~+0.01%;
+# ±0.05% (≈ ±55% annualised) is the level funding analysers treat as crowded.
+_FUNDING_LONG_CROWDED = 0.0005    # longs paying this much → don't arm a new long
+_FUNDING_SHORT_CROWDED = -0.0005  # shorts paying this much → don't arm a new short
+
+
+def _crowded(direction: str, rate: float) -> bool:
+    """True only at an extreme on the trade's own side; neutral funding → False."""
+    if direction == "long":
+        return rate >= _FUNDING_LONG_CROWDED
+    return rate <= _FUNDING_SHORT_CROWDED
 
 
 def _management_params(setup_label: str | None = None) -> dict | None:
@@ -237,6 +250,14 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
 
     armed = []
     wide_stop_excluded = []
+    crowded_excluded = []
+    # Perp funding for just the coins we might arm (off the monitor hot path).
+    # Coins without a perp return nothing → never vetoed.
+    try:
+        funding = _xch.get_funding_rates([r["ticker"] for r in top])
+    except Exception as exc:                       # noqa: BLE001 — filter is advisory
+        log.warning("scan_and_arm: funding fetch failed — %s", exc)
+        funding = {}
     for r in top:
         trade = r.get("trade") or {}
         action = trade.get("action")
@@ -267,6 +288,14 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
                 stop = round(base_px + risk, 8)
                 target = None if mgmt.get("trailing") else \
                     round(base_px - mgmt.get("target_r", 3.0) * risk, 8)
+
+        # ── Crowding filter (extremes only): funding is the price of holding the
+        # crowded side. Normal funding blocks nothing — both longs and shorts stay
+        # live. Only an extreme on the SAME side as the trade vetoes it.
+        fr = funding.get(r["ticker"])
+        if fr is not None and _crowded(direction, fr):
+            crowded_excluded.append(f"{r['ticker']} {direction} (funding {fr*100:+.3f}%)")
+            continue
 
         # ── Nonsense-stop guard (always on, even with the max-stop gate off): a
         # 3.5×ATR stop on a hyper-vol coin can land below zero — no real level.
@@ -328,6 +357,7 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
             "edge_gated": valid is not None, "gated_out_setups": gated_out,
             "regime_blocked": False, "actionable": len(rows),
             "wide_stop_excluded": wide_stop_excluded,
+            "crowded_excluded": crowded_excluded,
             "management": "Exits are set per setup (breakouts trail and let winners "
                           "run; mean-reversion & momentum take a fixed target) — the "
                           "backtested edge for each. See each trigger's plan."}

@@ -93,7 +93,19 @@ def _conn() -> sqlite3.Connection:
         con.execute("ALTER TABLE triggers ADD COLUMN condition_json TEXT")
     except sqlite3.OperationalError:
         pass  # column already exists
+    # Outcome tracking (triggers/outcomes.py): what a fired signal did afterwards.
+    for col, typ in _OUTCOME_COLS:
+        try:
+            con.execute(f"ALTER TABLE triggers ADD COLUMN {col} {typ}")
+        except sqlite3.OperationalError:
+            pass
     return con
+
+
+# outcome NULL on a fired row = trade still open. Values: target | stop | trail | time.
+_OUTCOME_COLS = [("outcome", "TEXT"), ("exit_price", "REAL"), ("exit_at", "TEXT"),
+                 ("r_multiple", "REAL"), ("peak_price", "REAL"), ("trail_stop", "REAL"),
+                 ("bars_held", "INTEGER")]
 
 
 def init_db() -> None:
@@ -283,6 +295,26 @@ def get_watchlist() -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_fired_trades(open_only: bool = False) -> list[dict]:
+    """Fired triggers = live signal-trades. open_only → outcome not yet decided."""
+    sql = "SELECT * FROM triggers WHERE status = 'fired'"
+    if open_only:
+        sql += " AND outcome IS NULL"
+    with _conn() as con:
+        return [dict(r) for r in con.execute(sql + " ORDER BY fired_at")]
+
+
+def set_outcome(trigger_id: int, patch: dict) -> None:
+    """Update outcome-tracking columns (outcome/exit_price/r_multiple/peak…)."""
+    allowed = {c for c, _ in _OUTCOME_COLS}
+    patch = {k: v for k, v in patch.items() if k in allowed}
+    if not patch:
+        return
+    cols = ", ".join(f"{k} = ?" for k in patch)
+    with _conn() as con:
+        con.execute(f"UPDATE triggers SET {cols} WHERE id = ?", (*patch.values(), trigger_id))
+
+
 def get_triggers_since(iso_cutoff: str, statuses=("fired", "invalidated", "expired")) -> list[dict]:
     """Triggers that changed to one of `statuses` since `iso_cutoff` (for the brief)."""
     qmarks = ",".join("?" * len(statuses))
@@ -322,3 +354,5 @@ if _SU and _SK:
     remove_watch = _supa.remove_watch
     get_watchlist = _supa.get_watchlist
     get_triggers_since = _supa.get_triggers_since
+    get_fired_trades = _supa.get_fired_trades
+    set_outcome = _supa.set_outcome

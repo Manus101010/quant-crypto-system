@@ -225,9 +225,18 @@ def poll_once() -> dict:
     now_iso = datetime.datetime.utcnow().isoformat()
     tdb.expire_stale(now_iso)
 
+    # Follow already-fired signals to their exit (live track record). Isolated so
+    # a tracking hiccup never blocks new alerts.
+    try:
+        from triggers import outcomes
+        track = outcomes.update_open_trades()
+    except Exception as exc:                       # noqa: BLE001
+        log.warning("outcome tracking failed — %s", exc)
+        track = {}
+
     active = tdb.get_triggers("active")
     if not active:
-        return {"active": 0, "fired": 0, "invalidated": 0}
+        return {"active": 0, "fired": 0, "invalidated": 0, **track}
 
     symbols = sorted({t["symbol"] for t in active})
     candles = exchange.get_ohlcv_batch(symbols, timeframe="1d", limit=_CANDLE_LIMIT)
@@ -262,7 +271,7 @@ def poll_once() -> dict:
             invalidated += 1
             log.info("INVALIDATED #%d %s — %s", t["id"], t["symbol"], reason)
 
-    return {"active": len(active), "fired": fired, "invalidated": invalidated}
+    return {"active": len(active), "fired": fired, "invalidated": invalidated, **track}
 
 
 def main() -> None:

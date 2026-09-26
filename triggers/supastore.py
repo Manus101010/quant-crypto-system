@@ -98,6 +98,23 @@ def get_triggers_since(iso_cutoff, statuses=("fired", "invalidated", "expired"))
     return rows
 
 
+def get_fired_trades(open_only: bool = False) -> list[dict]:
+    q = _c().table("triggers").select("*").eq("status", "fired")
+    if open_only:
+        q = q.is_("outcome", "null")
+    return q.order("fired_at").execute().data or []
+
+
+_OUTCOME_FIELDS = {"outcome", "exit_price", "exit_at", "r_multiple",
+                   "peak_price", "trail_stop", "bars_held"}
+
+
+def set_outcome(trigger_id, patch: dict) -> None:
+    patch = {k: v for k, v in patch.items() if k in _OUTCOME_FIELDS}
+    if patch:
+        _c().table("triggers").update(patch).eq("id", trigger_id).execute()
+
+
 # ── Watchlist ─────────────────────────────────────────────────────────────────
 def add_watch(symbol, note=None) -> None:
     _c().table("watchlist").upsert(

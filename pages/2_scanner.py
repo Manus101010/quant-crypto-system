@@ -119,6 +119,8 @@ if run:
         st.caption("Excluded (no validated edge): " + ", ".join(res["gated_out_setups"]))
     if res.get("wide_stop_excluded"):
         st.caption("🛡️ Excluded (stop too wide to risk): " + ", ".join(res["wide_stop_excluded"]))
+    if res.get("crowded_excluded"):
+        st.caption("🐑 Skipped (crowded side — extreme funding): " + ", ".join(res["crowded_excluded"]))
 
 res = st.session_state.get("scan_res")
 
@@ -427,5 +429,40 @@ if fired:
     _grid(cards, minpx=260)
 
 st.divider()
-st.caption("Run the monitor on an always-on host: `python monitor.py --interval 120` "
-           "(tmux/systemd). It evaluates these triggers and alerts Telegram — no trading.")
+
+# ── Live track record: what fired signals actually did (vs backtest) ──────────
+st.subheader("📒 Live track record")
+st.caption("Every fired signal is followed as a paper trade under its backtested exit "
+           "rules until target / stop / trail / time. R = profit in units of the risk "
+           "taken (+1R = made what the stop would have lost). Needs ~30 trades to mean much.")
+try:
+    from triggers import outcomes as _oc
+    _ls = _oc.live_stats()
+    _tot = _ls["total"]
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Closed trades", _tot["n"])
+    c2.metric("Win rate", f"{_tot['win_rate']*100:.0f}%" if _tot["win_rate"] is not None else "—")
+    c3.metric("Total R", f"{_tot['total_r']:+.2f}R" if _tot["n"] else "—")
+    _pfv = _tot["pf"]
+    c4.metric("Profit factor", "—" if _pfv is None else ("∞" if _pfv == float("inf") else f"{_pfv:.2f}"))
+    if _ls["by_setup"]:
+        import pandas as _pd
+        _vcol = {"early": "⏳ early", "holding up": "✅ holding up",
+                 "lagging backtest": "⚠️ lagging backtest", "no edge live": "❌ no edge live"}
+        st.dataframe(_pd.DataFrame([{
+            "Setup": r["setup"], "Trades": r["n"], "Win %": f"{r['win_rate']*100:.0f}%",
+            "Avg R": f"{r['avg_r']:+.2f}", "Total R": f"{r['total_r']:+.2f}",
+            "Live PF": "∞" if r["pf"] == float("inf") else ("—" if r["pf"] is None else f"{r['pf']:.2f}"),
+            "Backtest PF": "—" if r["bt_pf"] is None else f"{r['bt_pf']:.2f}",
+            "Verdict": _vcol.get(r["verdict"], r["verdict"]),
+        } for r in _ls["by_setup"]]), hide_index=True, use_container_width=True)
+    if _ls["open"]:
+        st.caption("Open: " + " · ".join(
+            f"{t['symbol']} ({t.get('bars_held') or 0}d, stop {_fmt(t.get('trail_stop') or t.get('stop'))})"
+            for t in _ls["open"]))
+except Exception as _e:                            # noqa: BLE001
+    st.caption(f"Track record unavailable ({_e}).")
+
+st.divider()
+st.caption("Alerts run 24/7 in the cloud (GitHub Actions, every 15 min) — this page "
+           "and the monitor share one Supabase database. Signal only; no trading.")

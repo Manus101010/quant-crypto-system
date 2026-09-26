@@ -124,11 +124,34 @@ def _decay() -> str:
     return f"⛔ <b>Deactivated by decay watch:</b> {names}"
 
 
+def _track_record() -> str:
+    """Live results of fired signals, and any setup lagging its backtest."""
+    try:
+        from triggers import outcomes
+        ls = outcomes.live_stats()
+    except Exception:                              # noqa: BLE001
+        return ""
+    t = ls["total"]
+    if not t["n"] and not ls["open"]:
+        return ""
+    line = f"📒 <b>Live record:</b> {t['n']} closed"
+    if t["n"]:
+        line += f", {t['win_rate']*100:.0f}% win, {t['total_r']:+.2f}R total"
+    line += f" · {len(ls['open'])} open"
+    lag = [r["setup"] for r in ls["by_setup"] if r["verdict"] in ("lagging backtest", "no edge live")]
+    if lag:
+        line += "\n⚠️ Underperforming live: " + ", ".join(lag)
+    return line
+
+
 def build_brief() -> str:
     tdb.init_db()
     today = datetime.datetime.utcnow().strftime("%a %d %b %Y")
     parts = [f"☀️ <b>Morning Brief — {today} UTC</b>",
              _regime_line(), _overnight(), _active(), _watchlist()]
+    rec = _track_record()
+    if rec:
+        parts.append(rec)
     decay = _decay()
     if decay:
         parts.append(decay)
