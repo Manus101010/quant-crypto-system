@@ -459,7 +459,7 @@ try:
     if _ls["open"]:
         st.caption("Open: " + " · ".join(
             f"{t['symbol']} ({t.get('bars_held') or 0}d, stop {_fmt(t.get('trail_stop') or t.get('stop'))})"
-            for t in _ls["open"]))
+            for t in _ls["open"]).replace("$", "\\$"))   # $ would render as LaTeX
 except Exception as _e:                            # noqa: BLE001
     st.caption(f"Track record unavailable ({_e}).")
 
