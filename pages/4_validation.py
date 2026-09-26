@@ -152,7 +152,7 @@ def _mark(v):
     if "❌" in s: return "color:#f87171"
     return ""
 
-st.dataframe(df.style.applymap(_mark, subset=["Tradeable"]),
+st.dataframe(df.style.map(_mark, subset=["Tradeable"]),
              use_container_width=True, hide_index=True)
 
 arming = sorted(validated - deactivated)

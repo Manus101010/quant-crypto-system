@@ -276,7 +276,7 @@ def color_score(val):
     except Exception:
         return ""
 
-styled = df.style.applymap(color_score, subset=["Score"])
+styled = df.style.map(color_score, subset=["Score"])
 st.dataframe(styled, use_container_width=True, hide_index=True)
 
 # ── Signal history sparklines ─────────────────────────────────────────────────
