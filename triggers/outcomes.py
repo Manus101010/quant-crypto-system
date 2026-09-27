@@ -177,15 +177,19 @@ def _open_risk_frac(t: dict) -> float:
 
 def portfolio_heat(risk_per_trade: float | None = None,
                    cap: float | None = None) -> dict:
-    """Assumes each fired alert was taken at `risk_per_trade`. Returns open $ risk,
+    """Counts open trades you marked taken, each at `risk_per_trade`. Returns open $ risk,
     remaining budget, and what a NEW trade should risk to stay under the cap."""
     from config import RISK_PER_TRADE_USD, MAX_PORTFOLIO_RISK_USD
     rpt = risk_per_trade if risk_per_trade is not None else RISK_PER_TRADE_USD
     cap = cap if cap is not None else MAX_PORTFOLIO_RISK_USD
-    open_ = tdb.get_fired_trades(open_only=True)
+    # Heat is REAL risk: only trades you marked as taken. Paper-tracked signals
+    # (everything else) feed the track record but carry no money at risk.
+    paper = tdb.get_fired_trades(open_only=True)
+    open_ = [t for t in paper if t.get("taken")]
     at_risk = sum(_open_risk_frac(t) * rpt for t in open_)
     n_long = sum(1 for t in open_ if t.get("direction") != "short")
     left = max(0.0, cap - at_risk)
     return {"open_risk": round(at_risk, 2), "cap": cap, "left": round(left, 2),
             "n_open": len(open_), "n_long": n_long, "n_short": len(open_) - n_long,
-            "next_risk": round(min(rpt, left), 2), "risk_per_trade": rpt}
+            "next_risk": round(min(rpt, left), 2), "risk_per_trade": rpt,
+            "n_paper": len(paper)}

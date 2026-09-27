@@ -163,10 +163,10 @@ with c1:
     raw = st.text_input("Coin symbol (MEXC)", value="", placeholder="e.g. SOL, WIF, PEPE").strip()
 with c2:
     st.write("")
-    go = st.button("🔎 Read", type="primary", use_container_width=True)
+    go = st.button("🔎 Read", type="primary", width="stretch")
 with c3:
     st.write("")
-    watch = st.button("⭐ Watch", use_container_width=True,
+    watch = st.button("⭐ Watch", width="stretch",
                       help="Add this coin to the Morning Brief watchlist")
 
 if not raw:
@@ -189,7 +189,7 @@ with st.expander(f"⭐ Watchlist ({len(_wl)}) — drives the daily Morning Brief
         for sym_w in _wl:
             wc1, wc2 = st.columns([4, 1])
             wc1.caption(sym_w)
-            if wc2.button("Remove", key=f"rm_{sym_w}", use_container_width=True):
+            if wc2.button("Remove", key=f"rm_{sym_w}", width="stretch"):
                 tdb.remove_watch(sym_w)
                 st.rerun()
     else:
@@ -296,7 +296,7 @@ for tfk in A.TIMEFRAMES:
         "BB %": round(r["bb_pct"], 2) if r.get("bb_pct") is not None else "—",
         "ATR": _fmt(r["atr"]) if r.get("atr") else "—",
     })
-st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
 # ── Grid bot parameters ───────────────────────────────────────────────────────
 st.subheader("Grid bot parameters — starting suggestion")

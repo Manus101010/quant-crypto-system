@@ -78,7 +78,7 @@ with c3:
     diversify = st.checkbox("Diversify setups", value=True,
                             help="Cap how many of any one setup can be armed so the "
                                  "watchlist is a spread across strategy types.")
-    run = st.button("🛰️ Run Scan & Arm", type="primary", use_container_width=True)
+    run = st.button("🛰️ Run Scan & Arm", type="primary", width="stretch")
 
 if is_mexc:
     st.caption("🌐 MEXC full-universe scan: thousands of pairs, candles pinned to MEXC. "
@@ -120,7 +120,8 @@ if run:
     if res.get("wide_stop_excluded"):
         st.caption("🛡️ Excluded (stop too wide to risk): " + ", ".join(res["wide_stop_excluded"]))
     if res.get("held_excluded"):
-        st.caption("📌 Skipped (you already have an open trade): " + ", ".join(res["held_excluded"]))
+        st.caption("📌 Not re-armed (already an open trade — still ranked below): "
+                   + ", ".join(res["held_excluded"]))
     if res.get("crowded_excluded"):
         st.caption("🐑 Skipped (crowded side — extreme funding): " + ", ".join(res["crowded_excluded"]))
 
@@ -368,6 +369,14 @@ if res and res.get("candidates"):
         st.caption("Every setup that passed the edge gate today, best first — only a handful of "
                    "coins are ever in a valid, tradeable setup at once. The top ones are armed as "
                    "live triggers below.")
+        hs = res.get("held_status") or {}
+        if hs:
+            _v = {"valid": "✅ still a valid setup", "gone": "⚠️ setup gone — review",
+                  "not_scanned": "· not in this scan's universe"}
+            st.markdown("**📌 Your open trades vs this scan:** " + " · ".join(
+                f"{sym} {_v.get(x['verdict'], x['verdict'])}"
+                + (f" ({x['setup']})" if x['verdict'] == 'valid' else "")
+                for sym, x in sorted(hs.items(), key=lambda kv: kv[1]["verdict"] != "gone")))
         cand_candles = _candles_for(tuple(r["ticker"] for r in res["candidates"]))
         _risk = st.session_state.get("risk_usd", 50)
         cards = []
@@ -376,7 +385,8 @@ if res and res.get("candidates"):
             is_long = t.get("action") == "BUY"
             cards.append(_card(
                 r["ticker"], is_long, r.get("setup_label", ""),
-                f"{(r.get('setup_category') or '').replace('_',' ').title()} · score {r.get('_composite')}",
+                ("📌 in trade · " if r.get("_held") else "")
+                + f"{(r.get('setup_category') or '').replace('_',' ').title()} · score {r.get('_composite')}",
                 _legs(t.get("entry"), t.get("target"), t.get("stop"), t.get("rr")),
                 footer=_size_hint(t.get("entry"), t.get("stop"), _risk),
                 chart_svg=_svg_chart(cand_candles.get(r["ticker"]), t.get("entry"),
@@ -393,7 +403,7 @@ hcol1, hcol2 = st.columns([3, 1])
 with hcol1:
     st.subheader("📡 Watching now")
 with hcol2:
-    if active and st.button("Cancel all", use_container_width=True):
+    if active and st.button("Cancel all", width="stretch"):
         n = tdb.clear_active()
         st.toast(f"Cancelled {n} triggers.")
         st.rerun()
@@ -453,12 +463,13 @@ try:
         f"<div style='border-left:4px solid {_col};padding:8px 12px;background:#161b22;"
         f"border-radius:6px;margin-bottom:10px'>🔥 <b>Portfolio heat</b> — "
         f"<b style='color:{_col}'>${_h['open_risk']:.0f}</b> of ${_h['cap']:.0f} at risk across "
-        f"{_h['n_open']} open trade(s) ({_h['n_long']} long / {_h['n_short']} short). "
+        f"{_h['n_open']} trade(s) you took ({_h['n_long']} long / {_h['n_short']} short). "
         + ("<b>Full — new alerts will say skip.</b>" if _h["left"] <= 0 else
            f"Next trade can risk <b>${_h['next_risk']:.0f}</b>.")
-        + "<br><span style='color:#8b949e;font-size:0.85em'>Assumes you took every alert at "
-          f"${_h['risk_per_trade']:.0f} risk. A trade stops counting once its trailing stop "
-          "passes entry. Cap = MAX_PORTFOLIO_RISK_USD.</span></div>",
+        + "<br><span style='color:#8b949e;font-size:0.85em'>Real money only — tick "
+          f"<b>Took it</b> below for trades you actually entered ({_h['n_paper']} paper-tracked "
+          f"open). Each counts ${_h['risk_per_trade']:.0f} until its trailing stop passes "
+          "entry. Cap = MAX_PORTFOLIO_RISK_USD.</span></div>",
         unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Closed trades", _tot["n"])
@@ -476,11 +487,25 @@ try:
             "Live PF": "∞" if r["pf"] == float("inf") else ("—" if r["pf"] is None else f"{r['pf']:.2f}"),
             "Backtest PF": "—" if r["bt_pf"] is None else f"{r['bt_pf']:.2f}",
             "Verdict": _vcol.get(r["verdict"], r["verdict"]),
-        } for r in _ls["by_setup"]]), hide_index=True, use_container_width=True)
+        } for r in _ls["by_setup"]]), hide_index=True, width="stretch")
     if _ls["open"]:
-        st.caption("Open: " + " · ".join(
-            f"{t['symbol']} ({t.get('bars_held') or 0}d, stop {_fmt(t.get('trail_stop') or t.get('stop'))})"
-            for t in _ls["open"]).replace("$", "\\$"))   # $ would render as LaTeX
+        import pandas as _pd2
+        st.markdown("**Open trades** — every alert is paper-tracked; tick **Took it** for the "
+                    "ones you really entered so heat counts real risk.")
+        _odf = _pd2.DataFrame([{
+            "id": t["id"], "Took it": bool(t.get("taken")), "Coin": t["symbol"],
+            "Setup": t.get("setup_label") or "", "Fired": (t.get("fired_at") or "")[:10],
+            "Entry": t.get("fired_price"), "Stop now": t.get("trail_stop") or t.get("stop"),
+            "Days": t.get("bars_held") or 0,
+        } for t in _ls["open"]])
+        _ed = st.data_editor(_odf, hide_index=True, width="stretch",
+                             disabled=[c for c in _odf.columns if c != "Took it"],
+                             column_config={"id": None}, key="open_trades_editor")
+        _chg = _ed[_ed["Took it"] != _odf["Took it"]]
+        if len(_chg):
+            for _, _row in _chg.iterrows():
+                tdb.set_outcome(int(_row["id"]), {"taken": bool(_row["Took it"])})
+            st.rerun()
 except Exception as _e:                            # noqa: BLE001
     st.caption(f"Track record unavailable ({_e}).")
 

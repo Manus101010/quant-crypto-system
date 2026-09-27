@@ -105,7 +105,8 @@ def _conn() -> sqlite3.Connection:
 # outcome NULL on a fired row = trade still open. Values: target | stop | trail | time.
 _OUTCOME_COLS = [("outcome", "TEXT"), ("exit_price", "REAL"), ("exit_at", "TEXT"),
                  ("r_multiple", "REAL"), ("peak_price", "REAL"), ("trail_stop", "REAL"),
-                 ("bars_held", "INTEGER")]
+                 ("bars_held", "INTEGER"),
+                 ("taken", "INTEGER")]    # 1 = you actually took this trade (heat counts only these)
 
 
 def init_db() -> None:

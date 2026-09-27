@@ -249,10 +249,29 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     except Exception as exc:                       # noqa: BLE001
         log.warning("scan_and_arm: open-trade lookup failed — %s", exc)
         held = set()
-    held_excluded = sorted({r["ticker"] for r in rows if r["ticker"] in held})
-    rows = [r for r in rows if r["ticker"] not in held]   # frees the slot for another coin
-    top = _diversify(rows, top_n, max_per_setup)     # armed as live triggers
+    # Held coins are still scanned, ranked and SHOWN (is my trade still a good
+    # setup?) — they're only left out of new-trigger allocation, so their slot
+    # goes to the next-best coin.
+    for r in rows:
+        r["_held"] = r["ticker"] in held
+    held_excluded = sorted({r["ticker"] for r in rows if r["_held"]})
+    top = _diversify([r for r in rows if not r["_held"]], top_n, max_per_setup)
     candidates = rows[:_MAX_CANDIDATES]              # full ranked list shown to the user
+
+    # Verdict per open trade from THIS scan: still in a validated setup (same
+    # direction) → hold with confidence; gone → review the position.
+    scanned = set(df["ticker"]) if "ticker" in df else set()
+    held_status = {}
+    for t in tdb.get_fired_trades(open_only=True) if held else []:
+        sym, d = t["symbol"], t.get("direction") or "long"
+        match = next((r for r in rows if r["ticker"] == sym and r.get("direction") == d), None)
+        if match:
+            held_status[sym] = {"verdict": "valid", "setup": match.get("setup_label"),
+                                "score": match.get("_composite")}
+        elif sym in scanned:
+            held_status[sym] = {"verdict": "gone", "setup": t.get("setup_label")}
+        else:
+            held_status[sym] = {"verdict": "not_scanned", "setup": t.get("setup_label")}
 
     # ── Regime gate: the setups' edge is regime-dependent (strong in trend,
     # weak in chop/bear per the backtest), so only ARM in a risk-on regime.
@@ -381,6 +400,7 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
             "wide_stop_excluded": wide_stop_excluded,
             "crowded_excluded": crowded_excluded,
             "held_excluded": held_excluded,
+            "held_status": held_status,
             "management": "Exits are set per setup (breakouts trail and let winners "
                           "run; mean-reversion & momentum take a fixed target) — the "
                           "backtested edge for each. See each trigger's plan."}

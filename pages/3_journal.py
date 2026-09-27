@@ -155,7 +155,7 @@ if len(trades) >= 3:
         height=300,
         margin=dict(l=40, r=20, t=40, b=30),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     fig2 = px.line(
         trade_df, x="created_at", y="cumulative_pnl",
@@ -171,4 +171,4 @@ if len(trades) >= 3:
         height=250,
         margin=dict(l=40, r=20, t=40, b=30),
     )
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width="stretch")

@@ -182,7 +182,7 @@ st.divider()
 
 run_col, info_col = st.columns([1, 3])
 with run_col:
-    run_btn = st.button("⚡ Refresh Signals", type="primary", use_container_width=True)
+    run_btn = st.button("⚡ Refresh Signals", type="primary", width="stretch")
 with info_col:
     st.caption("Pulls live market data · ~5-10 second refresh · Signals run in parallel")
 
@@ -232,7 +232,7 @@ st.divider()
 c_radar, c_gauges = st.columns([1, 2])
 
 with c_radar:
-    st.plotly_chart(radar_chart(signals), use_container_width=True)
+    st.plotly_chart(radar_chart(signals), width="stretch")
 
 with c_gauges:
     g_cols = st.columns(3)
@@ -240,7 +240,7 @@ with c_gauges:
         with g_cols[i % 3]:
             st.plotly_chart(
                 gauge_chart(sig["score"], sig["name"]),
-                use_container_width=True,
+                width="stretch",
             )
 
 st.divider()
@@ -277,7 +277,7 @@ def color_score(val):
         return ""
 
 styled = df.style.map(color_score, subset=["Score"])
-st.dataframe(styled, use_container_width=True, hide_index=True)
+st.dataframe(styled, width="stretch", hide_index=True)
 
 # ── Signal history sparklines ─────────────────────────────────────────────────
 st.divider()
@@ -291,7 +291,7 @@ for i, (key, sig) in enumerate(signals.items()):
         if raw:
             st.plotly_chart(
                 history_chart(raw, sig["name"], colors[i % len(colors)]),
-                use_container_width=True,
+                width="stretch",
             )
         else:
             st.markdown('<div style="color:#475569;font-size:0.75rem">No history</div>',

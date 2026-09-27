@@ -47,7 +47,7 @@ with c3:
     cost = st.number_input("Round-trip cost %", 0.0, 2.0, 0.36, 0.05)
 with c4:
     st.write("")
-    run = st.button("🔬 Run Validation", type="primary", use_container_width=True)
+    run = st.button("🔬 Run Validation", type="primary", width="stretch")
 
 if run:
     where = "the MEXC universe" if is_mexc else f"top {universe} coins"
@@ -75,7 +75,7 @@ with rc1:
                 "it now, off the monitor path.")
 with rc2:
     st.write("")
-    reval = st.button("🔁 Revalidate now", use_container_width=True)
+    reval = st.button("🔁 Revalidate now", width="stretch")
 
 if reval:
     with st.spinner("Revalidating armed setups on the MEXC universe … (a few minutes)"):
@@ -101,7 +101,7 @@ if deacts:
             st.caption(f"**{d['setup_label']}** — {d.get('reason','')} "
                        f"(disabled {(d.get('deactivated_at') or '')[:10]})")
         with dc2:
-            if st.button("Reactivate", key=f"react_{d['setup_label']}", use_container_width=True):
+            if st.button("Reactivate", key=f"react_{d['setup_label']}", width="stretch"):
                 tdb.reactivate_setup(d["setup_label"])
                 st.toast(f"Reactivated {d['setup_label']} — will arm again if it's in the validated set.")
                 st.rerun()
@@ -153,7 +153,7 @@ def _mark(v):
     return ""
 
 st.dataframe(df.style.map(_mark, subset=["Tradeable"]),
-             use_container_width=True, hide_index=True)
+             width="stretch", hide_index=True)
 
 arming = sorted(validated - deactivated)
 passed = ", ".join(arming) or "— none arming —"

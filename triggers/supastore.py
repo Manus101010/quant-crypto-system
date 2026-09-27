@@ -106,7 +106,7 @@ def get_fired_trades(open_only: bool = False) -> list[dict]:
 
 
 _OUTCOME_FIELDS = {"outcome", "exit_price", "exit_at", "r_multiple",
-                   "peak_price", "trail_stop", "bars_held"}
+                   "peak_price", "trail_stop", "bars_held", "taken"}
 
 
 def set_outcome(trigger_id, patch: dict) -> None:
