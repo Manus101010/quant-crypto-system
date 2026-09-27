@@ -140,6 +140,11 @@ def _price(s):
         return None
     if isinstance(s, (int, float)):
         return float(s)
+    # Prefer a $-prefixed number: text like "Buy the 55-day breakout near $190"
+    # must parse as 190, not the 55 in "55-day".
+    m = re.search(r"\$\s*([-+]?\d[\d,]*\.?\d*)", str(s))
+    if m:
+        return float(m.group(1).replace(",", ""))
     m = re.search(r"[-+]?\d[\d,]*\.?\d*", str(s).replace("$", ""))
     return float(m.group().replace(",", "")) if m else None
 
