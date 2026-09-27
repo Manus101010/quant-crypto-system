@@ -280,6 +280,11 @@ def main() -> None:
     ap.add_argument("--once", action="store_true", help="single pass then exit")
     ap.add_argument("--heartbeat-telegram-hours", type=float, default=0.0,
                     help="send a 'still alive' Telegram every N hours (0 = off)")
+    ap.add_argument("--max-minutes", type=float, default=0.0,
+                    help="exit cleanly after N minutes (0 = run forever); lets a "
+                         "CI job poll on a loop and hand over to the next run")
+    ap.add_argument("--quiet-start", action="store_true",
+                    help="don't send the 'Monitor started' Telegram (relay runs)")
     args = ap.parse_args()
     interval = max(args.interval, _MIN_INTERVAL)
 
@@ -295,8 +300,10 @@ def main() -> None:
     n_active = len(tdb.get_triggers("active"))
     log.info("monitor: starting, poll every %ds, %d active triggers. Ctrl-C to stop.",
              interval, n_active)
-    telegram.send_message(f"🟢 <b>Monitor started</b> — watching {n_active} armed "
-                          f"trigger(s), polling every {interval}s.")
+    if not args.quiet_start:
+        telegram.send_message(f"🟢 <b>Monitor started</b> — watching {n_active} armed "
+                              f"trigger(s), polling every {interval}s.")
+    deadline = time.time() + args.max_minutes * 60 if args.max_minutes else None
     hb_secs = args.heartbeat_telegram_hours * 3600
     last_hb = time.time()
     try:
@@ -314,6 +321,9 @@ def main() -> None:
                     last_hb = time.time()
             except Exception as exc:                # noqa: BLE001 — keep the loop alive
                 log.error("poll error: %s", exc)
+            if deadline and time.time() + interval > deadline:
+                log.info("monitor: max runtime reached — exiting for hand-over.")
+                return
             time.sleep(interval)
     except KeyboardInterrupt:
         log.info("monitor: stopped.")

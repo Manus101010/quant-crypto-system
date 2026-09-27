@@ -1,13 +1,16 @@
 name: Monitor (trigger alerts)
 
-# Runs the monitor as a single pass against the shared Supabase state, then
-# exits — GitHub Actions can't hold a long polling loop, so we cron it instead.
+# Relay design: each run polls every 15 min for ~5h40m, then exits; the schedule
+# keeps one run queued behind it (concurrency group), which takes over at once.
+# GitHub throttles *scheduled starts* on free accounts to ~every 3h, but the poll
+# cadence inside a run isn't throttled — so this gives true 15-min checks with no
+# token or outside service. Public repo = unlimited free Actions minutes.
 # This is what makes alerts fire with the laptop off. Signal-only: reads public
 # market data via ccxt, writes trigger state to Supabase, sends Telegram alerts.
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # every 15 minutes (UTC). GitHub may delay under load.
+    - cron: "7 * * * *"      # hourly (UTC) — only needs to keep a relay run queued
   workflow_dispatch:          # lets you run it manually from the Actions tab
 
 concurrency:
@@ -17,7 +20,7 @@ concurrency:
 jobs:
   poll:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 355     # GitHub's hard cap per job is 360
     steps:
       - uses: actions/checkout@v4
 
@@ -29,7 +32,7 @@ jobs:
       - name: Install deps
         run: pip install -r requirements.txt
 
-      - name: Poll once
+      - name: Poll every 15 min (relay)
         env:
           SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
@@ -37,4 +40,4 @@ jobs:
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
           ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
           FRED_API_KEY:       ${{ secrets.FRED_API_KEY }}
-        run: python monitor.py --once
+        run: python monitor.py --interval 900 --max-minutes 340 --quiet-start
