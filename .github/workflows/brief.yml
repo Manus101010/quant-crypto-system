@@ -6,7 +6,7 @@ name: Morning Brief
 
 on:
   schedule:
-    - cron: "0 7 * * *"   # 07:00 UTC daily — adjust to your local morning
+    - cron: "0 20 * * *"  # 20:00 UTC = 7am Sydney (AEDT, Oct–Apr) / 6am (AEST, Apr–Oct)
   workflow_dispatch:        # run manually from the Actions tab
 
 concurrency:
