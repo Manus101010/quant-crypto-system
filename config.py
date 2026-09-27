@@ -73,6 +73,16 @@ DEPLOY_THRESHOLDS = {
 RISK_PER_TRADE_USD: float = float(_secret("RISK_PER_TRADE_USD") or 50)
 MAX_PORTFOLIO_RISK_USD: float = float(_secret("MAX_PORTFOLIO_RISK_USD") or 300)
 
+# ── Automatic scans (run by the cloud monitor at these local times) ──────────
+# (name, IANA timezone, "HH:MM"). "close" = just after the UTC daily candle close.
+AUTO_SCAN_SCHEDULE = [
+    ("morning", "Australia/Sydney", "06:50"),
+    ("close",   "UTC",              "00:05"),
+    ("arvo",    "Australia/Sydney", "15:00"),
+]
+AUTO_SCAN_PARAMS = {"source": "mexc", "top_n": 15, "expiry_hours": 72,
+                    "min_vol_usd_m": 0.5, "max_stop_pct": 25.0}
+
 # ── BTC regime veto hooks (v1 = WARNING only; both default off) ────────────────
 # When flipped True later, the monitor will refuse to FIRE the relevant direction
 # while BTC is in the adverse regime. Left off so the regime read is advisory.

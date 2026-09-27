@@ -193,3 +193,28 @@ def portfolio_heat(risk_per_trade: float | None = None,
             "n_open": len(open_), "n_long": n_long, "n_short": len(open_) - n_long,
             "next_risk": round(min(rpt, left), 2), "risk_per_trade": rpt,
             "n_paper": len(paper)}
+
+
+def open_marks(trades: list[dict] | None = None) -> dict:
+    """Mark-to-market for open trades: {trigger_id: R now} from the latest price
+    (paper P&L so far, in units of the initial risk). Network: ccxt last close."""
+    trades = trades if trades is not None else tdb.get_fired_trades(open_only=True)
+    if not trades:
+        return {}
+    syms = sorted({t["symbol"] for t in trades})
+    px = {}
+    got = exchange.get_ohlcv_batch(syms, timeframe="1d", limit=2, exchange="mexc")
+    missing = [s for s in syms if s not in got]
+    if missing:
+        got.update(exchange.get_ohlcv_batch(missing, timeframe="1d", limit=2))
+    for s, df in got.items():
+        if df is not None and not df.empty:
+            px[s] = float(df["close"].iloc[-1])
+    out = {}
+    for t in trades:
+        e, s0, p = t.get("fired_price"), t.get("stop"), px.get(t["symbol"])
+        if not e or s0 is None or p is None or e == s0:
+            continue
+        risk = abs(e - s0)
+        out[t["id"]] = round(((e - p) if t.get("direction") == "short" else (p - e)) / risk, 2)
+    return out

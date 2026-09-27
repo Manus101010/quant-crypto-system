@@ -97,6 +97,31 @@ def _num(s) -> float | None:
     return float(m.group().replace(",", "")) if m else None
 
 
+def _armed_plan(r: dict) -> dict:
+    """The exact plan a candidate would be armed with: the VALIDATED management
+    for its setup (stop = stop_mult×ATR; trailing setups have no fixed target,
+    others target = target_r×risk), not the scanner's generic suggestion. Falls
+    back to the suggestion when there's no ATR/management."""
+    trade = r.get("trade") or {}
+    direction = "long" if trade.get("action") == "BUY" else "short"
+    ref = r.get("price")
+    entry = _num(trade.get("entry")) or ref
+    stop, target = _num(trade.get("stop")), _num(trade.get("target"))
+    mgmt = _management_params(r.get("setup_label"))
+    trailing = bool(mgmt and mgmt.get("trailing"))
+    atr = r.get("atr_14")
+    rr = _num(trade.get("rr"))
+    if mgmt and atr and entry:
+        risk = mgmt.get("stop_mult", 3.5) * atr
+        sgn = 1 if direction == "long" else -1
+        stop = entry - sgn * risk          # unrounded — sub-cent coins (PEPE) need it
+        target = None if trailing else entry + sgn * mgmt.get("target_r", 3.0) * risk
+        rr = None if trailing else float(mgmt.get("target_r", 3.0))
+    stop_pct = abs(entry - stop) / entry * 100 if (entry and stop is not None) else None
+    return {"direction": direction, "entry": entry, "stop": stop, "target": target,
+            "trailing": trailing, "stop_pct": stop_pct, "rr": rr}
+
+
 def _setup_key(r: dict) -> tuple:
     """Cap key = setup type AND direction (a long and short of the same setup are
     different types for capping — matters once shorts are added)."""
@@ -240,23 +265,46 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         boost = _MR_BOOST if r.get("setup_category") == "mean_reversion" else 1.0
         r["_composite"] = round(conv * boost, 1)
     rows.sort(key=lambda r: -r["_composite"])
-    # Diversify: cap any single setup so the armed set is a spread across setup
-    # types, not 10 of whatever setup is most common in today's market.
-    # Already in it: a coin with an open (fired, not yet exited) trade must not be
-    # armed again — a second fire would stack risk on one coin.
+
+    # ── Every candidate gets the plan it would ACTUALLY be armed with, and a
+    # status saying why it is or isn't live. Filters run BEFORE slots are handed
+    # out, so a held / too-wide / crowded coin frees its slot for the next one.
     try:
         held = {t["symbol"] for t in tdb.get_fired_trades(open_only=True)}
     except Exception as exc:                       # noqa: BLE001
         log.warning("scan_and_arm: open-trade lookup failed — %s", exc)
         held = set()
-    # Held coins are still scanned, ranked and SHOWN (is my trade still a good
-    # setup?) — they're only left out of new-trigger allocation, so their slot
-    # goes to the next-best coin.
+    candidates = rows[:_MAX_CANDIDATES]              # ranked list shown to the user
+    try:   # perp funding for the coins we might arm; no perp → never vetoed
+        funding = _xch.get_funding_rates([r["ticker"] for r in candidates])
+    except Exception as exc:                       # noqa: BLE001 — filter is advisory
+        log.warning("scan_and_arm: funding fetch failed — %s", exc)
+        funding = {}
+
+    wide_stop_excluded, crowded_excluded, eligible = [], [], []
     for r in rows:
+        r["_plan"] = plan = _armed_plan(r)
         r["_held"] = r["ticker"] in held
+        fr = funding.get(r["ticker"])
+        if r["_held"]:
+            r["_status"] = "held"
+        elif not plan["stop_pct"] or plan["stop_pct"] < 0.3:
+            r["_status"] = "bad_plan"      # zero/too-tight risk → would invalidate instantly
+        elif plan["stop"] is not None and plan["direction"] == "long" and plan["stop"] <= 0:
+            r["_status"] = "wide_stop"
+            wide_stop_excluded.append(f"{r['ticker']} (stop ≤ 0)")
+        elif max_stop_pct and plan["stop_pct"] and plan["stop_pct"] > max_stop_pct:
+            r["_status"] = "wide_stop"
+            wide_stop_excluded.append(f"{r['ticker']} (−{plan['stop_pct']:.0f}%)")
+        elif fr is not None and _crowded(plan["direction"], fr):
+            r["_status"] = "crowded"
+            crowded_excluded.append(f"{r['ticker']} {plan['direction']} (funding {fr*100:+.3f}%)")
+        else:
+            r["_status"] = "not_selected"
+            eligible.append(r)
     held_excluded = sorted({r["ticker"] for r in rows if r["_held"]})
-    top = _diversify([r for r in rows if not r["_held"]], top_n, max_per_setup)
-    candidates = rows[:_MAX_CANDIDATES]              # full ranked list shown to the user
+    # Diversify: cap any single setup so the armed set is a spread across types.
+    top = _diversify(eligible, top_n, max_per_setup)
 
     # Verdict per open trade from THIS scan: still in a validated setup (same
     # direction) → hold with confidence; gone → review the position.
@@ -273,14 +321,19 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         else:
             held_status[sym] = {"verdict": "not_scanned", "setup": t.get("setup_label")}
 
+    common = {"candidates": candidates, "edge_gated": valid is not None,
+              "gated_out_setups": gated_out, "actionable": len(rows),
+              "wide_stop_excluded": wide_stop_excluded,
+              "crowded_excluded": crowded_excluded, "held_excluded": held_excluded,
+              "held_status": held_status}
+
     # ── Regime gate: the setups' edge is regime-dependent (strong in trend,
     # weak in chop/bear per the backtest), so only ARM in a risk-on regime.
     # Below the threshold we still show candidates but arm nothing and keep any
     # existing triggers untouched. The macro Deployment Score is the filter.
     if regime_score is not None and regime_score < _MIN_DEPLOY_TO_ARM:
-        return {"candidates": candidates, "armed": [], "edge_gated": valid is not None,
-                "gated_out_setups": gated_out, "regime_blocked": True,
-                "regime_score": regime_score, "actionable": len(rows),
+        return {**common, "armed": [], "regime_blocked": True,
+                "regime_score": regime_score,
                 "management": "Exits are set per setup (breakouts trail; mean-reversion "
                               "& momentum take a fixed target)."}
 
@@ -290,67 +343,14 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     expires = (now + datetime.timedelta(hours=expiry_hours)).isoformat()
 
     armed = []
-    wide_stop_excluded = []
-    crowded_excluded = []
-    # Perp funding for just the coins we might arm (off the monitor hot path).
-    # Coins without a perp return nothing → never vetoed.
-    try:
-        funding = _xch.get_funding_rates([r["ticker"] for r in top])
-    except Exception as exc:                       # noqa: BLE001 — filter is advisory
-        log.warning("scan_and_arm: funding fetch failed — %s", exc)
-        funding = {}
     for r in top:
         trade = r.get("trade") or {}
-        action = trade.get("action")
-        direction = "long" if action == "BUY" else "short"
-        cat = r.get("setup_category")
-        ref = r.get("price")
-        mgmt = _management_params(r.get("setup_label"))   # per-setup validated exits
-        entry, target, stop = _num(trade.get("entry")), _num(trade.get("target")), _num(trade.get("stop"))
+        plan = r["_plan"]
+        direction, cat, ref = plan["direction"], r.get("setup_category"), r.get("price")
+        entry, stop, target = plan["entry"], plan["stop"], plan["target"]
         # 20-day mean = Bollinger midline (from the scan's BB bands).
         bb_u, bb_l = r.get("bb_upper"), r.get("bb_lower")
         mean20 = (bb_u + bb_l) / 2 if (bb_u is not None and bb_l is not None) else ref
-
-        # ── Align stop/target to the VALIDATED management (not the equity-tuned
-        # trade_suggestion): stop = stop_mult×ATR; if the validated config trails,
-        # drop the fixed target, otherwise set target = target_r × risk so the
-        # live suggestion matches exactly what was backtested. Without a
-        # validation, fall back to the suggestion.
-        atr = r.get("atr_14")
-        base_px = entry or ref
-        if mgmt and atr and base_px:
-            sm = mgmt.get("stop_mult", 3.5)
-            risk = sm * atr
-            if direction == "long":
-                stop = round(base_px - risk, 8)
-                target = None if mgmt.get("trailing") else \
-                    round(base_px + mgmt.get("target_r", 3.0) * risk, 8)
-            else:
-                stop = round(base_px + risk, 8)
-                target = None if mgmt.get("trailing") else \
-                    round(base_px - mgmt.get("target_r", 3.0) * risk, 8)
-
-        # ── Crowding filter (extremes only): funding is the price of holding the
-        # crowded side. Normal funding blocks nothing — both longs and shorts stay
-        # live. Only an extreme on the SAME side as the trade vetoes it.
-        fr = funding.get(r["ticker"])
-        if fr is not None and _crowded(direction, fr):
-            crowded_excluded.append(f"{r['ticker']} {direction} (funding {fr*100:+.3f}%)")
-            continue
-
-        # ── Nonsense-stop guard (always on, even with the max-stop gate off): a
-        # 3.5×ATR stop on a hyper-vol coin can land below zero — no real level.
-        if direction == "long" and stop is not None and stop <= 0:
-            wide_stop_excluded.append(f"{r['ticker']} (stop ≤ 0)")
-            continue
-
-        # ── Max-stop risk gate: a stop this far from entry is a huge single-trade
-        # loss on a full-size position (hyper-vol microcaps). Don't arm it.
-        if max_stop_pct and base_px and stop:
-            stop_pct = abs(base_px - stop) / base_px * 100
-            if stop_pct > max_stop_pct:
-                wide_stop_excluded.append(f"{r['ticker']} (−{stop_pct:.0f}%)")
-                continue
 
         if cat == "mean_reversion" and direction == "long":
             # Multi-factor bounce confirmation (evaluated live by the monitor):
@@ -383,24 +383,21 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
             condition_json=json.dumps(cond),
             setup_label=r.get("setup_label"), setup_category=cat, direction=direction,
             timeframe="1d", ref_price=ref, entry=entry, target=target, stop=stop,
-            rr=_num(trade.get("rr")), composite=r["_composite"], expires_at=expires,
+            rr=plan["rr"], composite=r["_composite"], expires_at=expires,
             note=trade.get("note"),
         )
+        r["_status"] = "armed"
+        r["_trigger_level"] = cval
         armed.append({
             "id": tid, "symbol": r["ticker"], "setup_label": r.get("setup_label"),
             "category": cat, "direction": direction, "composite": r["_composite"],
             "condition": desc, "management": _management_note(r.get("setup_label")),
+            "level": cval, "stop_pct": plan["stop_pct"], "trailing": plan["trailing"],
         })
 
     log.info("scan_and_arm: %d candidates, armed top %d (cancelled %d prior)",
              len(rows), len(armed), cancelled)
-    return {"candidates": candidates, "armed": armed,
-            "edge_gated": valid is not None, "gated_out_setups": gated_out,
-            "regime_blocked": False, "actionable": len(rows),
-            "wide_stop_excluded": wide_stop_excluded,
-            "crowded_excluded": crowded_excluded,
-            "held_excluded": held_excluded,
-            "held_status": held_status,
+    return {**common, "armed": armed, "regime_blocked": False,
             "management": "Exits are set per setup (breakouts trail and let winners "
                           "run; mean-reversion & momentum take a fixed target) — the "
                           "backtested edge for each. See each trigger's plan."}

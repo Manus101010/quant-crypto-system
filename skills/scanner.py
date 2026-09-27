@@ -1013,7 +1013,7 @@ def _run(tickers: list[str], criteria: ScanCriteria,
                 "mom_12_1_pct":     round(mom121, 1) if mom121 is not None else None,
                 "rsi_14":           round(rsi, 1),
                 "rsi_2":            round(rsi_2, 1) if rsi_2 is not None else None,
-                "atr_14":           round(atr, 4) if atr is not None else None,
+                "atr_14":           float(atr) if atr is not None else None,   # unrounded: sub-cent coins need full precision
                 "vol_usd_m":        round(vol_usd_m, 1),
                 # Mean reversion metrics
                 "bb_pct":           round(bb_pct, 3) if bb_pct is not None else None,
@@ -1149,7 +1149,7 @@ def _run_from_bybit(bybit_data: dict, tickers: list[str], criteria: ScanCriteria
                 "mom_12_1_pct":     round(mom121, 1) if mom121 is not None else None,
                 "rsi_14":           round(rsi, 1),
                 "rsi_2":            round(rsi_2, 1) if rsi_2 is not None else None,
-                "atr_14":           round(atr, 4) if atr is not None else None,
+                "atr_14":           float(atr) if atr is not None else None,   # unrounded: sub-cent coins need full precision
                 "vol_usd_m":        round(vol_usd_m, 1),
                 "bb_pct":           round(bb_pct, 3) if bb_pct is not None else None,
                 "bb_upper":         round(bb_upper, 4) if bb_upper is not None else None,

@@ -69,6 +69,12 @@ CREATE TABLE IF NOT EXISTS setup_deactivations (
 
 -- Personal watchlist driving the scheduled Morning Brief. Signal-only; a coin
 -- here is just something you want a daily read on, nothing is armed from it.
+CREATE TABLE IF NOT EXISTS app_state (   -- tiny key/value store (e.g. last auto-scan run)
+    key        TEXT PRIMARY KEY,
+    value      TEXT,
+    updated_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS watchlist (
     symbol     TEXT PRIMARY KEY,        -- e.g. SOL-USD
     added_at   TEXT NOT NULL,
@@ -316,6 +322,18 @@ def set_outcome(trigger_id: int, patch: dict) -> None:
         con.execute(f"UPDATE triggers SET {cols} WHERE id = ?", (*patch.values(), trigger_id))
 
 
+def get_state(key: str) -> str | None:
+    with _conn() as con:
+        r = con.execute("SELECT value FROM app_state WHERE key = ?", (key,)).fetchone()
+    return r[0] if r else None
+
+
+def set_state(key: str, value: str) -> None:
+    with _conn() as con:
+        con.execute("INSERT OR REPLACE INTO app_state (key, value, updated_at) VALUES (?,?,?)",
+                    (key, value, datetime.utcnow().isoformat()))
+
+
 def get_triggers_since(iso_cutoff: str, statuses=("fired", "invalidated", "expired")) -> list[dict]:
     """Triggers that changed to one of `statuses` since `iso_cutoff` (for the brief)."""
     qmarks = ",".join("?" * len(statuses))
@@ -357,3 +375,5 @@ if _SU and _SK:
     get_triggers_since = _supa.get_triggers_since
     get_fired_trades = _supa.get_fired_trades
     set_outcome = _supa.set_outcome
+    get_state = _supa.get_state
+    set_state = _supa.set_state

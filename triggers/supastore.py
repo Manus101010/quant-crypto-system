@@ -115,6 +115,16 @@ def set_outcome(trigger_id, patch: dict) -> None:
         _c().table("triggers").update(patch).eq("id", trigger_id).execute()
 
 
+def get_state(key):
+    res = _c().table("app_state").select("value").eq("key", key).limit(1).execute()
+    return res.data[0]["value"] if res.data else None
+
+
+def set_state(key, value) -> None:
+    _c().table("app_state").upsert({"key": key, "value": value,
+                                    "updated_at": datetime.utcnow().isoformat()}).execute()
+
+
 # ── Watchlist ─────────────────────────────────────────────────────────────────
 def add_watch(symbol, note=None) -> None:
     _c().table("watchlist").upsert(

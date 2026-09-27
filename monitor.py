@@ -337,6 +337,13 @@ def main() -> None:
     last_hb = time.time()
     try:
         while True:
+            # Scheduled Scan & Arm (6:50am / daily close / 3pm) — before the poll
+            # so newly armed triggers are evaluated straight away.
+            try:
+                from triggers import autoscan
+                autoscan.run_due()
+            except Exception as exc:                # noqa: BLE001 — never kill the loop
+                log.error("autoscan error: %s", exc)
             try:
                 s = poll_once()
                 # Heartbeat: ONE line every poll, so a quiet loop is distinguishable
@@ -350,10 +357,17 @@ def main() -> None:
                     last_hb = time.time()
             except Exception as exc:                # noqa: BLE001 — keep the loop alive
                 log.error("poll error: %s", exc)
-            if deadline and time.time() + interval > deadline:
+            # Wake early for a scheduled scan so it runs on time, not up to 15 min late.
+            nap = interval
+            try:
+                from triggers import autoscan
+                nap = min(interval, autoscan.seconds_to_next() + 5)
+            except Exception:                       # noqa: BLE001
+                pass
+            if deadline and time.time() + nap > deadline:
                 log.info("monitor: max runtime reached — exiting for hand-over.")
                 return
-            time.sleep(interval)
+            time.sleep(max(nap, _MIN_INTERVAL))
     except KeyboardInterrupt:
         log.info("monitor: stopped.")
 

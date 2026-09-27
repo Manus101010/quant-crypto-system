@@ -364,11 +364,12 @@ def _grid(cards: list[str], minpx: int = 300) -> None:
 # ── Post-scan: full ranked candidate list (ephemeral) ──────────────────────────
 if res and res.get("candidates"):
     n_found = res.get("actionable", len(res["candidates"]))
-    with st.expander(f"🎯 Last scan — {n_found} valid setup{'s' if n_found != 1 else ''} "
-                     f"(showing {len(res['candidates'])})", expanded=True):
-        st.caption("Every setup that passed the edge gate today, best first — only a handful of "
-                   "coins are ever in a valid, tradeable setup at once. The top ones are armed as "
-                   "live triggers below.")
+    with st.expander(f"🎯 Candidates — not armed unless badged 📡 · {n_found} valid setup"
+                     f"{'s' if n_found != 1 else ''} (showing {len(res['candidates'])})", expanded=True):
+        st.caption("Every coin that passed the edge gate this scan, best first. These are NOT "
+                   "trades. Only 📡 armed ones are being watched — see **Watching now** below; an "
+                   "alert fires when their trigger level is hit. Each tile shows the exact plan it "
+                   "would be armed with (backtested stop, and a fixed target or a trailing stop).")
         hs = res.get("held_status") or {}
         if hs:
             _v = {"valid": "✅ still a valid setup", "gone": "⚠️ setup gone — review",
@@ -380,17 +381,22 @@ if res and res.get("candidates"):
         cand_candles = _candles_for(tuple(r["ticker"] for r in res["candidates"]))
         _risk = st.session_state.get("risk_usd", 50)
         cards = []
+        _badge = {"armed": "📡 armed", "held": "📌 in trade", "wide_stop": "🛡️ stop too wide",
+                  "crowded": "🐑 crowded (funding)", "not_selected": "⏭️ not selected",
+                  "bad_plan": "⚠️ no usable stop"}
         for r in res["candidates"]:
             t = r.get("trade") or {}
-            is_long = t.get("action") == "BUY"
+            p = r.get("_plan") or {}
+            is_long = (p.get("direction") or ("long" if t.get("action") == "BUY" else "short")) == "long"
+            e, sp, tg = p.get("entry", t.get("entry")), p.get("stop", t.get("stop")), p.get("target")
+            tg_disp = "trail" if p.get("trailing") else (tg if p else t.get("target"))
+            rr_disp = "trail" if p.get("trailing") else (p.get("rr") if p else t.get("rr"))
             cards.append(_card(
                 r["ticker"], is_long, r.get("setup_label", ""),
-                ("📌 in trade · " if r.get("_held") else "")
-                + f"{(r.get('setup_category') or '').replace('_',' ').title()} · score {r.get('_composite')}",
-                _legs(t.get("entry"), t.get("target"), t.get("stop"), t.get("rr")),
-                footer=_size_hint(t.get("entry"), t.get("stop"), _risk),
-                chart_svg=_svg_chart(cand_candles.get(r["ticker"]), t.get("entry"),
-                                     t.get("stop"), t.get("target"), is_long),
+                f"<b>{_badge.get(r.get('_status'), '')}</b> · score {r.get('_composite')}",
+                _legs(e, tg_disp, sp, rr_disp),
+                footer=_size_hint(e, sp, _risk),
+                chart_svg=_svg_chart(cand_candles.get(r["ticker"]), e, sp, tg, is_long),
             ))
         _grid(cards)
 
@@ -471,6 +477,17 @@ try:
           f"open). Each counts ${_h['risk_per_trade']:.0f} until its trailing stop passes "
           "entry. Cap = MAX_PORTFOLIO_RISK_USD.</span></div>",
         unsafe_allow_html=True)
+    @st.cache_data(ttl=900, show_spinner=False)
+    def _marks(_ids: tuple) -> dict:
+        return _oc.open_marks()
+    _mk = _marks(tuple(t["id"] for t in _ls["open"])) if _ls["open"] else {}
+    _ur = sum(_mk.values())
+    o1, o2, o3 = st.columns(3)
+    o1.metric("Signals fired", _tot["n"] + len(_ls["open"]))
+    o2.metric("Still open", len(_ls["open"]),
+              help="Fired but not yet at stop / target / time limit — no final result yet.")
+    o3.metric("Open P&L now", f"{_ur:+.2f}R" if _mk else "—",
+              help="Paper profit/loss of the open trades at the latest price, in R.")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Closed trades", _tot["n"])
     c2.metric("Win rate", f"{_tot['win_rate']*100:.0f}%" if _tot["win_rate"] is not None else "—")
@@ -497,6 +514,7 @@ try:
             "Setup": t.get("setup_label") or "", "Fired": (t.get("fired_at") or "")[:10],
             "Entry": t.get("fired_price"), "Stop now": t.get("trail_stop") or t.get("stop"),
             "Days": t.get("bars_held") or 0,
+            "R now": _mk.get(t["id"]),
         } for t in _ls["open"]])
         _ed = st.data_editor(_odf, hide_index=True, width="stretch",
                              disabled=[c for c in _odf.columns if c != "Took it"],
