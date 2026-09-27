@@ -242,6 +242,15 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     rows.sort(key=lambda r: -r["_composite"])
     # Diversify: cap any single setup so the armed set is a spread across setup
     # types, not 10 of whatever setup is most common in today's market.
+    # Already in it: a coin with an open (fired, not yet exited) trade must not be
+    # armed again — a second fire would stack risk on one coin.
+    try:
+        held = {t["symbol"] for t in tdb.get_fired_trades(open_only=True)}
+    except Exception as exc:                       # noqa: BLE001
+        log.warning("scan_and_arm: open-trade lookup failed — %s", exc)
+        held = set()
+    held_excluded = sorted({r["ticker"] for r in rows if r["ticker"] in held})
+    rows = [r for r in rows if r["ticker"] not in held]   # frees the slot for another coin
     top = _diversify(rows, top_n, max_per_setup)     # armed as live triggers
     candidates = rows[:_MAX_CANDIDATES]              # full ranked list shown to the user
 
@@ -371,6 +380,7 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
             "regime_blocked": False, "actionable": len(rows),
             "wide_stop_excluded": wide_stop_excluded,
             "crowded_excluded": crowded_excluded,
+            "held_excluded": held_excluded,
             "management": "Exits are set per setup (breakouts trail and let winners "
                           "run; mean-reversion & momentum take a fixed target) — the "
                           "backtested edge for each. See each trigger's plan."}

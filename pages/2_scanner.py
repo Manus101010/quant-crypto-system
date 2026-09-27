@@ -119,6 +119,8 @@ if run:
         st.caption("Excluded (no validated edge): " + ", ".join(res["gated_out_setups"]))
     if res.get("wide_stop_excluded"):
         st.caption("🛡️ Excluded (stop too wide to risk): " + ", ".join(res["wide_stop_excluded"]))
+    if res.get("held_excluded"):
+        st.caption("📌 Skipped (you already have an open trade): " + ", ".join(res["held_excluded"]))
     if res.get("crowded_excluded"):
         st.caption("🐑 Skipped (crowded side — extreme funding): " + ", ".join(res["crowded_excluded"]))
 
