@@ -444,6 +444,20 @@ try:
     from triggers import outcomes as _oc
     _ls = _oc.live_stats()
     _tot = _ls["total"]
+    _h = _oc.portfolio_heat(risk_per_trade=float(st.session_state.get("risk_usd", 50)))
+    _pct = min(1.0, _h["open_risk"] / _h["cap"]) if _h["cap"] else 0
+    _col = "#f87171" if _h["left"] <= 0 else ("#facc15" if _pct > 0.7 else "#4ade80")
+    st.markdown(
+        f"<div style='border-left:4px solid {_col};padding:8px 12px;background:#161b22;"
+        f"border-radius:6px;margin-bottom:10px'>🔥 <b>Portfolio heat</b> — "
+        f"<b style='color:{_col}'>${_h['open_risk']:.0f}</b> of ${_h['cap']:.0f} at risk across "
+        f"{_h['n_open']} open trade(s) ({_h['n_long']} long / {_h['n_short']} short). "
+        + ("<b>Full — new alerts will say skip.</b>" if _h["left"] <= 0 else
+           f"Next trade can risk <b>${_h['next_risk']:.0f}</b>.")
+        + "<br><span style='color:#8b949e;font-size:0.85em'>Assumes you took every alert at "
+          f"${_h['risk_per_trade']:.0f} risk. A trade stops counting once its trailing stop "
+          "passes entry. Cap = MAX_PORTFOLIO_RISK_USD.</span></div>",
+        unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Closed trades", _tot["n"])
     c2.metric("Win rate", f"{_tot['win_rate']*100:.0f}%" if _tot["win_rate"] is not None else "—")

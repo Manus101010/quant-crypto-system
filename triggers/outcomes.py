@@ -158,3 +158,34 @@ def live_stats() -> dict:
              "total_r": sum(all_r), "pf": _pf(all_r) if all_r else None}
     open_ = [t for t in trades if not t.get("outcome")]
     return {"by_setup": rows, "total": total, "open": open_}
+
+
+# ── Portfolio heat: total $ still at risk across open trades ──────────────────
+def _open_risk_frac(t: dict) -> float:
+    """Fraction of the original 1R still at risk (0 once the stop is at/through
+    entry — a trail that has locked in profit no longer counts as heat)."""
+    entry, stop0 = t.get("fired_price"), t.get("stop")
+    cur = t.get("trail_stop") or stop0
+    if not entry or stop0 is None or cur is None:
+        return 1.0
+    r0 = abs(entry - stop0)
+    if r0 <= 0:
+        return 0.0
+    left = (cur - entry) if t.get("direction") == "short" else (entry - cur)
+    return max(0.0, min(1.0, left / r0))
+
+
+def portfolio_heat(risk_per_trade: float | None = None,
+                   cap: float | None = None) -> dict:
+    """Assumes each fired alert was taken at `risk_per_trade`. Returns open $ risk,
+    remaining budget, and what a NEW trade should risk to stay under the cap."""
+    from config import RISK_PER_TRADE_USD, MAX_PORTFOLIO_RISK_USD
+    rpt = risk_per_trade if risk_per_trade is not None else RISK_PER_TRADE_USD
+    cap = cap if cap is not None else MAX_PORTFOLIO_RISK_USD
+    open_ = tdb.get_fired_trades(open_only=True)
+    at_risk = sum(_open_risk_frac(t) * rpt for t in open_)
+    n_long = sum(1 for t in open_ if t.get("direction") != "short")
+    left = max(0.0, cap - at_risk)
+    return {"open_risk": round(at_risk, 2), "cap": cap, "left": round(left, 2),
+            "n_open": len(open_), "n_long": n_long, "n_short": len(open_) - n_long,
+            "next_risk": round(min(rpt, left), 2), "risk_per_trade": rpt}

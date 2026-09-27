@@ -73,6 +73,9 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     if trg.get("stop"):   lines.append(f"Stop: {_fmt_price(trg['stop'])}")
     if trg.get("rr"):     lines.append(f"R:R: {trg['rr']}")
     lines.append(f"📐 {_management_note(trg.get('setup_label'))}")
+    sz = _sizing_line(trg, price)
+    if sz:
+        lines.append(sz)
     # Direction-aware BTC regime stamp (WARNING, never a veto in v1).
     try:
         from utils import btc_regime
@@ -83,6 +86,32 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
         log.debug("btc_regime stamp failed: %s", exc)
     lines.append("\n<i>Signal only — review and execute manually.</i>")
     return "\n".join(lines)
+
+
+def _sizing_line(trg: dict, price: float) -> str:
+    """Position size that fits the portfolio-heat budget (never blocks the alert)."""
+    try:
+        from triggers.outcomes import portfolio_heat
+        h = portfolio_heat()
+        stop = trg.get("stop")
+        if not stop or not price:
+            return ""
+        frac = abs(price - stop) / price
+        if frac <= 0:
+            return ""
+        heat = (f"🔥 Portfolio heat ${h['open_risk']:.0f}/${h['cap']:.0f} "
+                f"({h['n_long']}L/{h['n_short']}S open)")
+        if h["next_risk"] <= 0:
+            return (f"{heat}\n⚠️ <b>Heat full</b> — skip this one, or close/trail "
+                    f"an open trade first.")
+        risk = h["next_risk"]
+        pos = risk / frac
+        note = "" if risk >= h["risk_per_trade"] else " (sized down to fit)"
+        return (f"💰 Risk ${risk:.0f}{note} → position <b>${pos:,.0f}</b> "
+                f"(stop −{frac*100:.1f}%)\n{heat}")
+    except Exception as exc:                       # noqa: BLE001
+        log.debug("sizing line failed: %s", exc)
+        return ""
 
 
 def _management_note(setup_label: str | None = None) -> str:

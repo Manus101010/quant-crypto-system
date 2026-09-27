@@ -20,6 +20,9 @@ def _secret(key: str, default: str = "") -> str:
     v = os.getenv(key, "")
     if v:
         return v
+    import sys
+    if "streamlit" not in sys.modules:    # CLI/cron (monitor, brief): no st.secrets
+        return default
     try:
         import streamlit as st            # only present/needed on the UI host
         return str(st.secrets.get(key, default))
@@ -62,6 +65,13 @@ DEPLOY_THRESHOLDS = {
     "cautious":    40,
     "avoid":        0,
 }
+
+# ── Position sizing / portfolio heat (Turtle-style total-risk cap) ────────────
+# Each alert is sized to risk RISK_PER_TRADE_USD; the sum of risk still open
+# across tracked trades may not exceed MAX_PORTFOLIO_RISK_USD. Correlated longs
+# lose together, so this caps the damage of a market-wide drop.
+RISK_PER_TRADE_USD: float = float(_secret("RISK_PER_TRADE_USD") or 50)
+MAX_PORTFOLIO_RISK_USD: float = float(_secret("MAX_PORTFOLIO_RISK_USD") or 300)
 
 # ── BTC regime veto hooks (v1 = WARNING only; both default off) ────────────────
 # When flipped True later, the monitor will refuse to FIRE the relevant direction

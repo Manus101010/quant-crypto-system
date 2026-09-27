@@ -138,6 +138,12 @@ def _track_record() -> str:
     if t["n"]:
         line += f", {t['win_rate']*100:.0f}% win, {t['total_r']:+.2f}R total"
     line += f" · {len(ls['open'])} open"
+    try:
+        h = outcomes.portfolio_heat()
+        line += (f"\n🔥 Heat ${h['open_risk']:.0f}/${h['cap']:.0f}"
+                 + (" — <b>full</b>, skip new entries" if h["left"] <= 0 else ""))
+    except Exception:                              # noqa: BLE001
+        pass
     lag = [r["setup"] for r in ls["by_setup"] if r["verdict"] in ("lagging backtest", "no edge live")]
     if lag:
         line += "\n⚠️ Underperforming live: " + ", ".join(lag)
