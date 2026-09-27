@@ -211,6 +211,14 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     from backtesting.crypto_validation import validated_labels
     valid = validated_labels()
     gated_out = []
+    if valid is None:
+        # Fail CLOSED: no validation file (e.g. a fresh cloud host) must never mean
+        # "arm everything". Rank for display, arm nothing.
+        log.warning("scan_and_arm: no validation file — edge gate unavailable, arming nothing")
+        return {"candidates": [], "armed": [], "edge_gated": False,
+                "gated_out_setups": ["(no validation file on this host — nothing armed; "
+                                     "existing triggers left untouched)"],
+                "regime_blocked": False, "actionable": 0}
     if valid is not None:
         # Subtract setups auto-deactivated by the revalidation job (edge decayed).
         # They stop arming NEW triggers; existing armed triggers are left alone.

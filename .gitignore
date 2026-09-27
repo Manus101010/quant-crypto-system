@@ -14,6 +14,8 @@ venv/
 # Data / caches / DBs (regenerated at runtime)
 data/*.db
 data/*.json
+# The edge gate's source of truth — the cloud scanner needs it (stats only, no secrets).
+!data/crypto_validation.json
 *.log
 
 # OS

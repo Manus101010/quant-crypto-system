@@ -1,0 +1,267 @@
+{
+  "stats": {
+    "Relative Weakness Short": {
+      "n": 8261,
+      "win_rate": 0.3894,
+      "avg_win": 23.82,
+      "avg_loss": -21.504,
+      "avg_ret": -3.854,
+      "profit_factor": 0.706,
+      "expectancy_r": -0.1032,
+      "median_bars_held": 21.0,
+      "exits": {
+        "target": 0,
+        "stop": 5165,
+        "time": 3096
+      }
+    },
+    "Relative Strength Leader": {
+      "n": 3256,
+      "win_rate": 0.3596,
+      "avg_win": 41.889,
+      "avg_loss": -22.518,
+      "avg_ret": 0.645,
+      "profit_factor": 1.045,
+      "expectancy_r": 0.0104,
+      "median_bars_held": 26.0,
+      "exits": {
+        "target": 0,
+        "stop": 2152,
+        "time": 1104
+      }
+    },
+    "Donchian Breakout (55d)": {
+      "n": 136,
+      "win_rate": 0.3603,
+      "avg_win": 37.765,
+      "avg_loss": -16.706,
+      "avg_ret": 2.919,
+      "profit_factor": 1.273,
+      "expectancy_r": -0.0277,
+      "median_bars_held": 21.0,
+      "exits": {
+        "target": 0,
+        "stop": 117,
+        "time": 19
+      }
+    },
+    "Momentum Runner": {
+      "n": 1307,
+      "win_rate": 0.3497,
+      "avg_win": 19.601,
+      "avg_loss": -8.521,
+      "avg_ret": 1.312,
+      "profit_factor": 1.237,
+      "expectancy_r": -0.0456,
+      "median_bars_held": 11.0,
+      "exits": {
+        "target": 121,
+        "stop": 478,
+        "time": 708
+      }
+    },
+    "Confirmed Uptrend": {
+      "n": 688,
+      "win_rate": 0.2791,
+      "avg_win": 7.219,
+      "avg_loss": -6.798,
+      "avg_ret": -2.886,
+      "profit_factor": 0.411,
+      "expectancy_r": -0.3245,
+      "median_bars_held": 12.0,
+      "exits": {
+        "target": 14,
+        "stop": 285,
+        "time": 389
+      }
+    },
+    "Pullback to SMA50": {
+      "n": 2276,
+      "win_rate": 0.3686,
+      "avg_win": 18.011,
+      "avg_loss": -11.251,
+      "avg_ret": -0.464,
+      "profit_factor": 0.935,
+      "expectancy_r": -0.0832,
+      "median_bars_held": 15.0,
+      "exits": {
+        "target": 155,
+        "stop": 793,
+        "time": 1328
+      }
+    },
+    "Squeeze Breakout": {
+      "n": 8,
+      "win_rate": 0.25,
+      "avg_win": 13.055,
+      "avg_loss": -15.268,
+      "avg_ret": -8.187,
+      "profit_factor": 0.285,
+      "expectancy_r": -0.1481,
+      "median_bars_held": 18.5,
+      "exits": {
+        "target": 0,
+        "stop": 6,
+        "time": 2
+      }
+    },
+    "Breakdown Short (55d low)": {
+      "n": 30,
+      "win_rate": 0.5333,
+      "avg_win": 30.439,
+      "avg_loss": -27.18,
+      "avg_ret": 3.55,
+      "profit_factor": 1.28,
+      "expectancy_r": 0.0946,
+      "median_bars_held": 31.0,
+      "exits": {
+        "target": 0,
+        "stop": 14,
+        "time": 16
+      }
+    },
+    "Volume Breakout": {
+      "n": 16,
+      "win_rate": 0.375,
+      "avg_win": 103.508,
+      "avg_loss": -30.741,
+      "avg_ret": 19.602,
+      "profit_factor": 2.02,
+      "expectancy_r": 0.4353,
+      "median_bars_held": 26.5,
+      "exits": {
+        "target": 0,
+        "stop": 12,
+        "time": 4
+      }
+    }
+  },
+  "recommended": {
+    "Relative Weakness Short": {
+      "suggested_base": 38.1,
+      "n": 8261,
+      "trusted": true,
+      "profit_factor": 0.706,
+      "expectancy_r": -0.1032,
+      "win_rate": 0.3894
+    },
+    "Relative Strength Leader": {
+      "suggested_base": 46.7,
+      "n": 3256,
+      "trusted": true,
+      "profit_factor": 1.045,
+      "expectancy_r": 0.0104,
+      "win_rate": 0.3596
+    },
+    "Donchian Breakout (55d)": {
+      "suggested_base": 51.0,
+      "n": 136,
+      "trusted": true,
+      "profit_factor": 1.273,
+      "expectancy_r": -0.0277,
+      "win_rate": 0.3603
+    },
+    "Momentum Runner": {
+      "suggested_base": 49.6,
+      "n": 1307,
+      "trusted": true,
+      "profit_factor": 1.237,
+      "expectancy_r": -0.0456,
+      "win_rate": 0.3497
+    },
+    "Confirmed Uptrend": {
+      "suggested_base": 24.1,
+      "n": 688,
+      "trusted": true,
+      "profit_factor": 0.411,
+      "expectancy_r": -0.3245,
+      "win_rate": 0.2791
+    },
+    "Pullback to SMA50": {
+      "suggested_base": 42.9,
+      "n": 2276,
+      "trusted": true,
+      "profit_factor": 0.935,
+      "expectancy_r": -0.0832,
+      "win_rate": 0.3686
+    },
+    "Squeeze Breakout": {
+      "suggested_base": 34.8,
+      "n": 8,
+      "trusted": false,
+      "profit_factor": 0.285,
+      "expectancy_r": -0.1481,
+      "win_rate": 0.25
+    },
+    "Breakdown Short (55d low)": {
+      "suggested_base": 58.9,
+      "n": 30,
+      "trusted": true,
+      "profit_factor": 1.28,
+      "expectancy_r": 0.0946,
+      "win_rate": 0.5333
+    },
+    "Volume Breakout": {
+      "suggested_base": 63.2,
+      "n": 16,
+      "trusted": false,
+      "profit_factor": 2.02,
+      "expectancy_r": 0.4353,
+      "win_rate": 0.375
+    }
+  },
+  "validated": [
+    "Breakdown Short (55d low)",
+    "Donchian Breakout (55d)",
+    "Momentum Runner",
+    "Relative Strength Leader"
+  ],
+  "management_by_setup": {
+    "Breakdown Short (55d low)": {
+      "name": "trail 3.5\u00d7ATR / 60b",
+      "stop_mult": 3.5,
+      "target_r": 99,
+      "trailing": true,
+      "max_hold": 60
+    },
+    "Donchian Breakout (55d)": {
+      "name": "trail 3.5\u00d7ATR / 60b",
+      "stop_mult": 3.5,
+      "target_r": 99,
+      "trailing": true,
+      "max_hold": 60
+    },
+    "Momentum Runner": {
+      "name": "tight 2.0\u00d7ATR / 3R / 15b",
+      "stop_mult": 2.0,
+      "target_r": 3.0,
+      "trailing": false,
+      "max_hold": 15
+    },
+    "Relative Strength Leader": {
+      "name": "trail 3.5\u00d7ATR / 60b",
+      "stop_mult": 3.5,
+      "target_r": 99,
+      "trailing": true,
+      "max_hold": 60
+    }
+  },
+  "meta": {
+    "universe_requested": 400,
+    "coins_with_data": 300,
+    "total_trades": 15978,
+    "source": "mexc",
+    "per_setup_management": true,
+    "params": {
+      "days": 600,
+      "cost_pct": 0.36,
+      "management": {
+        "name": "tight 2.0\u00d7ATR / 3R / 15b",
+        "stop_mult": 2.0,
+        "target_r": 3.0,
+        "trailing": false,
+        "max_hold": 15
+      }
+    }
+  }
+}
