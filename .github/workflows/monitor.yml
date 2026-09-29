@@ -10,12 +10,21 @@ name: Monitor (trigger alerts)
 
 on:
   schedule:
-    - cron: "7 * * * *"      # hourly (UTC) — only needs to keep a relay run queued
-  workflow_dispatch:          # lets you run it manually from the Actions tab
+    - cron: "7 * * * *"      # hourly (UTC) — backup restarter if the chain ever breaks
+  workflow_dispatch:          # manual start (and how each run starts its successor)
+    inputs:
+      minutes:
+        description: "How long this run polls before handing over (default 340)"
+        required: false
+        default: "340"
 
 concurrency:
   group: monitor              # never overlap two monitor runs
   cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write              # lets a finishing run start its own successor
 
 jobs:
   poll:
@@ -40,4 +49,14 @@ jobs:
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
           ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
           FRED_API_KEY:       ${{ secrets.FRED_API_KEY }}
-        run: python monitor.py --interval 900 --max-minutes 340 --quiet-start
+        run: python monitor.py --interval 900 --max-minutes ${{ github.event.inputs.minutes || '340' }} --quiet-start
+
+      # Self-chaining: queue the next run before this one ends so there's no gap
+      # (GitHub's scheduler only fires every ~6h on free repos). The dispatched run
+      # waits in the concurrency group and starts the moment this one finishes.
+      # Skipped if you cancel a run — that's how to stop the chain on purpose.
+      - name: Hand over to the next run
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run monitor.yml --ref main -R ${{ github.repository }}
