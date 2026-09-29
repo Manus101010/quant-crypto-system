@@ -216,6 +216,50 @@ def _stop_pct(entry, stop) -> float | None:
     return abs(e - s) / e * 100
 
 
+def _mgmt(label):
+    try:
+        from triggers.scan import _management_params
+        return _management_params(label) or {}
+    except Exception:                               # noqa: BLE001
+        return {}
+
+
+def _exit_text(entry, stop, target, label, direction="long") -> tuple[str, str]:
+    """(TARGET cell, R:R cell) in plain words: fixed target, or '½ at $X' then trail."""
+    t = _price(target)
+    if t is not None:
+        return _fmt(t), None
+    m = _mgmt(label)
+    part = m.get("partial") or {}
+    e, sp = _price(entry), _price(stop)
+    if part.get("at_r") and e and sp:
+        d = abs(e - sp)
+        px = e + part["at_r"] * d if direction == "long" else e - part["at_r"] * d
+        return f"½ at {_fmt(px)}", "then trail"
+    return "trail ↑", "no cap"
+
+
+def _bot_hint(direction, entry, stop, target, label, risk_usd) -> str:
+    """The same trade as a MEXC futures grid bot (desk/gridplan.py)."""
+    try:
+        from desk.gridplan import grid_for_signal
+        e, sp = _price(entry), _price(stop)
+        if not e or not sp or not risk_usd:
+            return ""
+        atr = abs(e - sp) / float(_mgmt(label).get("stop_mult") or 3.0)
+        g = grid_for_signal(direction, e, sp, _price(target), atr, float(risk_usd))
+        if not g.get("ok"):
+            return (f"<div style='margin-top:6px;font-size:12px;color:#8a8f98'>🤖 Grid bot: "
+                    f"not suggested ({g.get('note', '')})</div>")
+        tp = f" · TP {_fmt(g['take_profit'])}" if g.get("take_profit") else ""
+        return (f"<div style='margin-top:6px;font-size:12px;color:#c9ccd3'>🤖 <b>Grid bot:</b> "
+                f"{g['mode']} {g['leverage']}× · {_fmt(g['lower'])}–{_fmt(g['upper'])} · "
+                f"{g['grids']} grids · invest ~${g['margin']:,.0f} · "
+                f"<b>stop-loss {_fmt(g['stop_loss'])}</b>{tp}</div>")
+    except Exception:                               # noqa: BLE001
+        return ""
+
+
 def _size_hint(entry, stop, risk_usd) -> str:
     """Position size that risks exactly `risk_usd` given this stop distance —
     the whole point of a wide ATR stop is a correspondingly SMALL position."""
@@ -248,9 +292,17 @@ def _legs(entry, target, stop, rr) -> str:
                 f"<div style='font-size:15px;font-weight:600;color:{color}'>{val}</div>"
                 f"{sub_html}</div>")
     # Trailing setups have no fixed target — say so instead of showing a bogus R:R.
-    trailing = _price(target) is None
-    tgt_txt = "trail" if trailing else _fmt(target)
-    rr_txt = "—" if trailing else (str(rr) if rr else "—")
+    worded = isinstance(target, str) and not target.strip().startswith("$") \
+        and not target.strip()[:1].isdigit()
+    trailing = worded or _price(target) is None
+    if worded:
+        tgt_txt = target                          # plain-words exit ("½ at $X", "trail ↑")
+    else:
+        tgt_txt = "trail" if trailing else _fmt(target)
+    if isinstance(rr, str) and _price(rr) is None:
+        rr_txt = rr
+    else:
+        rr_txt = "—" if trailing else (str(rr) if rr else "—")
     sp = _stop_pct(entry, stop)
     stop_sub = f"−{sp:.0f}%" if sp is not None else ""
     stop_color = "#f59e0b" if (sp is not None and sp >= _WIDE_STOP_PCT) else _SHORT
@@ -398,15 +450,18 @@ if res and res.get("candidates"):
             p = r.get("_plan") or {}
             is_long = (p.get("direction") or ("long" if t.get("action") == "BUY" else "short")) == "long"
             e, sp, tg = p.get("entry", t.get("entry")), p.get("stop", t.get("stop")), p.get("target")
-            tg_disp = "trail" if p.get("trailing") else (tg if p else t.get("target"))
-            rr_disp = "trail" if p.get("trailing") else (p.get("rr") if p else t.get("rr"))
+            _dir = "long" if is_long else "short"
+            tg_disp, rr_txt = _exit_text(e, sp, tg if p else t.get("target"), r.get("setup_label"), _dir)
+            rr_disp = rr_txt or (p.get("rr") if p else t.get("rr"))
             cards.append(_card(
                 r["ticker"], is_long, r.get("setup_label", ""),
                 f"<b>{_badge.get(r.get('_status'), '')}</b>"
                 + (" · 🔓 unlock soon" if _unlock_soon(r["ticker"]) else "")
                 + f" · score {r.get('_composite')}",
                 _legs(e, tg_disp, sp, rr_disp),
-                footer=_size_hint(e, sp, _risk),
+                footer=_size_hint(e, sp, _risk)
+                       + (_bot_hint(_dir, e, sp, tg, r.get("setup_label"), _risk)
+                          if r.get("_status") in ("armed", "not_selected", "held") else ""),
                 chart_svg=_svg_chart(cand_candles.get(r["ticker"]), e, sp, tg, is_long),
             ))
         _grid(cards)
@@ -433,12 +488,16 @@ if active:
     cards = []
     for t in active:
         is_long = t["direction"] == "long"
+        _tg, _rr = _exit_text(t.get("entry"), t.get("stop"), t.get("target"),
+                              t.get("setup_label"), t["direction"])
         cards.append(_card(
             t["symbol"], is_long, t.get("setup_label", ""),
             f"👁 {_expires_in(t.get('expires_at'))}",
-            _legs(t.get("entry"), t.get("target"), t.get("stop"), t.get("rr")),
+            _legs(t.get("entry"), _tg, t.get("stop"), _rr or t.get("rr")),
             footer=f"<b style='color:#c9ccd3'>Fires when</b> {_cond_plain(t)}"
-                   + _size_hint(t.get("entry"), t.get("stop"), _risk),
+                   + _size_hint(t.get("entry"), t.get("stop"), _risk)
+                   + _bot_hint(t["direction"], t.get("entry"), t.get("stop"), t.get("target"),
+                               t.get("setup_label"), _risk),
             chart_svg=_svg_chart(act_candles.get(t["symbol"]), t.get("entry"),
                                  t.get("stop"), t.get("target"), is_long),
         ))
