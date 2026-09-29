@@ -51,36 +51,56 @@ def _simulate(t: dict, df: pd.DataFrame) -> dict | None:
 
     fire_day = pd.Timestamp(t["fired_at"][:10])
     bars = df[df.index > fire_day]
+    # Same mechanics as the backtest (backtesting/crypto_optimize._simulate):
+    # stop checked first; optional partial exit at +at_r R (then breakeven);
+    # the trailing stop ratchets off the CLOSE, one initial-risk behind it.
+    part = m.get("partial") or {}
+    p_frac, p_r, p_be = part.get("frac", 0.0), part.get("at_r"), part.get("breakeven")
+    took, booked = 0.0, 0.0
     peak = entry
     trail = stop
     held = 0
+    sgn = -1 if short else 1
     for ts, b in bars.iterrows():
         o, h, l, c = b["open"], b["high"], b["low"], b["close"]
         # 1) stop / trail (checked first — conservative)
         if (not short and l <= trail) or (short and h >= trail):
             px = (min(o, trail) if not short else max(o, trail))
             moved = (trail > stop) if not short else (trail < stop)
-            return _closed(t, "trail" if moved else "stop", px, ts, entry, risk, short, peak, trail, held + 1)
-        # 2) fixed target
+            return _closed(t, "trail" if moved else "stop", px, ts, entry, risk, short,
+                           peak, trail, held + 1, took, booked)
+        # 2) partial profit at +at_r R, then stop to breakeven on the rest
+        if p_r and not took and ((not short and h >= entry + p_r * risk)
+                                 or (short and l <= entry - p_r * risk)):
+            took, booked = p_frac, p_frac * p_r * risk
+            if p_be:
+                trail = max(trail, entry) if not short else min(trail, entry)
+        # 3) fixed target
         if target and ((not short and h >= target) or (short and l <= target)):
-            return _closed(t, "target", target, ts, entry, risk, short, peak, trail, held + 1)
+            return _closed(t, "target", target, ts, entry, risk, short, peak, trail,
+                           held + 1, took, booked)
         held += 1
-        # 3) ratchet the trailing stop off the new extreme
+        peak = max(peak, h) if not short else min(peak, l)
+        # 4) ratchet the trailing stop off the close (as backtested)
         if trailing:
-            peak = max(peak, h) if not short else min(peak, l)
-            trail = max(trail, peak - risk) if not short else min(trail, peak + risk)
-        # 4) time exit on a completed bar
+            new = c - sgn * risk
+            trail = max(trail, new) if not short else min(trail, new)
+        # 5) time exit on a completed bar
         if held >= max_hold and ts.date() < datetime.datetime.utcnow().date():
-            return _closed(t, "time", c, ts, entry, risk, short, peak, trail, held)
+            return _closed(t, "time", c, ts, entry, risk, short, peak, trail, held,
+                           took, booked)
     return {"outcome": None, "peak_price": float(peak), "trail_stop": float(trail),
-            "bars_held": held}
+            "bars_held": held, "_partial_taken": bool(took)}
 
 
-def _closed(t, outcome, px, ts, entry, risk, short, peak, trail, held) -> dict:
-    r = ((entry - px) if short else (px - entry)) / risk
+def _closed(t, outcome, px, ts, entry, risk, short, peak, trail, held,
+            took=0.0, booked=0.0) -> dict:
+    rest = (entry - px) if short else (px - entry)
+    r = (booked + (1 - took) * rest) / risk
     return {"outcome": outcome, "exit_price": float(px), "exit_at": ts.isoformat(),
             "r_multiple": round(float(r), 3), "peak_price": float(peak),
-            "trail_stop": float(trail), "bars_held": int(held)}
+            "trail_stop": float(trail), "bars_held": int(held),
+            "_partial_taken": bool(took)}
 
 
 def update_open_trades(notify: bool = True) -> dict:
@@ -109,6 +129,8 @@ def update_open_trades(notify: bool = True) -> dict:
             if notify:
                 telegram.send_message(_close_text(t, patch))
         elif notify and t.get("taken"):
+            if patch.get("_partial_taken"):
+                _maybe_partial_msg(t)
             _maybe_nudge_trail(t, patch)
     return {"open": len(open_trades) - closed, "closed": closed}
 
@@ -132,6 +154,20 @@ def _close_text(t: dict, p: dict) -> str:
             f"Result: <b>{r:+.2f}R</b> — {'made' if r > 0 else 'lost'} {abs(r):.2f}× the amount risked "
             f"(≈ {'+' if usd >= 0 else '−'}${abs(usd):.0f} on a ${RISK_PER_TRADE_USD:.0f} risk) "
             f"after {p['bars_held']} day(s).\n<i>{t.get('setup_label','')}</i>")
+
+
+def _maybe_partial_msg(t: dict) -> None:
+    """Once per trade: the +2R partial-profit level was reached."""
+    key = f"partial:{t['id']}"
+    if tdb.get_state(key):
+        return
+    tdb.set_state(key, "sent")
+    coin = t["symbol"].replace("-USD", "")
+    telegram.send_message(
+        f"💵 <b>{coin}: take half your profit now</b>\n"
+        f"It's reached +2× your risk. Close half the position (or stop the bot and "
+        f"restart it at half size), then move the stop on the rest to your entry "
+        f"({t.get('fired_price'):.6g}). The rest can't lose money from here.")
 
 
 def _maybe_nudge_trail(t: dict, p: dict) -> None:

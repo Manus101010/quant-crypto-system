@@ -115,8 +115,17 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
         loss = abs(price - stop) / price * 100
         lines.append(f"• Stop loss: {_fmt_price(stop)}  (−{loss:.1f}%) — "
                      f"{'buy back' if short else 'sell'} if it gets here; that caps your loss")
+    part = m.get("partial") or {}
+    if part.get("at_r") and stop:
+        dist = abs(price - stop)
+        ppx = price - part["at_r"] * dist if short else price + part["at_r"] * dist
+        lines.append(f"• Take <b>{part.get('frac', 0.5) * 100:.0f}% profit at {_fmt_price(ppx)}</b> "
+                     f"({_pct(price, ppx)}, +{part['at_r']:g}× your risk)"
+                     + (", then move your stop to your entry — the rest can't lose"
+                        if part.get("breakeven") else ""))
     if trailing:
-        lines.append("• No fixed target — it's a <b>trailing stop</b>: as the price "
+        lines.append(("• For the rest: no" if part.get("at_r") else "• No")
+                     + " fixed target — it's a <b>trailing stop</b>: as the price "
                      f"{'falls' if short else 'rises'}, move your stop "
                      f"{'down' if short else 'up'} behind it to lock in profit. "
                      "If you tick \"Took it\", the bot messages you each time to raise it.")

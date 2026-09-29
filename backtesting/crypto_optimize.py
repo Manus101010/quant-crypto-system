@@ -34,12 +34,19 @@ _TRAIL = {"name": "trail 3.5×ATR / 60b", "stop_mult": 3.5, "target_r": 99,
 _TIGHT = {"name": "tight 2.0×ATR / 3R / 15b", "stop_mult": 2.0, "target_r": 3.0,
           "trailing": False, "max_hold": 15}
 
+# Relative Strength Leader: bank half at +2R and move the rest to breakeven, then
+# trail. Research (research/scaled_exits.py, 408 MEXC coins × 600d, 0.36% cost):
+# PF 1.29 → 1.38, expectancy +0.028R → +0.058R, better in BOTH halves of the
+# history. The other setups were not improved by partial exits, so they're unchanged.
+_TRAIL_HALF_2R = {**_TRAIL, "name": "trail 3.5×ATR / 60b · ½ off at 2R → breakeven",
+                  "partial": {"frac": 0.5, "at_r": 2.0, "breakeven": True}}
+
 SETUP_MANAGEMENT = {
     # Fresh breakouts + leaders → let winners run.
     "Donchian Breakout (55d)":   _TRAIL,
     "Volume Breakout":           _TRAIL,
     "Squeeze Breakout":          _TRAIL,
-    "Relative Strength Leader":  _TRAIL,
+    "Relative Strength Leader":  _TRAIL_HALF_2R,
     # Shorts mirror the longs: breakdown/rel-weakness trail; MR/Williams tight.
     "Breakdown Short (55d low)":          _TRAIL,
     "Relative Weakness Short":            _TRAIL,
@@ -86,6 +93,10 @@ def _simulate(close, high, low, i, ind, cfg) -> dict | None:
     is_short = ind.get("_label") in SHORT_SETUPS
     n = len(close)
     exit_p, reason, k = None, "time", 0
+    part = cfg.get("partial") or {}
+    p_frac, p_r, p_be = part.get("frac", 0.0), part.get("at_r"), part.get("breakeven")
+    took = 0.0                                   # fraction already banked
+    booked = 0.0                                 # frac × signed $ move booked
 
     if not is_short:
         stop = entry - cfg["stop_mult"] * atr
@@ -102,6 +113,12 @@ def _simulate(close, high, low, i, ind, cfg) -> dict | None:
             cur_stop = trail if cfg["trailing"] else stop
             if lo <= cur_stop:
                 exit_p, reason = cur_stop, "stop"; break
+            if p_r and not took and hi >= entry + p_r * risk:
+                took = p_frac
+                booked += p_frac * (p_r * risk)
+                if p_be:
+                    stop = max(stop, entry)
+                    trail = max(trail, entry)
             if hi >= target:
                 exit_p, reason = target, "target"; break
             if cfg["trailing"]:
@@ -110,8 +127,9 @@ def _simulate(close, high, low, i, ind, cfg) -> dict | None:
                     trail = new_stop
         if exit_p is None:
             exit_p = float(close.iloc[min(i + max(k, 1), n - 1)])
-        ret_pct = (exit_p / entry - 1) * 100
-        r_mult = (exit_p - entry) / risk
+        move = booked + (1 - took) * (exit_p - entry)
+        ret_pct = move / entry * 100
+        r_mult = move / risk
     else:
         stop = entry + cfg["stop_mult"] * atr        # stop ABOVE for a short
         risk = stop - entry
@@ -127,6 +145,12 @@ def _simulate(close, high, low, i, ind, cfg) -> dict | None:
             cur_stop = trail if cfg["trailing"] else stop
             if hi >= cur_stop:                        # stop hit (price rose)
                 exit_p, reason = cur_stop, "stop"; break
+            if p_r and not took and lo <= entry - p_r * risk:
+                took = p_frac
+                booked += p_frac * (p_r * risk)
+                if p_be:
+                    stop = min(stop, entry)
+                    trail = min(trail, entry)
             if lo <= target:                          # target hit (price fell)
                 exit_p, reason = target, "target"; break
             if cfg["trailing"]:
@@ -138,8 +162,9 @@ def _simulate(close, high, low, i, ind, cfg) -> dict | None:
         # Short return on notional = (entry - exit)/entry, capped at +100% (price
         # to zero). NOT (entry/exit - 1), which is unbounded and inflates PF when
         # a coin crashes toward zero.
-        ret_pct = (entry - exit_p) / entry * 100
-        r_mult = (entry - exit_p) / risk
+        move = booked + (1 - took) * (entry - exit_p)
+        ret_pct = move / entry * 100
+        r_mult = move / risk
 
     return {"setup": ind["_label"], "win": ret_pct > 0, "ret_pct": ret_pct,
             "r_mult": r_mult, "bars_held": k, "reason": reason}

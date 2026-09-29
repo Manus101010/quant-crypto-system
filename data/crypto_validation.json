@@ -239,11 +239,16 @@
       "max_hold": 15
     },
     "Relative Strength Leader": {
-      "name": "trail 3.5\u00d7ATR / 60b",
+      "name": "trail 3.5\u00d7ATR / 60b \u00b7 \u00bd off at 2R \u2192 breakeven",
       "stop_mult": 3.5,
       "target_r": 99,
       "trailing": true,
-      "max_hold": 60
+      "max_hold": 60,
+      "partial": {
+        "frac": 0.5,
+        "at_r": 2.0,
+        "breakeven": true
+      }
     }
   },
   "meta": {
