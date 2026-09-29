@@ -319,3 +319,8 @@ st.markdown(
     f'What-If Deployment Score: {what_if_score}</div>',
     unsafe_allow_html=True,
 )
+
+
+st.caption("Macro data: Federal Reserve Economic Data (FRED), accessed via the FRED® API. "
+           "This product uses the FRED® API but is not endorsed or certified by the "
+           "Federal Reserve Bank of St. Louis.")
