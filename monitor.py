@@ -127,6 +127,9 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
             lines.append(f"• Reward vs risk: about {ratio:.1f} to 1 — the win is {ratio:.1f}× the loss")
     if hold:
         lines.append(f"• Time limit: close it after {hold} days if nothing's hit")
+    pj = _projection_line(trg, price, label)
+    if pj:
+        lines.append(pj)
     sz = _sizing_line(trg, price)
     if sz:
         lines += ["", sz]
@@ -153,6 +156,34 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     return "\n".join(lines)
 
 
+def _projection_line(trg: dict, price: float, label: str) -> str:
+    """What to expect, from this setup's backtest: odds of a win, the typical
+    winner as a multiple of the risk → a price and $ figure for THIS trade."""
+    try:
+        from backtesting.crypto_validation import load_validation
+        from triggers.outcomes import portfolio_heat
+        st_ = ((load_validation() or {}).get("stats") or {}).get(label)
+        stop = trg.get("stop")
+        if not st_ or not stop or not st_.get("avg_loss"):
+            return ""
+        wr = st_["win_rate"]
+        win_r = st_["avg_win"] / abs(st_["avg_loss"])        # typical winner, in R
+        short = (trg.get("direction") or "long") == "short"
+        dist = abs(price - stop)
+        px = price - win_r * dist if short else price + win_r * dist
+        risk = portfolio_heat()["next_risk"] or portfolio_heat()["risk_per_trade"]
+        odds = f"{wr * 100:.0f}% of trades"
+        days = st_.get("median_bars_held")
+        return (f"📈 <b>What to expect</b> (backtest, {st_['n']:,} past trades): {odds} win. "
+                f"Winners averaged ~{win_r:.1f}× the risk → around {_fmt_price(px)} "
+                f"({_pct(price, px)}), ≈ +${win_r * risk:,.0f}"
+                + (f", usually within ~{days:.0f} days" if days else "")
+                + f". The rest usually hit the stop (≈ −${risk:,.0f}).")
+    except Exception as exc:                        # noqa: BLE001
+        log.debug("projection failed: %s", exc)
+        return ""
+
+
 def _grid_block(trg: dict, price: float, m: dict) -> str:
     """Optional MEXC futures grid-bot version of the same trade (same stop, same
     worst-case $ loss)."""
@@ -177,7 +208,8 @@ def _grid_block(trg: dict, price: float, m: dict) -> str:
             "🤖 <b>Or run it as a MEXC futures grid bot</b> (profits from the swings):",
             f"• Mode: <b>{g['mode']}</b> · Leverage: <b>{g['leverage']}×</b> (isolated)",
             f"• Price range: {f(g['lower'])} – {f(g['upper'])} · <b>{g['grids']} grids</b> "
-            f"(~{g['step_pct']:.1f}% apart, ~{g['net_per_grid_pct']:.1f}% profit per swing)",
+            f"(~{g['step_pct']:.1f}% apart, ~{g['net_per_grid_pct']:.1f}% ≈ "
+            f"${g['notional'] / g['grids'] * g['net_per_grid_pct'] / 100:,.2f} profit per completed swing)",
             f"• Investment: about <b>${g['margin']:,.0f}</b>",
             f"• Stop-loss price: <b>{f(g['stop_loss'])}</b> ← type this in; MEXC won't add a % stop for you",
             tp,
