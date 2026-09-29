@@ -89,12 +89,12 @@ def summary(name: str, res: dict, regime_score) -> str:
     for a in armed:
         arrow = "▲" if a["direction"] == "long" else "▼"
         lvl = a.get("level")
-        how = "trail" if a.get("trailing") else "3R target"
-        fire = (f"fires {'>' if a['direction']=='long' else '<'} {_fmt(lvl)}"
-                if a.get("category") != "mean_reversion" else "fires on RSI-2 turn")
+        how = "trailing stop" if a.get("trailing") else "take-profit at 3× risk"
+        fire = (f"alerts if price goes {'above' if a['direction']=='long' else 'below'} {_fmt(lvl)}"
+                if a.get("category") != "mean_reversion" else "alerts when the dip turns up")
         sp = a.get("stop_pct")
         lines.append(f"📡 {arrow} <b>{a['symbol'].replace('-USD','')}</b> {a['setup_label']} — "
-                     f"{fire} · stop −{sp:.0f}% · {how}" if sp else
+                     f"{fire} · stop {sp:.0f}% below · {how}" if sp else
                      f"📡 {arrow} <b>{a['symbol'].replace('-USD','')}</b> {a['setup_label']} — {fire}")
     hs = res.get("held_status") or {}
     if hs:

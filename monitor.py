@@ -20,6 +20,7 @@ triggers; grouped candle fetches for indicator triggers). ccxt paces each venue.
 from __future__ import annotations
 import time
 import argparse
+import json
 import datetime
 import numpy as np
 import pandas as pd
@@ -55,41 +56,102 @@ def _fmt_price(p) -> str:
     return f"${p:,.2f}"
 
 
+# One plain-English line per setup: what kind of trade this is.
+_SETUP_PLAIN = {
+    "Momentum Runner":            "a coin in a strong uptrend making a fresh push higher",
+    "Relative Strength Leader":   "a coin that's been beating Bitcoin — a market leader",
+    "Donchian Breakout (55d)":    "a breakout to a new 55-day high",
+    "Breakdown Short (55d low)":  "a downtrending coin breaking to a new 55-day low",
+    "RSI-2 Pullback (Connors)":   "a short, sharp dip inside an uptrend",
+    "BB Bounce Setup":            "a dip to the bottom of its normal range",
+    "Williams %R Oversold":       "a dip to an oversold level inside an uptrend",
+}
+
+
+def _why_plain(trg: dict) -> str:
+    """Why it fired, in words (instead of RSI/indicator shorthand)."""
+    try:
+        cond = json.loads(trg.get("condition_json") or "{}")
+    except Exception:                               # noqa: BLE001
+        cond = {}
+    kind, lvl = cond.get("kind"), cond.get("level")
+    if kind == "breakout":
+        return (f"Price just pushed above {_fmt_price(lvl)} — the level it was waiting for — "
+                f"and the move isn't overheated yet.")
+    if kind == "breakdown":
+        return (f"Price just dropped below {_fmt_price(lvl)} — the level it was waiting for — "
+                f"and it isn't oversold yet.")
+    if kind == "mr_reversal":
+        return "It had sold off hard and has just started to bounce back up."
+    if kind == "mr_reversal_short":
+        return "It had run up too far and has just started to turn back down."
+    return "Its trigger condition was met."
+
+
+def _pct(a, b) -> str:
+    return f"{(b / a - 1) * 100:+.1f}%" if a and b else ""
+
+
 def _alert_text(trg: dict, price: float, reason: str) -> str:
-    direction = trg.get("direction") or "long"
-    if direction == "short":
-        arrow = "🔴 SHORT  (MEXC futures/perp)"
-    else:
-        arrow = "🟢 LONG  (spot)"
-    cat = (trg.get("setup_category") or "").replace("_", " ")
-    lines = [
-        f"⚡ <b>{trg['symbol']}</b> — {trg.get('setup_label','setup')}",
-        f"{arrow}  ·  {cat}",
-        f"<b>Trigger met:</b> {reason}",
-        f"Price now: <b>{_fmt_price(price)}</b>",
-    ]
-    if trg.get("entry"):  lines.append(f"Entry: {_fmt_price(trg['entry'])}")
-    if trg.get("target"): lines.append(f"Target: {_fmt_price(trg['target'])}")
-    if trg.get("stop"):   lines.append(f"Stop: {_fmt_price(trg['stop'])}")
-    if trg.get("rr"):     lines.append(f"R:R: {trg['rr']}")
-    lines.append(f"📐 {_management_note(trg.get('setup_label'))}")
+    short = (trg.get("direction") or "long") == "short"
+    coin = trg["symbol"].replace("-USD", "")
+    label = trg.get("setup_label") or "setup"
+    stop, target = trg.get("stop"), trg.get("target")
+    try:
+        from triggers.scan import _management_params
+        m = _management_params(label) or {}
+    except Exception:                               # noqa: BLE001
+        m = {}
+    trailing = bool(m.get("trailing")) and not target
+    hold = m.get("max_hold")
+
+    head = (f"🔴 <b>SELL / SHORT signal — {coin}</b>  (futures)" if short
+            else f"🟢 <b>BUY signal — {coin}</b>")
+    lines = [head, f"<i>{label}: {_SETUP_PLAIN.get(label, 'a validated setup')}.</i>", "",
+             f"<b>Why now:</b> {_why_plain(trg)}",
+             f"<b>Price now:</b> {_fmt_price(price)}", "", "📋 <b>The plan</b>"]
+    lines.append(f"• {'Sell (short) around' if short else 'Buy around'}: {_fmt_price(price)}")
+    if stop:
+        loss = abs(price - stop) / price * 100
+        lines.append(f"• Stop loss: {_fmt_price(stop)}  (−{loss:.1f}%) — "
+                     f"{'buy back' if short else 'sell'} if it gets here; that caps your loss")
+    if trailing:
+        lines.append("• No fixed target — it's a <b>trailing stop</b>: as the price "
+                     f"{'falls' if short else 'rises'}, move your stop "
+                     f"{'down' if short else 'up'} behind it to lock in profit. "
+                     "If you tick \"Took it\", the bot messages you each time to raise it.")
+    elif target:
+        lines.append(f"• Take profit: {_fmt_price(target)}  ({_pct(price, target)})")
+        if stop and abs(price - stop):
+            ratio = abs(target - price) / abs(price - stop)
+            lines.append(f"• Reward vs risk: about {ratio:.1f} to 1 — the win is {ratio:.1f}× the loss")
+    if hold:
+        lines.append(f"• Time limit: close it after {hold} days if nothing's hit")
     sz = _sizing_line(trg, price)
     if sz:
-        lines.append(sz)
-    # Direction-aware BTC regime stamp (WARNING, never a veto in v1).
+        lines += ["", sz]
+    # Bitcoin backdrop in words (a warning, never a block).
     try:
         from utils import btc_regime
-        reg = btc_regime.get_btc_regime()
-        stamp = btc_regime.stamp_for(reg["label"], direction)
-        lines.append(f"🧭 BTC {reg['label']} — {reg.get('detail','')}  {stamp}")
-    except Exception as exc:                       # noqa: BLE001 — never block an alert
+        lab = btc_regime.get_btc_regime()["label"]
+        if lab == btc_regime.RISK_ON:
+            txt = ("headwind — Bitcoin is trending up, shorts are fighting it" if short
+                   else "tailwind — Bitcoin is trending up")
+        elif lab == btc_regime.RISK_OFF:
+            txt = ("tailwind — Bitcoin is weak" if short
+                   else "headwind — Bitcoin is weak, be extra careful with buys")
+        else:
+            txt = "neutral — Bitcoin is mixed, no strong push either way"
+        lines.append(f"🧭 Market: {txt}")
+    except Exception as exc:                        # noqa: BLE001 — never block an alert
         log.debug("btc_regime stamp failed: %s", exc)
-    lines.append("\n<i>Signal only — review and execute manually.</i>")
+    lines.append("\n<i>Signal only — you decide and place the trade. "
+                 "Tap \"Took it\" on the scanner if you enter.</i>")
     return "\n".join(lines)
 
 
 def _sizing_line(trg: dict, price: float) -> str:
-    """Position size that fits the portfolio-heat budget (never blocks the alert)."""
+    """How much to buy so a stop-out loses your set risk (fits the heat budget)."""
     try:
         from triggers.outcomes import portfolio_heat
         h = portfolio_heat()
@@ -99,17 +161,21 @@ def _sizing_line(trg: dict, price: float) -> str:
         frac = abs(price - stop) / price
         if frac <= 0:
             return ""
-        heat = (f"🔥 Portfolio heat ${h['open_risk']:.0f}/${h['cap']:.0f} "
-                f"({h['n_long']}L/{h['n_short']}S open)")
+        budget = (f"🔥 Money at risk in trades you've taken: ${h['open_risk']:.0f} "
+                  f"of your ${h['cap']:.0f} limit")
         if h["next_risk"] <= 0:
-            return (f"{heat}\n⚠️ <b>Heat full</b> — skip this one, or close/trail "
-                    f"an open trade first.")
+            return (f"{budget}\n⚠️ <b>You're at your limit</b> — skip this one, or wait "
+                    f"until an open trade is closed or safe.")
         risk = h["next_risk"]
         pos = risk / frac
-        note = "" if risk >= h["risk_per_trade"] else " (sized down to fit)"
-        return (f"💰 Risk ${risk:.0f}{note} → position <b>${pos:,.0f}</b> "
-                f"(stop −{frac*100:.1f}%)\n{heat}")
-    except Exception as exc:                       # noqa: BLE001
+        coin = trg["symbol"].replace("-USD", "")
+        tgt = trg.get("target")
+        win = f", hit the target and you make ~${risk * abs(tgt - price) / abs(price - stop):,.0f}" \
+            if tgt and abs(price - stop) else ""
+        sized = "" if risk >= h["risk_per_trade"] else " (sized down to stay under your limit)"
+        return (f"💰 <b>Size:</b> buy about <b>${pos:,.0f}</b> of {coin}{sized}\n"
+                f"    If the stop hits you lose ~${risk:.0f}{win}.\n{budget}")
+    except Exception as exc:                        # noqa: BLE001
         log.debug("sizing line failed: %s", exc)
         return ""
 

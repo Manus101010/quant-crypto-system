@@ -107,12 +107,48 @@ def update_open_trades(notify: bool = True) -> dict:
             log.info("CLOSED #%d %s — %s %+.2fR", t["id"], t["symbol"],
                      patch["outcome"], patch["r_multiple"])
             if notify:
-                icon = "✅" if patch["r_multiple"] > 0 else "❌"
-                telegram.send_message(
-                    f"{icon} <b>{t['symbol']}</b> closed — {t.get('setup_label','')}\n"
-                    f"Exit: {patch['outcome']} at {patch['exit_price']:.6g} → "
-                    f"<b>{patch['r_multiple']:+.2f}R</b> after {patch['bars_held']}d")
+                telegram.send_message(_close_text(t, patch))
+        elif notify and t.get("taken"):
+            _maybe_nudge_trail(t, patch)
     return {"open": len(open_trades) - closed, "closed": closed}
+
+
+_EXIT_PLAIN = {"target": "hit the take-profit 🎯", "stop": "hit the stop loss",
+               "trail": "trailing stop was hit", "time": "time limit reached — closed at market"}
+
+
+def _close_text(t: dict, p: dict) -> str:
+    from config import RISK_PER_TRADE_USD
+    r = p["r_multiple"]
+    icon = "✅" if r > 0 else "❌"
+    coin = t["symbol"].replace("-USD", "")
+    usd = r * RISK_PER_TRADE_USD
+    kind = "your trade" if t.get("taken") else "paper trade"
+    return (f"{icon} <b>{coin} {kind} closed</b> — {_EXIT_PLAIN.get(p['outcome'], p['outcome'])}\n"
+            f"Result: <b>{r:+.2f}R</b> — {'made' if r > 0 else 'lost'} {abs(r):.2f}× the amount risked "
+            f"(≈ {'+' if usd >= 0 else '−'}${abs(usd):.0f} on a ${RISK_PER_TRADE_USD:.0f} risk) "
+            f"after {p['bars_held']} day(s).\n<i>{t.get('setup_label','')}</i>")
+
+
+def _maybe_nudge_trail(t: dict, p: dict) -> None:
+    """For trades you TOOK: tell you when the trailing stop has moved enough to
+    be worth raising (≥ 0.25 of the original risk since the last nudge)."""
+    new, stop0, entry = p.get("trail_stop"), t.get("stop"), t.get("fired_price")
+    if new is None or stop0 is None or not entry:
+        return
+    r0 = abs(entry - stop0)
+    key = f"trail:{t['id']}"
+    last = float(tdb.get_state(key) or stop0)
+    short = t.get("direction") == "short"
+    moved = (last - new) if short else (new - last)
+    if r0 and moved >= 0.25 * r0:
+        tdb.set_state(key, str(new))
+        coin = t["symbol"].replace("-USD", "")
+        safe = (new <= entry) if short else (new >= entry)
+        telegram.send_message(
+            f"⬆️ <b>Raise your {coin} stop to {new:.6g}</b>\n"
+            f"The price has moved your way, so the trailing stop moves up with it."
+            + ("\n🔒 That's past your entry — this trade can no longer lose money." if safe else ""))
 
 
 # ── Stats: live track record vs backtest ──────────────────────────────────────
