@@ -262,10 +262,12 @@ def portfolio_heat(risk_per_trade: float | None = None,
     # (everything else) feed the track record but carry no money at risk.
     paper = tdb.get_fired_trades(open_only=True)
     open_ = [t for t in paper if t.get("taken")]
-    at_risk = sum(_open_risk_frac(t) * rpt for t in open_)
+    gross = sum(_open_risk_frac(t) * rpt for t in open_)
+    at_risk = _correlated_risk(open_, rpt, gross)
     n_long = sum(1 for t in open_ if t.get("direction") != "short")
     left = max(0.0, cap - at_risk)
-    return {"open_risk": round(at_risk, 2), "cap": cap, "left": round(left, 2),
+    return {"open_risk": round(at_risk, 2), "gross_risk": round(gross, 2),
+            "cap": cap, "left": round(left, 2),
             "n_open": len(open_), "n_long": n_long, "n_short": len(open_) - n_long,
             "next_risk": round(min(rpt, left), 2), "risk_per_trade": rpt,
             "n_paper": len(paper)}
@@ -294,3 +296,42 @@ def open_marks(trades: list[dict] | None = None) -> dict:
         risk = abs(e - s0)
         out[t["id"]] = round(((e - p) if t.get("direction") == "short" else (p - e)) / risk, 2)
     return out
+
+
+
+_CRASH_CORR_FLOOR = 0.7   # same-direction crypto positions: assume ≥ this in a sell-off
+
+
+def _correlated_risk(open_: list[dict], rpt: float, gross: float) -> float:
+    """Portfolio $ risk = sqrt(r' C r) with signed per-trade risk (long +, short −)
+    and a 60-day daily-return correlation matrix. Same-direction pairs are floored
+    at _CRASH_CORR_FLOOR (crypto correlations jump toward 1 in crashes), so a book
+    of longs is never under-counted; a short on a correlated coin partly offsets
+    longs (a hedge). Falls back to the plain sum on any data problem."""
+    if len(open_) < 2:
+        return gross
+    try:
+        import numpy as np
+        import pandas as pd
+        syms = sorted({t["symbol"] for t in open_})
+        got = exchange.get_ohlcv_batch(syms, timeframe="1d", limit=61, exchange="mexc")
+        rets = pd.DataFrame({s: df["close"].pct_change() for s, df in got.items()
+                             if df is not None and len(df) > 30}).dropna(how="all")
+        corr = rets.corr(min_periods=20)
+        r = np.array([_open_risk_frac(t) * rpt * (-1 if t.get("direction") == "short" else 1)
+                      for t in open_])
+        n = len(open_)
+        C = np.eye(n)
+        for i in range(n):
+            for j in range(i + 1, n):
+                a, b = open_[i]["symbol"], open_[j]["symbol"]
+                c = 1.0 if a == b else (corr.at[a, b] if a in corr and b in corr else np.nan)
+                if np.isnan(c):
+                    c = 1.0                       # unknown → assume fully correlated
+                if np.sign(r[i]) == np.sign(r[j]):
+                    c = max(c, _CRASH_CORR_FLOOR)
+                C[i, j] = C[j, i] = c
+        return float(np.sqrt(max(r @ C @ r, 0.0)))
+    except Exception as exc:                      # noqa: BLE001
+        log.debug("correlated heat failed — %s", exc)
+        return gross
