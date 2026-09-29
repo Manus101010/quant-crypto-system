@@ -130,6 +130,9 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     sz = _sizing_line(trg, price)
     if sz:
         lines += ["", sz]
+    gb = _grid_block(trg, price, m)
+    if gb:
+        lines += ["", gb]
     # Bitcoin backdrop in words (a warning, never a block).
     try:
         from utils import btc_regime
@@ -148,6 +151,44 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     lines.append("\n<i>Signal only — you decide and place the trade. "
                  "Tap \"Took it\" on the scanner if you enter.</i>")
     return "\n".join(lines)
+
+
+def _grid_block(trg: dict, price: float, m: dict) -> str:
+    """Optional MEXC futures grid-bot version of the same trade (same stop, same
+    worst-case $ loss)."""
+    try:
+        from desk.gridplan import grid_for_signal
+        from triggers.outcomes import portfolio_heat
+        risk = portfolio_heat()["next_risk"]
+        if risk <= 0:
+            return ""
+        stop = trg.get("stop")
+        atr = abs(price - stop) / float(m.get("stop_mult") or 3.0) if stop else None
+        g = grid_for_signal(trg.get("direction") or "long", price, stop,
+                            trg.get("target"), atr, risk)
+        if not g.get("ok"):
+            return f"🤖 <b>Grid bot:</b> not suggested here ({g.get('note', '')})."
+        f = _fmt_price
+        below = "below" if g["mode"] == "Long" else "above"
+        gap = abs(g["stop_loss"] - g["liq_est"]) / g["stop_loss"] * 100
+        tp = (f"• Take-profit price: {f(g['take_profit'])}" if g["take_profit"] else
+              "• Take-profit price: leave empty (trailing trade — I'll tell you when to stop it)")
+        return "\n".join([
+            "🤖 <b>Or run it as a MEXC futures grid bot</b> (profits from the swings):",
+            f"• Mode: <b>{g['mode']}</b> · Leverage: <b>{g['leverage']}×</b> (isolated)",
+            f"• Price range: {f(g['lower'])} – {f(g['upper'])} · <b>{g['grids']} grids</b> "
+            f"(~{g['step_pct']:.1f}% apart, ~{g['net_per_grid_pct']:.1f}% profit per swing)",
+            f"• Investment: about <b>${g['margin']:,.0f}</b>",
+            f"• Stop-loss price: <b>{f(g['stop_loss'])}</b> ← type this in; MEXC won't add a % stop for you",
+            tp,
+            f"• Liquidation ≈ {f(g['liq_est'])} ({gap:.0f}% {below} your stop, so the stop hits first). "
+            "Check the bot's own figure is also past your stop before starting.",
+            f"Worst case (every grid order filled, then stopped): lose ~${g['worst_loss']:.0f}. "
+            "Tick \"Took it\" and I'll message you to shut the bot off if the stop is hit.",
+        ])
+    except Exception as exc:                        # noqa: BLE001 — never block an alert
+        log.debug("grid block failed: %s", exc)
+        return ""
 
 
 def _sizing_line(trg: dict, price: float) -> str:

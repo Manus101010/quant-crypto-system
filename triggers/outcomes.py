@@ -124,7 +124,11 @@ def _close_text(t: dict, p: dict) -> str:
     coin = t["symbol"].replace("-USD", "")
     usd = r * RISK_PER_TRADE_USD
     kind = "your trade" if t.get("taken") else "paper trade"
-    return (f"{icon} <b>{coin} {kind} closed</b> — {_EXIT_PLAIN.get(p['outcome'], p['outcome'])}\n"
+    urgent = ""
+    if t.get("taken") and p["outcome"] in ("stop", "trail", "time"):
+        urgent = (f"🚨 <b>ACT NOW — close your {coin} position / STOP your grid bot.</b>\n"
+                  f"Price reached {p['exit_price']:.6g}. MEXC bots don't stop themselves.\n\n")
+    return urgent + (f"{icon} <b>{coin} {kind} closed</b> — {_EXIT_PLAIN.get(p['outcome'], p['outcome'])}\n"
             f"Result: <b>{r:+.2f}R</b> — {'made' if r > 0 else 'lost'} {abs(r):.2f}× the amount risked "
             f"(≈ {'+' if usd >= 0 else '−'}${abs(usd):.0f} on a ${RISK_PER_TRADE_USD:.0f} risk) "
             f"after {p['bars_held']} day(s).\n<i>{t.get('setup_label','')}</i>")

@@ -73,6 +73,12 @@ DEPLOY_THRESHOLDS = {
 RISK_PER_TRADE_USD: float = float(_secret("RISK_PER_TRADE_USD") or 50)
 MAX_PORTFOLIO_RISK_USD: float = float(_secret("MAX_PORTFOLIO_RISK_USD") or 300)
 
+# ── MEXC futures grid-bot suggestions (attached to every alert) ──────────────
+GRID_MAX_LEVERAGE = 5        # hard cap, even when the math allows more
+GRID_LIQ_BUFFER = 0.03       # liquidation must sit ≥3% beyond the stop-loss
+GRID_MMR = 0.005             # maintenance margin rate used in the liq estimate
+GRID_FEE_PCT = 0.02          # per-side fee % assumed per grid fill (limit orders)
+
 # ── Automatic scans (run by the cloud monitor at these local times) ──────────
 # (name, IANA timezone, "HH:MM"). "close" = just after the UTC daily candle close.
 AUTO_SCAN_SCHEDULE = [
