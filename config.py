@@ -93,6 +93,11 @@ AUTO_SCAN_PARAMS = {"source": "mexc", "top_n": 15, "expiry_hours": 72,
 # When flipped True later, the monitor will refuse to FIRE the relevant direction
 # while BTC is in the adverse regime. Left off so the regime read is advisory.
 BTC_REGIME_VETO      = False   # True → don't fire LONGS while BTC is RISK-OFF
+# Longs only while BTC closes above its 200-day SMA — at arming AND at fire time.
+# Backtest (research/garch_storm.py + regime test, 7,271 trades, 0.36% cost):
+# total +717R → +810R, max drawdown −406R → −44R, worst month −224R → +27R.
+# Every losing stretch came from buying alts while BTC was below its 200d.
+BTC_200D_LONG_GATE   = True
 SHORT_VETO_IN_RISK_ON = False  # True → don't fire SHORTS while BTC is RISK-ON
 
 # Analyst blender weights

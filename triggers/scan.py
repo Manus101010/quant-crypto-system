@@ -281,6 +281,17 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         log.warning("scan_and_arm: funding fetch failed — %s", exc)
         funding = {}
 
+    # Longs only while BTC is above its 200-day SMA (see config.BTC_200D_LONG_GATE).
+    btc_down = False
+    try:
+        from config import BTC_200D_LONG_GATE
+        if BTC_200D_LONG_GATE:
+            from utils import btc_regime
+            _r = btc_regime.get_btc_regime()
+            btc_down = bool(_r.get("ok")) and not (_r.get("daily") or {}).get("close_gt_200d", True)
+    except Exception as exc:                       # noqa: BLE001 — fail open, log
+        log.warning("scan_and_arm: BTC 200d gate unavailable — %s", exc)
+
     wide_stop_excluded, crowded_excluded, eligible = [], [], []
     for r in rows:
         r["_plan"] = plan = _armed_plan(r)
@@ -288,6 +299,8 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         fr = funding.get(r["ticker"])
         if r["_held"]:
             r["_status"] = "held"
+        elif btc_down and plan["direction"] == "long":
+            r["_status"] = "btc_downtrend"   # BTC below 200d — no new longs
         elif not plan["stop_pct"] or plan["stop_pct"] < 0.3:
             r["_status"] = "bad_plan"      # zero/too-tight risk → would invalidate instantly
         elif plan["stop"] is not None and plan["direction"] == "long" and plan["stop"] <= 0:
@@ -325,7 +338,7 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
               "gated_out_setups": gated_out, "actionable": len(rows),
               "wide_stop_excluded": wide_stop_excluded,
               "crowded_excluded": crowded_excluded, "held_excluded": held_excluded,
-              "held_status": held_status}
+              "held_status": held_status, "btc_below_200d": btc_down}
 
     # ── Regime gate: the setups' edge is regime-dependent (strong in trend,
     # weak in chop/bear per the backtest), so only ARM in a risk-on regime.

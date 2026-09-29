@@ -383,7 +383,7 @@ if res and res.get("candidates"):
         cards = []
         _badge = {"armed": "📡 armed", "held": "📌 in trade", "wide_stop": "🛡️ stop too wide",
                   "crowded": "🐑 crowded (funding)", "not_selected": "⏭️ not selected",
-                  "bad_plan": "⚠️ no usable stop"}
+                  "bad_plan": "⚠️ no usable stop", "btc_downtrend": "⛔ BTC below 200d"}
         for r in res["candidates"]:
             t = r.get("trade") or {}
             p = r.get("_plan") or {}
