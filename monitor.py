@@ -160,6 +160,13 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
         lines.append(f"🧭 Market: {txt}")
     except Exception as exc:                        # noqa: BLE001 — never block an alert
         log.debug("btc_regime stamp failed: %s", exc)
+    try:
+        from utils import events
+        for w in (events.coin_warning(trg["symbol"], 7), events.macro_warning(3)):
+            if w:
+                lines.append(w)
+    except Exception as exc:                        # noqa: BLE001 — never block an alert
+        log.debug("event warnings failed: %s", exc)
     lines.append("\n<i>Signal only — you decide and place the trade. "
                  "Tap \"Took it\" on the scanner if you enter.</i>")
     return "\n".join(lines)

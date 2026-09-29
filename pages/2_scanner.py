@@ -325,6 +325,15 @@ def _svg_chart(candles, entry, stop, target, is_long, w=300, h=120) -> str:
             f"{''.join(parts)}{over}</svg>")
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _unlock_soon(symbol: str) -> bool:
+    try:
+        from utils import events
+        return bool(events.unlocks_for(symbol, 7))
+    except Exception:                               # noqa: BLE001
+        return False
+
+
 def _card(symbol, is_long, setup, meta_right, legs_html="", footer="", chart_svg="") -> str:
     accent = _LONG if is_long else _SHORT
     dir_lbl = "▲ LONG" if is_long else "▼ SHORT"
@@ -393,7 +402,9 @@ if res and res.get("candidates"):
             rr_disp = "trail" if p.get("trailing") else (p.get("rr") if p else t.get("rr"))
             cards.append(_card(
                 r["ticker"], is_long, r.get("setup_label", ""),
-                f"<b>{_badge.get(r.get('_status'), '')}</b> · score {r.get('_composite')}",
+                f"<b>{_badge.get(r.get('_status'), '')}</b>"
+                + (" · 🔓 unlock soon" if _unlock_soon(r["ticker"]) else "")
+                + f" · score {r.get('_composite')}",
                 _legs(e, tg_disp, sp, rr_disp),
                 footer=_size_hint(e, sp, _risk),
                 chart_svg=_svg_chart(cand_candles.get(r["ticker"]), e, sp, tg, is_long),

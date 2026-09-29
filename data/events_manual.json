@@ -1,0 +1,9 @@
+{
+  "_help": "Hand-added events the automatic sources miss. type: unlock | macro | catalyst. date = YYYY-MM-DD (UTC). pct = % of circulating supply (unlocks).",
+  "events": [
+    {"date": "2026-09-30", "type": "macro",    "name": "US PCE inflation (Fed's preferred gauge)"},
+    {"date": "2026-10-02", "type": "macro",    "name": "US jobs report (September)"},
+    {"date": "2026-10-03", "type": "catalyst", "symbol": "HYPE", "name": "New HYPE buyback stream starts (Circle revenue)"},
+    {"date": "2026-10-05", "type": "unlock",   "symbol": "ENA",  "pct": 14.3, "name": "All remaining investor ENA unlocks (1.41B)"}
+  ]
+}

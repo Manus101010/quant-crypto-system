@@ -99,6 +99,17 @@ def summary(name: str, res: dict, regime_score) -> str:
         lines.append(f"📡 {arrow} <b>{a['symbol'].replace('-USD','')}</b> {a['setup_label']} — "
                      f"{fire} · stop {sp:.0f}% below · {how}" if sp else
                      f"📡 {arrow} <b>{a['symbol'].replace('-USD','')}</b> {a['setup_label']} — {fire}")
+    try:
+        from utils import events
+        flagged = [f"{a['symbol'].replace('-USD','')}: {events.coin_warning(a['symbol'], 7).splitlines()[0]}"
+                   for a in armed if events.coin_warning(a["symbol"], 7)]
+        if flagged:
+            lines.append("\n⚠️ <b>Event risk on armed coins</b>\n" + "\n".join(flagged))
+        mw = events.macro_warning(3)
+        if mw:
+            lines.append(mw)
+    except Exception as exc:                          # noqa: BLE001
+        log.debug("autoscan events failed: %s", exc)
     hs = res.get("held_status") or {}
     if hs:
         gone = [s.replace('-USD', '') for s, v in hs.items() if v["verdict"] == "gone"]

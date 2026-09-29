@@ -150,11 +150,36 @@ def _track_record() -> str:
     return line
 
 
+def _week_ahead() -> str:
+    """Macro releases this week + unlocks/catalysts on coins you hold or watch."""
+    try:
+        from utils import events
+        lines = []
+        mac = events.macro_events(7)
+        if mac:
+            lines.append("🗓 <b>This week:</b> " + "; ".join(
+                f"{e['name']} — {events._when(e['date'])}" for e in mac))
+        syms = sorted({t["symbol"] for t in tdb.get_fired_trades(open_only=True)}
+                      | {t["symbol"] for t in tdb.get_triggers("active")}
+                      | {w["symbol"] for w in tdb.get_watchlist()})
+        for s_ in syms:
+            w = events.coin_warning(s_, 7)
+            if w:
+                lines.append(f"<b>{s_.replace('-USD','')}</b> — " + w.replace("\n", " · "))
+        return "\n".join(lines)
+    except Exception as exc:                       # noqa: BLE001
+        log.debug("week ahead failed: %s", exc)
+        return ""
+
+
 def build_brief() -> str:
     tdb.init_db()
     today = datetime.datetime.utcnow().strftime("%a %d %b %Y")
     parts = [f"☀️ <b>Morning Brief — {today} UTC</b>",
              _regime_line(), _overnight(), _active(), _watchlist()]
+    wa = _week_ahead()
+    if wa:
+        parts.append(wa)
     rec = _track_record()
     if rec:
         parts.append(rec)
