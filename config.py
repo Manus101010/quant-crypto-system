@@ -86,6 +86,8 @@ AUTO_SCAN_SCHEDULE = [
     ("close",   "UTC",              "00:05"),
     ("arvo",    "Australia/Sydney", "15:00"),
 ]
+# Morning brief, sent by the monitor at this local time (GitHub cron ran it ~3h late).
+BRIEF_SCHEDULE = ("Australia/Sydney", "07:00")
 AUTO_SCAN_PARAMS = {"source": "mexc", "top_n": 15, "expiry_hours": 72,
                     "min_vol_usd_m": 0.5, "max_stop_pct": 25.0}
 

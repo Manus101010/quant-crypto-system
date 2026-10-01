@@ -269,11 +269,15 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     # ── Every candidate gets the plan it would ACTUALLY be armed with, and a
     # status saying why it is or isn't live. Filters run BEFORE slots are handed
     # out, so a held / too-wide / crowded coin frees its slot for the next one.
+    # Only trades you actually TOOK block a coin (stacking real risk). Paper-tracked
+    # signals don't: with 60-day trailing exits they pile up and once blocked 21 of
+    # 42 valid setups. Every open trade still gets a verdict below.
     try:
-        held = {t["symbol"] for t in tdb.get_fired_trades(open_only=True)}
+        open_all = tdb.get_fired_trades(open_only=True)
+        held = {t["symbol"] for t in open_all if t.get("taken")}
     except Exception as exc:                       # noqa: BLE001
         log.warning("scan_and_arm: open-trade lookup failed — %s", exc)
-        held = set()
+        open_all, held = [], set()
     candidates = rows[:_MAX_CANDIDATES]              # ranked list shown to the user
     try:   # perp funding for the coins we might arm; no perp → never vetoed
         funding = _xch.get_funding_rates([r["ticker"] for r in candidates])
@@ -323,7 +327,7 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     # direction) → hold with confidence; gone → review the position.
     scanned = set(df["ticker"]) if "ticker" in df else set()
     held_status = {}
-    for t in tdb.get_fired_trades(open_only=True) if held else []:
+    for t in open_all:
         sym, d = t["symbol"], t.get("direction") or "long"
         match = next((r for r in rows if r["ticker"] == sym and r.get("direction") == d), None)
         if match:

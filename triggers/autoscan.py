@@ -50,8 +50,9 @@ def due(now_utc: _dt.datetime | None = None) -> list[tuple[str, _dt.datetime]]:
 def seconds_to_next(now_utc: _dt.datetime | None = None) -> float:
     """Seconds until the next scheduled slot (lets the monitor wake on time)."""
     now_utc = now_utc or _dt.datetime.now(_dt.timezone.utc)
-    nxt = min(_slot_time(tz, hhmm, now_utc) + _dt.timedelta(days=1)
-              for _, tz, hhmm in AUTO_SCAN_SCHEDULE)
+    from config import BRIEF_SCHEDULE
+    slots = [(tz, hhmm) for _, tz, hhmm in AUTO_SCAN_SCHEDULE] + [BRIEF_SCHEDULE]
+    nxt = min(_slot_time(tz, hhmm, now_utc) + _dt.timedelta(days=1) for tz, hhmm in slots)
     return max(0.0, (nxt - now_utc).total_seconds())
 
 
@@ -139,9 +140,28 @@ def run_scan(name: str) -> dict:
     return res
 
 
+def _brief_due(now_utc=None):
+    from config import BRIEF_SCHEDULE
+    now_utc = now_utc or _dt.datetime.now(_dt.timezone.utc)
+    slot = _slot_time(BRIEF_SCHEDULE[0], BRIEF_SCHEDULE[1], now_utc)
+    if now_utc - slot > _dt.timedelta(minutes=CATCH_UP_MIN):
+        return None
+    last = tdb.get_state("brief:daily")
+    return None if (last and last >= slot.isoformat()) else slot
+
+
 def run_due() -> list[str]:
-    """Run every scan slot that's due now; returns the names run."""
+    """Run every scan slot (and the morning brief) that's due now."""
     ran = []
+    slot = _brief_due()
+    if slot:
+        tdb.set_state("brief:daily", slot.isoformat())
+        try:
+            import morning_brief
+            telegram.send_message(morning_brief.build_brief())
+            ran.append("brief")
+        except Exception as exc:                      # noqa: BLE001
+            log.error("brief failed — %s", exc)
     for name, slot in due():
         # Mark first so a crash mid-scan can't loop-retry a heavy scan every poll.
         tdb.set_state(f"autoscan:{name}", slot.isoformat())

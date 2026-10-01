@@ -4,9 +4,9 @@ name: Morning Brief
 # near-level flags, edge-decay flags) pushed to Telegram. Off the hot path;
 # reads the shared Supabase state. Signal-only.
 
+# The daily 7am send now comes from the always-on monitor (triggers/autoscan.py,
+# config.BRIEF_SCHEDULE) — GitHub's cron ran this ~3h late. Manual runs only.
 on:
-  schedule:
-    - cron: "0 20 * * *"  # 20:00 UTC = 7am Sydney (AEDT, Oct–Apr) / 6am (AEST, Apr–Oct)
   workflow_dispatch:        # run manually from the Actions tab
 
 concurrency:
