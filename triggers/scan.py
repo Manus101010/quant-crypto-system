@@ -269,12 +269,13 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     # ── Every candidate gets the plan it would ACTUALLY be armed with, and a
     # status saying why it is or isn't live. Filters run BEFORE slots are handed
     # out, so a held / too-wide / crowded coin frees its slot for the next one.
-    # Only trades you actually TOOK block a coin (stacking real risk). Paper-tracked
-    # signals don't: with 60-day trailing exits they pile up and once blocked 21 of
-    # 42 valid setups. Every open trade still gets a verdict below.
+    # Any coin with an OPEN trade (paper or taken) is not re-armed: one position per
+    # coin. Letting paper-held coins re-arm (Oct 1) produced 29 alerts/day with the
+    # same coin firing 3x — duplicate alerts and double-counted stats. When most
+    # valid setups are already held, few new arms is the honest answer.
     try:
         open_all = tdb.get_fired_trades(open_only=True)
-        held = {t["symbol"] for t in open_all if t.get("taken")}
+        held = {t["symbol"] for t in open_all}
     except Exception as exc:                       # noqa: BLE001
         log.warning("scan_and_arm: open-trade lookup failed — %s", exc)
         open_all, held = [], set()
