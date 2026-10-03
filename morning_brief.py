@@ -150,6 +150,18 @@ def _track_record() -> str:
     return line
 
 
+def _gate_line() -> str:
+    try:
+        from utils.breadth import long_gate, alt_breadth
+        ok, why = long_gate()
+        b = alt_breadth()
+        br = f" · {b['pct']:.0f}% of alts above their 50-day" if b else ""
+        return ("🟢 <b>Longs allowed</b> — BTC above its 200d &amp; 50d" + br) if ok else \
+               (f"⛔ <b>No new longs</b> — {why}. Shorts still allowed.")
+    except Exception:                              # noqa: BLE001
+        return ""
+
+
 def _week_ahead() -> str:
     """Macro releases this week + unlocks/catalysts on coins you hold or watch."""
     try:
@@ -177,6 +189,9 @@ def build_brief() -> str:
     today = datetime.datetime.utcnow().strftime("%a %d %b %Y")
     parts = [f"☀️ <b>Morning Brief — {today} UTC</b>",
              _regime_line(), _overnight(), _active(), _watchlist()]
+    gl = _gate_line()
+    if gl:
+        parts.append(gl)
     wa = _week_ahead()
     if wa:
         parts.append(wa)

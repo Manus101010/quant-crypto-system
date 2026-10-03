@@ -100,6 +100,11 @@ BTC_REGIME_VETO      = False   # True → don't fire LONGS while BTC is RISK-OFF
 # total +717R → +810R, max drawdown −406R → −44R, worst month −224R → +27R.
 # Every losing stretch came from buying alts while BTC was below its 200d.
 BTC_200D_LONG_GATE   = True
+# Full-cycle research (research/btc_filter_long.py + breadth_long.py, 2020-2026,
+# 27k trades) superseded the 200d-only test: require BTC above its 200d AND 50d,
+# AND >= ALT_BREADTH_MIN % of the breadth universe above its own 50d
+# (utils/breadth.py). Max DD -2543R -> -1430R, total +2018R -> +2802R.
+ALT_BREADTH_MIN      = 60.0
 SHORT_VETO_IN_RISK_ON = False  # True → don't fire SHORTS while BTC is RISK-ON
 
 # Analyst blender weights

@@ -17,6 +17,7 @@ data/*.json
 # The edge gate's source of truth — the cloud scanner needs it (stats only, no secrets).
 !data/crypto_validation.json
 !data/events_manual.json
+!data/breadth_universe.json
 *.log
 
 # OS

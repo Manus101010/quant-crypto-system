@@ -86,8 +86,9 @@ def summary(name: str, res: dict, regime_score) -> str:
         lines.append(f"⛔ Risk-off (deployment {res.get('regime_score', 0):.0f}) — nothing armed; "
                      "existing triggers kept.")
     if res.get("btc_below_200d"):
-        lines.append("⛔ Bitcoin is below its 200-day average — no new longs until it's back "
-                     "above (backtest: this avoided every losing stretch). Shorts still allowed.")
+        lines.append(f"⛔ No new longs: {res.get('long_gate_reason') or 'market trend is down'}. "
+                     "Shorts still allowed. (Full-cycle backtest: this filter cut the worst "
+                     "drawdown by ~44%.)")
     armed = res.get("armed") or []
     lines.append(f"\n<b>{res.get('actionable', 0)} valid setups → {len(armed)} armed</b>")
     for a in armed:

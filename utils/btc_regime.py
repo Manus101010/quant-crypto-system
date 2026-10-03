@@ -83,6 +83,7 @@ def _compute() -> dict:
     }
     daily = {
         "close_gt_200d": sma200d is not None and d_price > sma200d,
+        "close_gt_50d": (lambda s50: s50 is not None and d_price > s50)(_sma(dclose, 50)),
         "sma20_slope_up": bool(slope_up),
     }
 

@@ -287,15 +287,13 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         funding = {}
 
     # Longs only while BTC is above its 200-day SMA (see config.BTC_200D_LONG_GATE).
-    btc_down = False
+    btc_down, gate_reason = False, ""
     try:
-        from config import BTC_200D_LONG_GATE
-        if BTC_200D_LONG_GATE:
-            from utils import btc_regime
-            _r = btc_regime.get_btc_regime()
-            btc_down = bool(_r.get("ok")) and not (_r.get("daily") or {}).get("close_gt_200d", True)
+        from utils.breadth import long_gate
+        ok_, gate_reason = long_gate()
+        btc_down = not ok_
     except Exception as exc:                       # noqa: BLE001 — fail open, log
-        log.warning("scan_and_arm: BTC 200d gate unavailable — %s", exc)
+        log.warning("scan_and_arm: long gate unavailable — %s", exc)
 
     wide_stop_excluded, crowded_excluded, eligible = [], [], []
     for r in rows:
@@ -343,7 +341,8 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
               "gated_out_setups": gated_out, "actionable": len(rows),
               "wide_stop_excluded": wide_stop_excluded,
               "crowded_excluded": crowded_excluded, "held_excluded": held_excluded,
-              "held_status": held_status, "btc_below_200d": btc_down}
+              "held_status": held_status, "btc_below_200d": btc_down,
+              "long_gate_reason": gate_reason}
 
     # ── Regime gate: the setups' edge is regime-dependent (strong in trend,
     # weak in chop/bear per the backtest), so only ARM in a risk-on regime.

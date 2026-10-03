@@ -390,12 +390,13 @@ def _regime_vetoes(trg: dict) -> bool:
     d0 = trg.get("direction") or "long"
     if d0 == "long" and getattr(config, "BTC_200D_LONG_GATE", False):
         try:
-            from utils import btc_regime
-            r = btc_regime.get_btc_regime()
-            if r.get("ok") and not (r.get("daily") or {}).get("close_gt_200d", True):
-                return True                       # BTC below its 200d → no new longs
+            from utils.breadth import long_gate
+            ok_, why = long_gate()
+            if not ok_:
+                log.info("long gate closed: %s", why)
+                return True                       # BTC 200d&50d + alt breadth gate
         except Exception:                         # noqa: BLE001 — fail open, log
-            log.warning("200d gate: BTC regime unavailable")
+            log.warning("long gate: unavailable")
     long_veto = getattr(config, "BTC_REGIME_VETO", False)
     short_veto = getattr(config, "SHORT_VETO_IN_RISK_ON", False)
     if not (long_veto or short_veto):
