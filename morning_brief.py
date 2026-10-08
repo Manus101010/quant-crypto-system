@@ -135,7 +135,8 @@ def _track_record() -> str:
     if not t["n"] and not ls["open"]:
         return ""
     from config import RISK_PER_TRADE_USD as _rpt
-    line = f"📒 <b>Every signal (system):</b> {t['n']} closed"
+    since = f" since {ls['since'][:10]}" if ls.get("since") else ""
+    line = f"📒 <b>Every signal (system){since}:</b> {t['n']} closed"
     if t["n"]:
         line += (f", {t['win_rate']*100:.0f}% win, {t['total_r']:+.2f}R "
                  f"(${t['total_r']*_rpt:+.2f})")

@@ -24,6 +24,20 @@ log = get_logger(__name__)
 _MIN_N_FOR_VERDICT = 10   # below this many closed trades, live stats are "early"
 
 
+def track_from() -> str | None:
+    """Start of the current tracking period (ISO UTC), set by
+    scripts/track_admin.py reset. Signals armed before it are history: they stay
+    in the database but are left out of the live record. None = count everything."""
+    try:
+        return tdb.get_state("track_from") or None
+    except Exception:                               # noqa: BLE001
+        return None
+
+
+def _in_period(t: dict, start: str | None) -> bool:
+    return not start or (t.get("created_at") or "") >= start
+
+
 def _mgmt(label: str | None) -> dict:
     try:
         from triggers.scan import _management_params
@@ -105,7 +119,11 @@ def _closed(t, outcome, px, ts, entry, risk, short, peak, trail, held,
 
 def update_open_trades(notify: bool = True) -> dict:
     """Advance every open fired trade; close the ones that hit an exit."""
-    open_trades = tdb.get_fired_trades(open_only=True)
+    start = track_from()
+    # Old paper trades from before the reset are no longer followed; trades you
+    # actually took always are (you still need their stop / close alerts).
+    open_trades = [t for t in tdb.get_fired_trades(open_only=True)
+                   if t.get("taken") or _in_period(t, start)]
     if not open_trades:
         return {"open": 0, "closed": 0}
     syms = sorted({t["symbol"] for t in open_trades})
@@ -209,7 +227,8 @@ def live_stats(taken_only: bool = False) -> dict:
         bt = (load_validation() or {}).get("stats", {})
     except Exception:                               # noqa: BLE001
         bt = {}
-    trades = tdb.get_fired_trades()
+    start = track_from()
+    trades = [t for t in tdb.get_fired_trades() if _in_period(t, start)]
     if taken_only:
         trades = [t for t in trades if t.get("taken")]
     closed = [t for t in trades if t.get("outcome")]
@@ -237,7 +256,7 @@ def live_stats(taken_only: bool = False) -> dict:
              "win_rate": (sum(r > 0 for r in all_r) / len(all_r)) if all_r else None,
              "total_r": sum(all_r), "pf": _pf(all_r) if all_r else None}
     open_ = [t for t in trades if not t.get("outcome")]
-    return {"by_setup": rows, "total": total, "open": open_}
+    return {"by_setup": rows, "total": total, "open": open_, "since": start}
 
 
 # ── Portfolio heat: total $ still at risk across open trades ──────────────────
@@ -266,6 +285,8 @@ def portfolio_heat(risk_per_trade: float | None = None,
     # (everything else) feed the track record but carry no money at risk.
     paper = tdb.get_fired_trades(open_only=True)
     open_ = [t for t in paper if t.get("taken")]
+    start = track_from()
+    paper = [t for t in paper if _in_period(t, start)]
     gross = sum(_open_risk_frac(t) * rpt for t in open_)
     at_risk = _correlated_risk(open_, rpt, gross)
     n_long = sum(1 for t in open_ if t.get("direction") != "short")
@@ -280,7 +301,9 @@ def portfolio_heat(risk_per_trade: float | None = None,
 def open_marks(trades: list[dict] | None = None) -> dict:
     """Mark-to-market for open trades: {trigger_id: R now} from the latest price
     (paper P&L so far, in units of the initial risk). Network: ccxt last close."""
-    trades = trades if trades is not None else tdb.get_fired_trades(open_only=True)
+    if trades is None:
+        start = track_from()
+        trades = [t for t in tdb.get_fired_trades(open_only=True) if _in_period(t, start)]
     if not trades:
         return {}
     syms = sorted({t["symbol"] for t in trades})
