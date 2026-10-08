@@ -48,6 +48,13 @@ def scan() -> None:
     from triggers.autoscan import run_scan
     res = run_scan("manual")
     print(f"scan done: {res.get('actionable', 0)} valid, {len(res.get('armed') or [])} armed")
+    from collections import Counter
+    print("candidates by setup and status:")
+    for (lab, st, d), n in Counter((c.get("setup_label"), c.get("_status"), c.get("direction"))
+                                   for c in res.get("candidates") or []).most_common():
+        print(f"  {n:3d}  {d:5s} {lab}  [{st}]")
+    print("long gate blocked:", res.get("btc_below_200d"), res.get("long_gate_reason"))
+    print("skipped wide stop:", res.get("wide_stop_excluded"))
     for a in res.get("armed") or []:
         print(" ", a["direction"], a["symbol"], a["setup_label"], a.get("stop_pct"))
 
