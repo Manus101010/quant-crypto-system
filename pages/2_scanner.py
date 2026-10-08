@@ -65,8 +65,10 @@ with c2:
     top_n = st.slider("Arm top N", 3, 25, 10)
     min_vol_m = st.selectbox("Min 24h volume", [0.0, 0.5, 1.0, 5.0, 10.0], index=2,
                              format_func=lambda v: "off" if v == 0 else f"${v:g}M")
-    risk_usd = st.number_input("Risk / trade ($)", min_value=0, max_value=100000,
-                               value=st.session_state.get("risk_usd", __import__("config").RISK_PER_TRADE_USD), step=10,
+    risk_usd = st.number_input("Risk / trade ($)", min_value=0.0, max_value=100000.0,
+                               value=float(st.session_state.get("risk_usd",
+                                                                __import__("config").RISK_PER_TRADE_USD)),
+                               step=2.5, format="%.2f",
                                help="Dollars you're willing to lose if the stop hits. "
                                     "Tiles show the position size that risks exactly this — "
                                     "the point of a wide ATR stop is a SMALL position.")
