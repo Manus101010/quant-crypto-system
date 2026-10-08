@@ -70,8 +70,19 @@ DEPLOY_THRESHOLDS = {
 # Each alert is sized to risk RISK_PER_TRADE_USD; the sum of risk still open
 # across tracked trades may not exceed MAX_PORTFOLIO_RISK_USD. Correlated longs
 # lose together, so this caps the damage of a market-wide drop.
-RISK_PER_TRADE_USD: float = float(_secret("RISK_PER_TRADE_USD") or 50)
-MAX_PORTFOLIO_RISK_USD: float = float(_secret("MAX_PORTFOLIO_RISK_USD") or 300)
+# Manus's rules (8 Oct 2026): a $500 sleeve, every trade uses at least $50 of
+# margin, and a stop may never lose more than 25% of that margin. So each trade
+# risks $12.50 and leverage is set per trade so the stop costs <= $12.50
+# (leverage = 25% / stop distance). Ten such trades = the whole sleeve, so the
+# open-risk cap is 10 x $12.50 = $125.
+SLEEVE_USD: float = float(_secret("SLEEVE_USD") or 500)
+POSITION_MARGIN_USD: float = float(_secret("POSITION_MARGIN_USD") or 50)
+MAX_LOSS_PCT_OF_MARGIN: float = float(_secret("MAX_LOSS_PCT_OF_MARGIN") or 25)
+MAX_LEVERAGE: int = int(_secret("MAX_LEVERAGE") or 20)
+RISK_PER_TRADE_USD: float = float(_secret("RISK_PER_TRADE_USD")
+                                  or POSITION_MARGIN_USD * MAX_LOSS_PCT_OF_MARGIN / 100)
+MAX_PORTFOLIO_RISK_USD: float = float(_secret("MAX_PORTFOLIO_RISK_USD")
+                                      or SLEEVE_USD / POSITION_MARGIN_USD * RISK_PER_TRADE_USD)
 
 # ── MEXC futures grid-bot suggestions (attached to every alert) ──────────────
 GRID_MAX_LEVERAGE = 5        # hard cap, even when the math allows more
@@ -88,7 +99,7 @@ AUTO_SCAN_SCHEDULE = [
 ]
 # Morning brief, sent by the monitor at this local time (GitHub cron ran it ~3h late).
 BRIEF_SCHEDULE = ("Australia/Sydney", "07:00")
-AUTO_SCAN_PARAMS = {"source": "mexc", "top_n": 15, "expiry_hours": 72,
+AUTO_SCAN_PARAMS = {"source": "mexc_perps", "top_n": 15, "expiry_hours": 72,
                     "min_vol_usd_m": 0.5, "max_stop_pct": 25.0}
 
 # ── BTC regime veto hooks (v1 = WARNING only; both default off) ────────────────

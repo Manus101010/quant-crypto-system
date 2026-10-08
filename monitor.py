@@ -65,7 +65,12 @@ _SETUP_PLAIN = {
     "RSI-2 Pullback (Connors)":   "a short, sharp dip inside an uptrend",
     "BB Bounce Setup":            "a dip to the bottom of its normal range",
     "Williams %R Oversold":       "a dip to an oversold level inside an uptrend",
+    "Distribution Short":         "a coin that ran up hard, went quiet and is slipping to the bottom of its range",
+    "Downtrend Bounce Fade":      "a sharp bounce in a downtrending coin that is losing steam",
 }
+
+
+_NO_GRID = {"Distribution Short", "Downtrend Bounce Fade"}
 
 
 def _why_plain(trg: dict) -> str:
@@ -85,6 +90,8 @@ def _why_plain(trg: dict) -> str:
         return "It had sold off hard and has just started to bounce back up."
     if kind == "mr_reversal_short":
         return "It had run up too far and has just started to turn back down."
+    if kind == "enter_now_short":
+        return "Yesterday's daily close completed the setup. The research enters right away."
     return "Its trigger condition was met."
 
 
@@ -142,7 +149,9 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     sz = _sizing_line(trg, price)
     if sz:
         lines += ["", sz]
-    gb = _grid_block(trg, price, m)
+    # Oct 2026 research: for the new research setups a plain position with a stop
+    # beat every grid tested, so no grid suggestion is attached to them.
+    gb = "" if label in _NO_GRID else _grid_block(trg, price, m)
     if gb:
         lines += ["", gb]
     # Bitcoin backdrop in words (a warning, never a block).
@@ -255,15 +264,24 @@ def _sizing_line(trg: dict, price: float) -> str:
         if h["next_risk"] <= 0:
             return (f"{budget}\n⚠️ <b>You're at your limit</b> — skip this one, or wait "
                     f"until an open trade is closed or safe.")
-        risk = h["next_risk"]
-        pos = risk / frac
+        from config import POSITION_MARGIN_USD, MAX_LOSS_PCT_OF_MARGIN, MAX_LEVERAGE
         coin = trg["symbol"].replace("-USD", "")
+        # Fixed margin, leverage chosen so the stop loses at most MAX_LOSS_PCT of it.
+        lev = int(min(MAX_LEVERAGE, (MAX_LOSS_PCT_OF_MARGIN / 100) / frac))
+        if lev < 1:
+            return (f"💰 <b>Size:</b> skip. The stop is {frac * 100:.1f}% away, more than "
+                    f"your {MAX_LOSS_PCT_OF_MARGIN:.0f}% max loss even at 1x.\n{budget}")
+        pos = POSITION_MARGIN_USD * lev
+        loss = pos * frac
+        if loss > h["next_risk"] + 1e-9:
+            return (f"{budget}\n⚠️ <b>You're at your limit</b> — skip this one, or wait "
+                    f"until an open trade is closed or safe.")
         tgt = trg.get("target")
-        win = f", hit the target and you make ~${risk * abs(tgt - price) / abs(price - stop):,.0f}" \
-            if tgt and abs(price - stop) else ""
-        sized = "" if risk >= h["risk_per_trade"] else " (sized down to stay under your limit)"
-        return (f"💰 <b>Size:</b> buy about <b>${pos:,.0f}</b> of {coin}{sized}\n"
-                f"    If the stop hits you lose ~${risk:.0f}{win}.\n{budget}")
+        win = f", hit the target and you make ~${pos * abs(tgt - price) / price:,.2f}" if tgt else ""
+        return (f"💰 <b>Size:</b> <b>${POSITION_MARGIN_USD:,.0f} margin at {lev}x</b> "
+                f"(isolated) = a ${pos:,.0f} position in {coin}\n"
+                f"    If the stop hits you lose ~${loss:,.2f} "
+                f"({loss / POSITION_MARGIN_USD * 100:.0f}% of the margin){win}.\n{budget}")
     except Exception as exc:                        # noqa: BLE001
         log.debug("sizing line failed: %s", exc)
         return ""
@@ -287,6 +305,8 @@ def _management_note(setup_label: str | None = None) -> str:
         m = None
     if not m:
         return "Manage per the Validation page."
+    if m.get("note"):
+        return m["note"]
     if m.get("trailing"):
         return f"Trail a {m['stop_mult']}×ATR stop, let winners run (hold ≤{m['max_hold']}d)."
     return (f"{m['stop_mult']}×ATR stop, take profit at {m['target_r']}R "
@@ -361,6 +381,20 @@ def _evaluate(trg: dict, ind: dict) -> tuple[str, str]:
             return ("fire", f"broke {_fmt_price(lvl)}, RSI14 {ind['rsi14_now']:.0f} (&lt;{rmax})")
         return ("wait", "")
 
+    if kind == "enter_now_short":
+        # skills/new_setups.py: the research entered on the signal close with no
+        # extra confirmation, so fire on the first poll unless price has already
+        # run more than `max_drift` past the entry or reached the stop/target.
+        if stop and price >= stop:
+            return ("invalidate", f"stop {_fmt_price(stop)} hit before entry")
+        entry, tgt = cond.get("entry"), cond.get("target")
+        if tgt is not None and price <= tgt:
+            return ("invalidate", f"already at the target {_fmt_price(tgt)}")
+        if entry and price < entry * (1 - cond.get("max_drift", 0.03)):
+            return ("invalidate", f"moved more than {cond.get('max_drift', 0.03) * 100:.0f}% "
+                                  f"below the signal price before you could enter")
+        return ("fire", "research setup on the daily close; enter now")
+
     if kind == "breakdown":
         if stop and price >= stop:
             return ("invalidate", f"stop {_fmt_price(stop)} hit")
@@ -433,7 +467,13 @@ def poll_once() -> dict:
         return {"active": 0, "fired": 0, "invalidated": 0, **track}
 
     symbols = sorted({t["symbol"] for t in active})
-    candles = exchange.get_ohlcv_batch(symbols, timeframe="1d", limit=_CANDLE_LIMIT)
+    # MEXC first (it is where you trade, and perp-only coins exist nowhere else),
+    # then the usual venue chain for anything MEXC did not return.
+    candles = exchange.get_ohlcv_batch(symbols, timeframe="1d", limit=_CANDLE_LIMIT,
+                                       exchange="mexc")
+    missing = [s_ for s_ in symbols if s_ not in candles]
+    if missing:
+        candles.update(exchange.get_ohlcv_batch(missing, timeframe="1d", limit=_CANDLE_LIMIT))
 
     fired = invalidated = 0
     for t in active:

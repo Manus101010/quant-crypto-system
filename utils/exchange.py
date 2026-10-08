@@ -117,6 +117,72 @@ def list_spot_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
     return out
 
 
+_perp_info: dict[str, tuple[str, float]] = {}            # "BASE-USD" -> (swap symbol, contract size)
+_COMMODITIES = {"XAU", "XAUT", "PAXG", "SILVER", "USOIL", "UKOIL", "NGAS", "COPPER", "XPD", "XPT"}
+
+
+def list_perp_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
+    """
+    Every active crypto USDT perpetual on `exchange`, as app tickers ('BASE-USD').
+    Drops MEXC's TradFi zone (tokenised stocks, ETFs, indices), commodities,
+    stablecoins and leveraged tokens. Cached 1h. Also records each perp's swap
+    symbol + contract size so get_ohlcv can fall back to perp candles for coins
+    with no spot pair.
+    """
+    now = time.time()
+    key = f"{exchange}:{quote}:perps"
+    if key in _market_cache and now - _market_cache[key][0] < _MARKET_TTL:
+        return _market_cache[key][1]
+    ex = _client(exchange)
+    if ex is None:
+        return []
+    try:
+        markets = ex.load_markets()
+    except Exception as exc:                # noqa: BLE001
+        log.warning("exchange: load_markets(%s) failed — %s", exchange, exc)
+        return []
+    from utils.crypto_universe import _BLOCKLIST
+    out = set()
+    for m in markets.values():
+        if not (m.get("swap") and m.get("active") and m.get("quote") == quote
+                and m.get("settle") == quote):
+            continue
+        base = str(m.get("base", "")).upper()
+        zones = " ".join(map(str, (m.get("info") or {}).get("conceptPlate") or []))
+        if ("tradfi" in zones or "Stock" in zones or not base or base in _BLOCKLIST
+                or base in _COMMODITIES or base.endswith(_LEV_SUFFIXES)):
+            continue
+        t = f"{base}-USD"
+        out.add(t)
+        _perp_info[t] = (m["symbol"], float(m.get("contractSize") or 1.0))
+    res = sorted(out)
+    _market_cache[key] = (now, res)
+    log.info("exchange: %s has %d crypto %s perps", exchange, len(res), quote)
+    return res
+
+
+def _perp_ohlcv(symbol: str, timeframe: str, limit: int, exchange: str) -> pd.DataFrame:
+    """Perp candles for a coin with no spot pair (volume converted from contracts)."""
+    info = _perp_info.get(symbol.strip().upper())
+    ex = _client(exchange)
+    if not info or ex is None:
+        return pd.DataFrame()
+    try:
+        rows = ex.fetch_ohlcv(info[0], timeframe=timeframe, limit=limit)
+    except Exception as exc:               # noqa: BLE001
+        log.debug("exchange: %s perp ohlcv %s failed — %s", exchange, info[0], exc)
+        return pd.DataFrame()
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows, columns=["ts", "open", "high", "low", "close", "volume"])
+    df["ts"] = pd.to_datetime(df["ts"], unit="ms", utc=True).dt.tz_localize(None)
+    df = df.set_index("ts")
+    for c in ("open", "high", "low", "close", "volume"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df["volume"] = df["volume"] * info[1]
+    return df.dropna(subset=["close"])
+
+
 def get_ohlcv(symbol: str, timeframe: str = "1d", limit: int = 400,
               exchange: str | None = None) -> pd.DataFrame:
     """
@@ -124,6 +190,16 @@ def get_ohlcv(symbol: str, timeframe: str = "1d", limit: int = 400,
     Tries the spot fallback chain (or a single `exchange` if given). Empty
     DataFrame if every venue fails / lacks the pair.
     """
+    if exchange == "mexc" and not _perp_info:
+        try:
+            list_perp_symbols("mexc")          # cached; fills the perp map once
+        except Exception:                      # noqa: BLE001
+            pass
+    if exchange and symbol.strip().upper() in _perp_info:
+        # Perp universe: use the perp's own candles (what is actually traded).
+        df = _perp_ohlcv(symbol, timeframe, limit, exchange)
+        if not df.empty:
+            return df
     ccxt_sym = to_ccxt_symbol(symbol)
     chain = [exchange] if exchange else _SPOT_CHAIN
     for name in chain:

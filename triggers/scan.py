@@ -74,6 +74,8 @@ def _management_params(setup_label: str | None = None) -> dict | None:
 def _management_note(setup_label: str | None = None) -> str:
     """The trade management the backtested edge requires (from the saved validation)."""
     m = _management_params(setup_label)
+    if m and m.get("note"):
+        return m["note"]
     if m:
         if m.get("trailing"):
             return (f"Manage: trail a {m['stop_mult']}×ATR stop, hold up to "
@@ -107,6 +109,15 @@ def _armed_plan(r: dict) -> dict:
     ref = r.get("price")
     entry = _num(trade.get("entry")) or ref
     stop, target = _num(trade.get("stop")), _num(trade.get("target"))
+    plan = trade.get("plan")
+    if plan and entry:
+        # skills/new_setups.py signals carry their exact researched plan.
+        stop, target = plan["stop"], plan.get("target")
+        trailing = target is None
+        rr = None if trailing else abs(entry - target) / abs(stop - entry)
+        stop_pct = abs(entry - stop) / entry * 100
+        return {"direction": direction, "entry": entry, "stop": stop, "target": target,
+                "trailing": trailing, "stop_pct": stop_pct, "rr": rr}
     mgmt = _management_params(r.get("setup_label"))
     trailing = bool(mgmt and mgmt.get("trailing"))
     atr = r.get("atr_14")
@@ -206,7 +217,13 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     `max_per_setup`: cap how many of any one setup can be armed, so the armed set
     is diverse (None/0 = no cap).
     """
-    if source == "mexc":
+    if source == "mexc_perps":
+        # Every MEXC crypto perpetual (what you can actually short), spot candles
+        # where a spot pair exists, perp candles otherwise.
+        from utils.exchange import list_perp_symbols
+        tickers = list_perp_symbols("mexc")
+        exchange = "mexc"
+    elif source == "mexc":
         from utils.exchange import list_spot_symbols
         tickers = list_spot_symbols("mexc")
         exchange = "mexc"
@@ -369,7 +386,13 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         bb_u, bb_l = r.get("bb_upper"), r.get("bb_lower")
         mean20 = (bb_u + bb_l) / 2 if (bb_u is not None and bb_l is not None) else ref
 
-        if cat == "mean_reversion" and direction == "long":
+        if trade.get("plan"):
+            # skills/new_setups.py signal: enter on the next poll (as researched).
+            ctype, cval = "enter_now_short", entry
+            cond = {"kind": "enter_now_short", "entry": entry, "stop": stop,
+                    "target": target, "max_drift": 0.03}
+            desc = f"enter now near {entry:.4g} (invalidate>stop)"
+        elif cat == "mean_reversion" and direction == "long":
             # Multi-factor bounce confirmation (evaluated live by the monitor):
             # RSI(2) turns up through the level + green bar + still below the mean
             # + above the stop. Auto-invalidates if the stop is hit first.
