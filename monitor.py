@@ -634,7 +634,13 @@ def main() -> None:
             if deadline and time.time() + nap > deadline:
                 log.info("monitor: max runtime reached — exiting for hand-over.")
                 return
-            time.sleep(max(nap, _MIN_INTERVAL))
+            # Wait for the next poll while answering Telegram commands.
+            try:
+                from utils import tg_commands
+                tg_commands.listen(max(nap, _MIN_INTERVAL))
+            except Exception as exc:                # noqa: BLE001
+                log.warning("command listener failed: %s", exc)
+                time.sleep(max(nap, _MIN_INTERVAL))
     except KeyboardInterrupt:
         log.info("monitor: stopped.")
 
