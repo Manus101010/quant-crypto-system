@@ -472,6 +472,30 @@ def breakout_signals(close, high, volume, low=None) -> dict:
 
 # ── Setup classifier (momentum + mean reversion) ──────────────────────────────
 
+def new_setup_trade(ns: dict, price: float) -> dict:
+    """Trade card for a skills/new_setups.py signal. Numbers are exact (the
+    research plan), carried in "plan" so the armed trigger uses them unchanged."""
+    stop, tgt, trail = ns["stop"], ns.get("target"), ns.get("trail_atr")
+    if tgt is not None and tgt < price:
+        tgt_txt = f"{_fmt_p(tgt)} (the 20 EMA)"
+        risk = abs(stop - price)
+        rr = f"{abs(price - tgt) / risk:.1f}:1" if risk > 0 else None
+    else:
+        tgt = None
+        tgt_txt = f"no fixed target: trail a {trail or 3.5:g}x ATR stop and let it run"
+        rr = None
+    return {
+        "action": "SELL",
+        "entry":  f"Short near {_fmt_p(price)}",
+        "target": tgt_txt,
+        "stop":   f"{_fmt_p(stop)}",
+        "rr":     rr,
+        "note":   "SHORT on MEXC futures. Signal only, you place it.",
+        "plan":   {"stop": stop, "target": tgt, "trail_atr": trail,
+                   "max_hold": ns.get("max_hold"), "atr": ns.get("atr")},
+    }
+
+
 def classify_setup(
     price: float, sma50: float, sma200: float,
     rsi: float, mom3m: float,
@@ -1053,10 +1077,12 @@ def _run_from_bybit(bybit_data: dict, tickers: list[str], criteria: ScanCriteria
     log.info("Scanning %d Bybit tickers …", len(bybit_data))
     # BTC 30-day return once per scan (cached) → relative-strength leg.
     try:
-        from utils.btc_regime import btc_return
+        from utils.btc_regime import btc_return, btc_daily_close
         btc_ret_30 = btc_return(30)
+        btc_close = btc_daily_close()
     except Exception:                              # noqa: BLE001
-        btc_ret_30 = None
+        btc_ret_30, btc_close = None, None
+    from skills import new_setups
     results = []
     for ticker in tickers:
         if ticker not in bybit_data:
@@ -1121,6 +1147,19 @@ def _run_from_bybit(bybit_data: dict, tickers: list[str], criteria: ScanCriteria
                 rel_strength=rel_strength,
             )
 
+            # Oct 2026 research setups (skills/new_setups.py) take priority over the
+            # generic label: they are the validated shorts for coins that ran up and
+            # for small caps. Their plan (stop/target/trail) is exact.
+            ns = None
+            try:
+                ns = new_setups.latest(df, btc_close)
+            except Exception as exc:                # noqa: BLE001
+                log.debug("new_setups failed for %s: %s", ticker, exc)
+            if ns:
+                setup_label = ns["label"]
+                setup_desc = new_setups.DESCRIPTIONS[setup_label]
+                setup_cat = "mean_reversion" if setup_label == new_setups.FADE else "momentum"
+
             if price < 0.01:
                 price_fmt = f"{price:.6f}"
             elif price < 1:
@@ -1134,9 +1173,12 @@ def _run_from_bybit(bybit_data: dict, tickers: list[str], criteria: ScanCriteria
                 setup_label, rsi, mom3m, bb_pct, zsc, wil_r, vol_usd_m, setup_cat,
                 rsi2=rsi_2, regime_score=regime_score,
             )
-            trade = trade_suggestion(
-                setup_label, price, sma50, sma200, bb_upper, bb_mid, bb_lower, rsi, mom3m, atr,
-            )
+            if ns:
+                trade = new_setup_trade(ns, price)
+            else:
+                trade = trade_suggestion(
+                    setup_label, price, sma50, sma200, bb_upper, bb_mid, bb_lower, rsi, mom3m, atr,
+                )
             results.append({
                 "ticker":           ticker,
                 "price":            round(price, 6 if price < 0.01 else (4 if price < 1 else 2)),

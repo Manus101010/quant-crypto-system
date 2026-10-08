@@ -14,6 +14,7 @@ signal bars. Mean-reversion setups additionally require price > 200-SMA
 from __future__ import annotations
 import copy
 import numpy as np
+import pandas as pd
 from backtesting.setup_validation import _indicators_at, ACTIONABLE_BUY_SETUPS, _MIN_HISTORY
 from backtesting.crypto_validation import _apply_costs, save_validation, validated_setups
 from backtesting.setup_validation import _aggregate, recommend_base_scores
@@ -52,6 +53,15 @@ SETUP_MANAGEMENT = {
     "Relative Weakness Short":            _TRAIL,
     "MR Short (overbought in downtrend)": _TIGHT,
     "Williams %R Overbought Short":       _TIGHT,
+    # Oct 2026 research setups (skills/new_setups.py). Distribution Short trails
+    # like a breakdown; the bounce fade has its own exact plan per signal (stop
+    # above the 7-day high, target the 20 EMA), carried on each signal as _plan.
+    "Distribution Short":    _TRAIL,
+    "Downtrend Bounce Fade": {"name": "stop 0.25 ATR over 7-day high / target 20 EMA / 10b",
+                              "stop_mult": None, "target_r": None, "trailing": False,
+                              "max_hold": 10,
+                              "note": "Manage: stop just above the 7-day high, take profit "
+                                      "at the 20 EMA, hold up to 10 days."},
     # Everything else (mean-reversion + continuation) → tight fixed target.
 }
 
@@ -60,6 +70,7 @@ SETUP_MANAGEMENT = {
 SHORT_SETUPS = {
     "Breakdown Short (55d low)", "Relative Weakness Short",
     "MR Short (overbought in downtrend)", "Williams %R Overbought Short",
+    "Distribution Short", "Downtrend Bounce Fade",
 }
 DEFAULT_MANAGEMENT = _TIGHT
 
@@ -91,6 +102,9 @@ def _simulate(close, high, low, i, ind, cfg) -> dict | None:
     if not atr or atr <= 0:
         return None
     is_short = ind.get("_label") in SHORT_SETUPS
+    plan = ind.get("_plan")
+    if plan:
+        return _simulate_plan(close, high, low, i, ind, plan)
     n = len(close)
     exit_p, reason, k = None, "time", 0
     part = cfg.get("partial") or {}
@@ -170,14 +184,61 @@ def _simulate(close, high, low, i, ind, cfg) -> dict | None:
             "r_mult": r_mult, "bars_held": k, "reason": reason}
 
 
+def _simulate_plan(close, high, low, i, ind, plan) -> dict | None:
+    """Exact plan from skills/new_setups.py (short only): fixed stop, optional
+    fixed target, optional ATR trail off the close, max hold."""
+    entry, atr = ind["price"], ind["atr"]
+    stop, target = plan["stop"], plan.get("target")
+    trail, max_hold = plan.get("trail_atr"), int(plan.get("max_hold") or 15)
+    risk = stop - entry
+    if risk <= 0:
+        return None
+    n, exit_p, reason, k = len(close), None, "time", 0
+    for k in range(1, max_hold + 1):
+        j = i + k
+        if j >= n:
+            k -= 1; break
+        hi, lo, cl = float(high.iloc[j]), float(low.iloc[j]), float(close.iloc[j])
+        if hi >= stop:
+            exit_p, reason = stop, "stop"; break
+        if target is not None and lo <= target:
+            exit_p, reason = target, "target"; break
+        if trail:
+            stop = min(stop, cl + trail * atr)
+    if exit_p is None:
+        exit_p = float(close.iloc[min(i + max(k, 1), n - 1)])
+    move = entry - exit_p
+    return {"setup": ind["_label"], "win": move > 0, "ret_pct": move / entry * 100,
+            "r_mult": move / risk, "bars_held": k, "reason": reason}
+
+
 def _signals(close, high, low, volume=None, btc_close=None) -> list[tuple[int, dict]]:
     """Precompute actionable BUY signal bars once (the expensive indicator pass)."""
     if btc_close is not None:
         btc_close = btc_close.reindex(close.index).ffill()
+    # Oct 2026 research setups, computed once per coin with the live-scan code.
+    from skills import new_setups
+    ns = None
+    try:
+        frame = pd.DataFrame({"close": close, "high": high, "low": low,
+                              "volume": volume if volume is not None else np.nan})
+        ns = new_setups.detect(frame, btc_close)
+    except Exception as exc:                         # noqa: BLE001
+        log.debug("new_setups detect failed: %s", exc)
     out = []
     for i in range(_MIN_HISTORY, len(close) - 1):
         ind = _indicators_at(close, high, low, i, volume, btc_close)
         if ind is None:
+            continue
+        if ns is not None and ns["label"].iat[i]:
+            ind = dict(ind)
+            ind["_label"] = ns["label"].iat[i]
+            ind["atr"] = float(ns["atr"].iat[i])
+            ind["_plan"] = {"stop": float(ns["stop"].iat[i]),
+                            "target": None if pd.isna(ns["target"].iat[i]) else float(ns["target"].iat[i]),
+                            "trail_atr": None if pd.isna(ns["trail_atr"].iat[i]) else float(ns["trail_atr"].iat[i]),
+                            "max_hold": int(ns["max_hold"].iat[i])}
+            out.append((i, ind))
             continue
         label, _d, cat = classify_setup(
             ind["price"], ind["sma50"], ind["sma200"], ind["rsi"], ind["mom3m"],
@@ -236,6 +297,9 @@ def _btc_close(days: int, exchange: str | None = None):
 def _universe(source: str, universe_size: int, max_coins: int) -> tuple[list[str], str | None]:
     """Resolve the backtest universe. 'mexc' = MEXC's tradeable USDT spot pairs
     (candles pinned to MEXC); otherwise CoinGecko top-N by market cap."""
+    if source == "mexc_perps":
+        from utils.exchange import list_perp_symbols
+        return list_perp_symbols("mexc")[:max_coins], "mexc"
     if source == "mexc":
         from utils.exchange import list_spot_symbols
         return list_spot_symbols("mexc")[:max_coins], "mexc"

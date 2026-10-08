@@ -172,3 +172,10 @@ def stamp_for(label: str, direction: str) -> str:
     if label == RISK_ON:
         return confirm
     return "· neutral tape"
+
+
+def btc_daily_close(force: bool = False):
+    """Cached BTC daily closes (same 6h cache as btc_return), or None."""
+    btc_return(30, force=force)            # fills/refreshes the cache
+    hit = _cache.get("daily_close")
+    return hit[1] if hit else None
