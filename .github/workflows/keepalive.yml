@@ -1,0 +1,30 @@
+name: Keep app awake
+
+# Streamlit Community Cloud sleeps free apps after ~12h without a browser visit.
+# A headless browser visits every few hours (GitHub may run this late, which is
+# fine — anything under ~12h keeps it awake) and clicks the wake button if needed.
+
+on:
+  schedule:
+    - cron: "23 */4 * * *"    # every 4h (UTC)
+  workflow_dispatch:
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: true
+
+jobs:
+  visit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install headless browser
+        run: |
+          pip install playwright==1.48.0
+          python -m playwright install --with-deps chromium
+      - name: Visit the app
+        run: python scripts/keepalive.py
