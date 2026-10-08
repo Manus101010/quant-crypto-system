@@ -28,12 +28,15 @@ URL = "https://contract.mexc.com/api/v1/contract/funding_rate/history"
 
 
 def funding(base: str) -> pd.Series | None:
-    rows, page = [], 1
+    rows, page, fails = [], 1, 0
     while True:
         try:
             r = requests.get(URL, params={"symbol": f"{base}_USDT", "page_num": page,
                                           "page_size": 100}, timeout=20).json()
         except Exception:                               # noqa: BLE001
+            fails += 1
+            if fails > 3:
+                break                                   # give up on this coin, keep partial
             time.sleep(2); continue
         d = r.get("data") or {}
         rows += d.get("resultList") or []

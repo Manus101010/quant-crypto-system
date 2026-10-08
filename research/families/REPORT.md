@@ -37,7 +37,7 @@ Harness sanity check: the production Donchian 55d idea reran at n 917, PF 1.34,
 | Pre positioning in the coil (longs) | Fails | see results/breakout.md |
 | Capitulation longs (buy the flush), BTC MIXED | Event driven, not steady | n 256, PF 3.56, but 113 of 282 trades on 10 Oct 2025, 51 distinct days; excluding busy days n 45, PF 1.24 |
 | Grids (hourly paths), any mechanical deployment rule | No edge found | every 10 days PF 0.92; in chop PF 0.71 (worst); long grid on breakout PF 1.03 |
-| Squeeze fuel (funding before breakouts) | Not finished | MEXC funding history only starts Apr 2025; fetch incomplete |
+| Squeeze fuel (funding before breakouts) | Not run yet | MEXC funding history only starts Apr 2025 and paging it for 219 coins was too slow from the research box; run `squeeze.py` at home |
 
 ## What this means for the live scanner
 
@@ -49,6 +49,24 @@ Harness sanity check: the production Donchian 55d idea reran at n 917, PF 1.34,
    version is a candidate upgrade to the Donchian setup when BTC is UP.
 4. Stop auto attaching grid plans to directional signals; no deployment rule tested
    had a measured edge.
+
+## Best trade TYPE per setup (what the alert should suggest)
+
+Every passing family was tested as a plain directional position with a stop. None
+of the grid deployments beat that, so for these setups the suggestion should be a
+leveraged long/short with the stop below (MEXC supports stop loss and trailing stop
+orders on futures), not a grid:
+
+| Setup | Suggested trade | Exit |
+|---|---|---|
+| Downtrend bounce fade | Short, stop 0.25 ATR above the 7 day high | Take profit at the 20 EMA (most exits hit target, ~4 days) |
+| Distribution short | Short, initial stop 3.5 ATR | Trailing stop 3.5 ATR, up to 60 days |
+| Compression breakout (BTC UP) | Long, stop 1 ATR below the breakout level | Trailing stop 3 ATR, up to 60 days |
+
+Leverage note: a grid feels safer at high leverage because it scales in, so the
+average position is smaller than the headline leverage. The same safety comes from
+sizing a directional trade by its stop distance (risk a fixed $ per trade) and
+setting leverage so liquidation sits well beyond the stop.
 
 ## Caveats
 
