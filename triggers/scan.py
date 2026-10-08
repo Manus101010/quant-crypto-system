@@ -297,6 +297,11 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     # valid setups are already held, few new arms is the honest answer.
     try:
         open_all = tdb.get_fired_trades(open_only=True)
+        # Paper trades from before the last tracking reset are no longer followed,
+        # so they must not block coins either. Trades you took always count.
+        from triggers.outcomes import track_from, _in_period
+        _start = track_from()
+        open_all = [t for t in open_all if t.get("taken") or _in_period(t, _start)]
         held = {t["symbol"] for t in open_all}
     except Exception as exc:                       # noqa: BLE001
         log.warning("scan_and_arm: open-trade lookup failed — %s", exc)
