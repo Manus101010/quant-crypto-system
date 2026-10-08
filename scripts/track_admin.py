@@ -4,6 +4,9 @@ secrets, which only GitHub Actions has).
 
   python scripts/track_admin.py export   → writes track_export.json: every trigger
                                             row plus the current tracking start
+  python scripts/track_admin.py scan     → runs a full scan and arm right now,
+                                            exactly like the scheduled ones (Telegram
+                                            summary included)
   python scripts/track_admin.py reset    → starts a new tracking period NOW.
                                             Nothing is deleted: older signals stay
                                             in the database as history and are just
@@ -41,5 +44,13 @@ def reset() -> None:
     print(f"tracking period reset: {prev} -> {now}")
 
 
+def scan() -> None:
+    from triggers.autoscan import run_scan
+    res = run_scan("manual")
+    print(f"scan done: {res.get('actionable', 0)} valid, {len(res.get('armed') or [])} armed")
+    for a in res.get("armed") or []:
+        print(" ", a["direction"], a["symbol"], a["setup_label"], a.get("stop_pct"))
+
+
 if __name__ == "__main__":
-    {"export": export, "reset": reset}[sys.argv[1]]()
+    {"export": export, "reset": reset, "scan": scan}[sys.argv[1]]()
