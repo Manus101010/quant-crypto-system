@@ -522,6 +522,21 @@ def poll_once() -> dict:
             log.info("VETOED #%d %s — BTC regime veto (%s)", t["id"], t["symbol"],
                      t.get("direction"))
             continue
+        if verdict == "fire" and (t.get("direction") or "long") == "long":
+            # Do-not-chase guard: never send a long into a coin that is already
+            # stretched far above its averages (the ORCA/OGN liquidation pattern).
+            try:
+                from utils import overext
+                mx = overext.measure(t["symbol"])
+            except Exception as exc:               # noqa: BLE001 — guard must not block alerts
+                log.debug("overext guard failed: %s", exc)
+                mx = None
+            if mx and mx["overextended"]:
+                telegram.send_message(overext.chase_message(t["symbol"], mx, t.get("setup_label", "")))
+                tdb.set_status(t["id"], "too_extended")
+                log.info("BLOCKED #%d %s — too extended (%.1f ATR above 4h EMA20)",
+                         t["id"], t["symbol"], mx["ext_4h"])
+                continue
         if verdict == "fire":
             text = _alert_text(t, ind["price"], reason)
             delivered = telegram.send_message(text)
