@@ -50,14 +50,16 @@ c1, c2, c3 = st.columns([1.4, 1, 1])
 with c1:
     source_lbl = st.selectbox(
         "Universe",
-        ["MEXC — all pairs", "Top by market cap"],
+        ["Bybit — USDT perps", "MEXC — all pairs", "Top by market cap"],
         index=0,
-        help="MEXC scans every tradeable USDT spot pair on MEXC (thousands of "
-             "coins). Slower — a few minutes — but the widest net.",
+        help="Bybit: every crypto USDT perpetual on Bybit — the venue you trade (native "
+             "stop-loss, take-profit and trailing stops; longs and shorts).",
     )
-    is_mexc = source_lbl.startswith("MEXC")
+    src = ("bybit_perps" if source_lbl.startswith("Bybit") else
+           "mexc" if source_lbl.startswith("MEXC") else "top_mcap")
+    is_mexc = src != "top_mcap"          # venue-wide scan (name kept for the UI below)
     universe = 100
-    if not is_mexc:
+    if src == "top_mcap":
         universe = st.selectbox("Top by mcap", [50, 100, 200, 300, 500], index=1)
 with c2:
     top_n = st.slider("Arm top N", 3, 25, 10)
@@ -81,8 +83,8 @@ with c3:
     run = st.button("🛰️ Run Scan & Arm", type="primary", width="stretch")
 
 if is_mexc:
-    st.caption("🌐 MEXC full-universe scan: thousands of pairs, candles pinned to MEXC. "
-               "First run takes a few minutes; keep a volume floor on to stay tradeable.")
+    st.caption(f"🌐 {source_lbl}: candles pinned to that venue so levels match what you "
+               "trade. Takes a minute or two; keep a volume floor on to stay tradeable.")
 
 # Pull the latest macro deployment score to bias conviction by regime (if run).
 regime_score = None
@@ -91,14 +93,14 @@ if mr:
     regime_score = mr.get("deployment_score")
 
 if run:
-    spin = ("Scanning all MEXC pairs via ccxt … (this can take a few minutes)"
+    spin = (f"Scanning {source_lbl} via ccxt … (a minute or two)"
             if is_mexc else f"Scanning top {universe} coins via ccxt … (~20-40s)")
     with st.spinner(spin):
         from triggers.scan import run_scan_and_arm
         res = run_scan_and_arm(universe_size=universe, top_n=top_n,
                                regime_score=regime_score, expiry_hours=expiry,
                                min_vol_usd_m=min_vol_m,
-                               source="mexc" if is_mexc else "top_mcap",
+                               source=src,
                                max_per_setup=(max(2, top_n // 3) if diversify else None),
                                max_stop_pct=max_stop_pct)
         st.session_state["scan_res"] = res
@@ -167,7 +169,7 @@ def _tv_url(symbol: str) -> str:
     """TradingView chart link. 'ZEC-USD' → BASE 'ZEC' → USDT pair TV resolves to
     the most liquid listing. Opens the full chart in a new tab."""
     base = re.split(r"[-/]", str(symbol))[0].upper()
-    return f"https://www.tradingview.com/chart/?symbol={base}USDT"
+    return f"https://www.tradingview.com/chart/?symbol=BYBIT:{base}USDT.P"   # Bybit perp chart
 
 
 def _expires_in(iso: str | None) -> str:
@@ -240,7 +242,7 @@ def _exit_text(entry, stop, target, label, direction="long") -> tuple[str, str]:
 
 
 def _bot_hint(direction, entry, stop, target, label, risk_usd) -> str:
-    """The same trade as a MEXC futures grid bot (desk/gridplan.py)."""
+    """The same trade as a Bybit futures grid bot (desk/gridplan.py)."""
     try:
         from desk.gridplan import grid_for_signal
         e, sp = _price(entry), _price(stop)
@@ -324,7 +326,7 @@ def _candles_for(symbols: tuple[str, ...], bars: int = 45) -> dict:
     # Pin to MEXC: the watched coins come from the MEXC scan and many are MEXC-only
     # microcaps the default fallback chain can't resolve (blank tiles otherwise).
     data = exchange.get_ohlcv_batch(list(symbols), timeframe="1d", limit=bars + 5,
-                                    exchange="mexc")
+                                    exchange=__import__("config").CANDLE_VENUE)
     for sym, df in data.items():
         d = df.tail(bars)
         out[sym] = [(float(o), float(h), float(l), float(c))

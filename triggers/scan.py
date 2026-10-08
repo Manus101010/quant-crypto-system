@@ -217,7 +217,12 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     `max_per_setup`: cap how many of any one setup can be armed, so the armed set
     is diverse (None/0 = no cap).
     """
-    if source == "mexc_perps":
+    if source == "bybit_perps":
+        # Every Bybit crypto USDT perpetual — the trading venue (perp candles).
+        from utils.exchange import list_perp_symbols
+        tickers = list_perp_symbols("bybit")
+        exchange = "bybit"
+    elif source == "mexc_perps":
         # Every MEXC crypto perpetual (what you can actually short), spot candles
         # where a spot pair exists, perp candles otherwise.
         from utils.exchange import list_perp_symbols

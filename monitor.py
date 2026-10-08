@@ -112,8 +112,8 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     trailing = bool(m.get("trailing")) and not target
     hold = m.get("max_hold")
 
-    head = (f"🔴 <b>SELL / SHORT signal — {coin}</b>  (futures)" if short
-            else f"🟢 <b>BUY signal — {coin}</b>")
+    head = (f"🔴 <b>SHORT signal — {coin}</b>  (Bybit USDT perp)" if short
+            else f"🟢 <b>LONG signal — {coin}</b>  (Bybit USDT perp)")
     lines = [head, f"<i>{label}: {_SETUP_PLAIN.get(label, 'a validated setup')}.</i>", "",
              f"<b>Why now:</b> {_why_plain(trg)}",
              f"<b>Price now:</b> {_fmt_price(price)}", "", "📋 <b>The plan</b>"]
@@ -132,10 +132,9 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
                         if part.get("breakeven") else ""))
     if trailing:
         lines.append(("• For the rest: no" if part.get("at_r") else "• No")
-                     + " fixed target — it's a <b>trailing stop</b>: as the price "
-                     f"{'falls' if short else 'rises'}, move your stop "
-                     f"{'down' if short else 'up'} behind it to lock in profit. "
-                     "If you tick \"Took it\", the bot messages you each time to raise it.")
+                     + " fixed target — a <b>trailing stop</b> follows the price "
+                     f"{'down' if short else 'up'} and locks in profit (Bybit does this for "
+                     "you — see below).")
     elif target:
         lines.append(f"• Take profit: {_fmt_price(target)}  ({_pct(price, target)})")
         if stop and abs(price - stop):
@@ -146,6 +145,9 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     pj = _projection_line(trg, price, label)
     if pj:
         lines.append(pj)
+    bb = _bybit_block(trg, price, m)
+    if bb:
+        lines += ["", bb]
     sz = _sizing_line(trg, price)
     if sz:
         lines += ["", sz]
@@ -209,8 +211,38 @@ def _projection_line(trg: dict, price: float, label: str) -> str:
         return ""
 
 
+def _bybit_block(trg: dict, price: float, m: dict) -> str:
+    """Exact order setup on Bybit: TP/SL on the order, the partial take-profit,
+    and Bybit's native trailing stop (distance = the initial risk, as tested).
+    Size/leverage come from _sizing_line (your $-margin rules)."""
+    try:
+        stop, target = trg.get("stop"), trg.get("target")
+        if not stop or not price:
+            return ""
+        short = (trg.get("direction") or "long") == "short"
+        dist = abs(price - stop)
+        part = m.get("partial") or {}
+        trailing = bool(m.get("trailing")) and not target
+        f = _fmt_price
+        out = [f"⚙️ <b>On Bybit</b> — open a <b>{'Short' if short else 'Long'}</b> "
+               "(isolated margin) and set on the order:",
+               f"• <b>Stop-loss {f(stop)}</b>" + (f" · <b>Take-profit {f(target)}</b>" if target else "")]
+        if part.get("at_r"):
+            ppx = price - part["at_r"] * dist if short else price + part["at_r"] * dist
+            out.append(f"• Partial take-profit: close <b>{part.get('frac', 0.5) * 100:.0f}% at "
+                       f"{f(ppx)}</b>, then move the stop-loss to your entry")
+        if trailing:
+            out.append(f"• <b>Trailing stop</b>: distance <b>{f(dist)}</b> "
+                       f"({dist / price * 100:.1f}%) — Bybit moves it with the price automatically")
+        out.append("Bybit closes the trade at the stop by itself — no need to watch it.")
+        return "\n".join(out)
+    except Exception as exc:                        # noqa: BLE001 — never block an alert
+        log.debug("bybit block failed: %s", exc)
+        return ""
+
+
 def _grid_block(trg: dict, price: float, m: dict) -> str:
-    """Optional MEXC futures grid-bot version of the same trade (same stop, same
+    """Optional Bybit futures grid-bot version of the same trade (same stop, same
     worst-case $ loss)."""
     try:
         from desk.gridplan import grid_for_signal
@@ -230,13 +262,13 @@ def _grid_block(trg: dict, price: float, m: dict) -> str:
         tp = (f"• Take-profit price: {f(g['take_profit'])}" if g["take_profit"] else
               "• Take-profit price: leave empty (trailing trade — I'll tell you when to stop it)")
         return "\n".join([
-            "🤖 <b>Or run it as a MEXC futures grid bot</b> (profits from the swings):",
+            "🤖 <b>Or run it as a Bybit futures grid bot</b> (profits from the swings):",
             f"• Mode: <b>{g['mode']}</b> · Leverage: <b>{g['leverage']}×</b> (isolated)",
             f"• Price range: {f(g['lower'])} – {f(g['upper'])} · <b>{g['grids']} grids</b> "
             f"(~{g['step_pct']:.1f}% apart, ~{g['net_per_grid_pct']:.1f}% ≈ "
             f"${g['notional'] / g['grids'] * g['net_per_grid_pct'] / 100:,.2f} profit per completed swing)",
             f"• Investment: about <b>${g['margin']:,.0f}</b>",
-            f"• Stop-loss price: <b>{f(g['stop_loss'])}</b> ← type this in; MEXC won't add a % stop for you",
+            f"• Stop-loss price: <b>{f(g['stop_loss'])}</b> (set it in the bot's TP/SL settings)",
             tp,
             f"• Liquidation ≈ {f(g['liq_est'])} ({gap:.0f}% {below} your stop, so the stop hits first). "
             "Check the bot's own figure is also past your stop before starting.",
@@ -467,10 +499,11 @@ def poll_once() -> dict:
         return {"active": 0, "fired": 0, "invalidated": 0, **track}
 
     symbols = sorted({t["symbol"] for t in active})
-    # MEXC first (it is where you trade, and perp-only coins exist nowhere else),
-    # then the usual venue chain for anything MEXC did not return.
+    # The trading venue first (Bybit perps — prices match what you trade), then
+    # the usual venue chain for anything it did not return.
+    from config import CANDLE_VENUE
     candles = exchange.get_ohlcv_batch(symbols, timeframe="1d", limit=_CANDLE_LIMIT,
-                                       exchange="mexc")
+                                       exchange=CANDLE_VENUE)
     missing = [s_ for s_ in symbols if s_ not in candles]
     if missing:
         candles.update(exchange.get_ohlcv_batch(missing, timeframe="1d", limit=_CANDLE_LIMIT))

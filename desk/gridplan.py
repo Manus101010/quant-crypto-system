@@ -1,5 +1,5 @@
 """
-MEXC futures grid-bot plan that lives INSIDE a signal's trade plan.
+Bybit futures grid-bot plan that lives INSIDE a signal's trade plan.
 
 The grid trades the oscillations between the signal's stop and its target; the
 bot's stop-loss price is the signal's stop. Leverage is the highest (≤ cap) that

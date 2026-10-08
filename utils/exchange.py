@@ -117,7 +117,7 @@ def list_spot_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
     return out
 
 
-_perp_info: dict[str, tuple[str, float]] = {}            # "BASE-USD" -> (swap symbol, contract size)
+_perp_info: dict[str, tuple[str, float]] = {}            # "venue:BASE-USD" -> (swap symbol, contract size)
 _COMMODITIES = {"XAU", "XAUT", "PAXG", "SILVER", "USOIL", "UKOIL", "NGAS", "COPPER", "XPD", "XPT"}
 
 
@@ -154,7 +154,7 @@ def list_perp_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
             continue
         t = f"{base}-USD"
         out.add(t)
-        _perp_info[t] = (m["symbol"], float(m.get("contractSize") or 1.0))
+        _perp_info[f"{exchange}:{t}"] = (m["symbol"], float(m.get("contractSize") or 1.0))
     res = sorted(out)
     _market_cache[key] = (now, res)
     log.info("exchange: %s has %d crypto %s perps", exchange, len(res), quote)
@@ -163,7 +163,7 @@ def list_perp_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
 
 def _perp_ohlcv(symbol: str, timeframe: str, limit: int, exchange: str) -> pd.DataFrame:
     """Perp candles for a coin with no spot pair (volume converted from contracts)."""
-    info = _perp_info.get(symbol.strip().upper())
+    info = _perp_info.get(f"{exchange}:{symbol.strip().upper()}")
     ex = _client(exchange)
     if not info or ex is None:
         return pd.DataFrame()
@@ -190,12 +190,12 @@ def get_ohlcv(symbol: str, timeframe: str = "1d", limit: int = 400,
     Tries the spot fallback chain (or a single `exchange` if given). Empty
     DataFrame if every venue fails / lacks the pair.
     """
-    if exchange == "mexc" and not _perp_info:
+    if exchange in ("mexc", "bybit") and not any(k.startswith(exchange + ":") for k in _perp_info):
         try:
-            list_perp_symbols("mexc")          # cached; fills the perp map once
+            list_perp_symbols(exchange)        # cached; fills the perp map once
         except Exception:                      # noqa: BLE001
             pass
-    if exchange and symbol.strip().upper() in _perp_info:
+    if exchange and f"{exchange}:{symbol.strip().upper()}" in _perp_info:
         # Perp universe: use the perp's own candles (what is actually traded).
         df = _perp_ohlcv(symbol, timeframe, limit, exchange)
         if not df.empty:

@@ -21,6 +21,11 @@ from utils.logger import get_logger
 
 log = get_logger(__name__)
 
+
+def _venue() -> str:
+    from config import CANDLE_VENUE
+    return CANDLE_VENUE
+
 _MIN_N_FOR_VERDICT = 10   # below this many closed trades, live stats are "early"
 
 
@@ -127,9 +132,9 @@ def update_open_trades(notify: bool = True) -> dict:
     if not open_trades:
         return {"open": 0, "closed": 0}
     syms = sorted({t["symbol"] for t in open_trades})
-    candles = exchange.get_ohlcv_batch(syms, timeframe="1d", limit=120, exchange="mexc")
+    candles = exchange.get_ohlcv_batch(syms, timeframe="1d", limit=120, exchange=_venue())
     missing = [s for s in syms if s not in candles]
-    if missing:   # not on MEXC → default chain
+    if missing:   # not on the trading venue → default chain
         candles.update(exchange.get_ohlcv_batch(missing, timeframe="1d", limit=120))
     closed = 0
     for t in open_trades:
@@ -166,8 +171,9 @@ def _close_text(t: dict, p: dict) -> str:
     kind = "your trade" if t.get("taken") else "paper trade"
     urgent = ""
     if t.get("taken") and p["outcome"] in ("stop", "trail", "time"):
-        urgent = (f"🚨 <b>ACT NOW — close your {coin} position / STOP your grid bot.</b>\n"
-                  f"Price reached {p['exit_price']:.6g}. MEXC bots don't stop themselves.\n\n")
+        urgent = (f"🚨 <b>{coin} hit its exit — check Bybit closed it.</b>\n"
+                  f"Price reached {p['exit_price']:.6g}. If you set the stop-loss / trailing "
+                  f"stop on the order, Bybit has already closed it; if not, close it now.\n\n")
     return urgent + (f"{icon} <b>{coin} {kind} closed</b> — {_EXIT_PLAIN.get(p['outcome'], p['outcome'])}\n"
             f"Result: <b>{r:+.2f}R</b> — {'made' if r > 0 else 'lost'} {abs(r):.2f}× the amount risked "
             f"(≈ {'+' if usd >= 0 else '−'}${abs(usd):.0f} on a ${RISK_PER_TRADE_USD:.0f} risk) "
@@ -308,7 +314,7 @@ def open_marks(trades: list[dict] | None = None) -> dict:
         return {}
     syms = sorted({t["symbol"] for t in trades})
     px = {}
-    got = exchange.get_ohlcv_batch(syms, timeframe="1d", limit=2, exchange="mexc")
+    got = exchange.get_ohlcv_batch(syms, timeframe="1d", limit=2, exchange=_venue())
     missing = [s for s in syms if s not in got]
     if missing:
         got.update(exchange.get_ohlcv_batch(missing, timeframe="1d", limit=2))
@@ -341,7 +347,7 @@ def _correlated_risk(open_: list[dict], rpt: float, gross: float) -> float:
         import numpy as np
         import pandas as pd
         syms = sorted({t["symbol"] for t in open_})
-        got = exchange.get_ohlcv_batch(syms, timeframe="1d", limit=61, exchange="mexc")
+        got = exchange.get_ohlcv_batch(syms, timeframe="1d", limit=61, exchange=_venue())
         rets = pd.DataFrame({s: df["close"].pct_change() for s, df in got.items()
                              if df is not None and len(df) > 30}).dropna(how="all")
         corr = rets.corr(min_periods=20)
