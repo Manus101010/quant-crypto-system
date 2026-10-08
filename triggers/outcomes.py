@@ -72,9 +72,15 @@ def _simulate(t: dict, df: pd.DataFrame) -> dict | None:
     bars = df[df.index > fire_day]
     # Same mechanics as the backtest (backtesting/crypto_optimize._simulate):
     # stop checked first; optional partial exit at +at_r R (then breakeven);
-    # the trailing stop ratchets off the CLOSE, one initial-risk behind it.
+    # the trailing stop follows the best price like Bybit (config.BYBIT_TRAIL).
     part = m.get("partial") or {}
     p_frac, p_r, p_be = part.get("frac", 0.0), part.get("at_r"), part.get("breakeven")
+    from config import BYBIT_TRAIL
+    tcfg = BYBIT_TRAIL.get(t.get("setup_label") or "", BYBIT_TRAIL["default"])
+    atr_e = risk / float(m.get("stop_mult") or 1.0)
+    trail_dist = (tcfg["k_atr"] * atr_e) if tcfg.get("k_atr") else risk
+    act_r = float(tcfg.get("activate_r") or 0.0)
+    active = act_r == 0
     took, booked = 0.0, 0.0
     peak = entry
     trail = stop
@@ -100,10 +106,14 @@ def _simulate(t: dict, df: pd.DataFrame) -> dict | None:
                            held + 1, took, booked)
         held += 1
         peak = max(peak, h) if not short else min(peak, l)
-        # 4) ratchet the trailing stop off the close (as backtested)
+        # 4) ratchet the trailing stop the way Bybit does it: off the best price
+        #    reached, at the configured distance, once the activation level is hit
         if trailing:
-            new = c - sgn * risk
-            trail = max(trail, new) if not short else min(trail, new)
+            if not active and sgn * ((h if not short else l) - entry) >= act_r * risk:
+                active = True
+            if active:
+                new = peak - sgn * trail_dist
+                trail = max(trail, new) if not short else min(trail, new)
         # 5) time exit on a completed bar
         if held >= max_hold and ts.date() < datetime.datetime.utcnow().date():
             return _closed(t, "time", c, ts, entry, risk, short, peak, trail, held,
