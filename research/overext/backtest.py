@@ -221,7 +221,7 @@ def simulate(f: pd.DataFrame, i: int, fund: pd.Series | None, exit_kind="ema4h",
             "btc_trend_up": bool(f["btc_up_trend"].iat[i] == 1.0)}
 
 
-def run(frames, variant, btc_filter, exit_kind="ema4h", hours=48, mode="setup"):
+def run(frames, variant, btc_filter, exit_kind="ema4h", hours=48, mode="setup", attempts=1):
     out = []
     for sym, (f, eps, fund) in frames.items():
         ext, trn = variant(f)
@@ -240,11 +240,19 @@ def run(frames, variant, btc_filter, exit_kind="ema4h", hours=48, mode="setup"):
             else:                                         # baseline A: random bar in the same pump
                 # window — no knowledge of where the top is (that would be hindsight)
                 hits = RNG.choice(w, size=1)
-            if len(hits):
-                t = simulate(f, int(hits[0]), fund, exit_kind, hours)
-                if t:
-                    t["sym"] = sym
-                    out.append(t)
+            k, done = 0, 0
+            while k < len(hits) and done < attempts:
+                t = simulate(f, int(hits[k]), fund, exit_kind, hours)
+                if not t:
+                    k += 1
+                    continue
+                t["sym"] = sym
+                t["attempt"] = done + 1
+                out.append(t)
+                done += 1
+                if t["why"] != "stop":                   # only retry after being stopped out
+                    break
+                k = int(np.searchsorted(hits, f.index.get_indexer([t["exit_t"]])[0] + 1))
     return out
 
 
