@@ -29,7 +29,7 @@ MIN_N = 25
 
 
 # ── data ──────────────────────────────────────────────────────────────────────
-def load(path: str | Path, min_rows: int = 260):
+def load(path: str | Path, min_rows: int = 260):  # pass ~45 to keep young listings
     d = pickle.loads(Path(path).read_bytes())
     coins = {}
     for sym, df in d["coins"].items():
@@ -78,7 +78,8 @@ def indicators(df: pd.DataFrame) -> pd.DataFrame:
     x["hh55p"] = h.rolling(55).max().shift(1)
     x["ll55p"] = l.rolling(55).min().shift(1)
     x["volr"] = v / v.rolling(20).mean().shift(1)
-    x["qvol20"] = (c * v).rolling(20).mean()
+    x["qv"] = c * v                                        # daily $ volume
+    x["qvol20"] = x["qv"].rolling(20).mean()
     # Kaufman efficiency ratio: 1 = straight line, ~0 = pure chop
     x["er20"] = (c - c.shift(20)).abs() / c.diff().abs().rolling(20).sum()
     x["stretch"] = (c - x["ema20"]) / x["atr"]          # ATR units from the mean
@@ -154,22 +155,33 @@ def apply_costs(trades: list[dict], cost: float = COST_PCT) -> list[dict]:
     out = []
     for t in trades:
         t = dict(t)
-        t["r_mult"] -= cost / t["risk_pct"]   # cost expressed in R
-        t["ret_pct"] -= cost
+        c = t.get("cost", cost)
+        t["r_mult"] -= c / t["risk_pct"]      # cost expressed in R
+        t["ret_pct"] -= c
         out.append(t)
     return out
 
 
-def run_signals(coins_ind: dict, signal_fn, plan_fn, extra=None) -> list[dict]:
+def tiered_cost(x: pd.DataFrame, i: int) -> float:
+    """Round-trip cost by liquidity: thin coins slip more. >= $2M a day: 0.36%,
+    $0.5M to $2M: 0.80% (small caps)."""
+    return COST_PCT if x["qvol20"].iat[i] >= 2e6 else 0.80
+
+
+def run_signals(coins_ind: dict, signal_fn, plan_fn, extra=None, min_i: int = 200,
+                cost_fn=None, min_qv: float = MIN_VOL_USD) -> list[dict]:
     """signal_fn(x) -> boolean Series; plan_fn(x, i) -> Plan | None.
-    One open trade per coin: signals while a trade is open are skipped."""
+    One open trade per coin: signals while a trade is open are skipped.
+    min_i = bars of history required before the first signal (200 for setups that
+    use the 200 SMA; small-cap / new-listing setups can use ~40).
+    cost_fn(x, i) -> round-trip cost %; default flat 0.36%."""
     trades = []
     for sym, x in coins_ind.items():
         sig = signal_fn(x)
-        sig = sig & (x["qvol20"] >= MIN_VOL_USD)
+        sig = sig & (x["qvol20"] >= min_qv)
         busy_until = -1
         for i in np.flatnonzero(sig.fillna(False).values):
-            if i <= busy_until or i < 200:
+            if i <= busy_until or i < min_i:
                 continue
             p = plan_fn(x, i)
             if p is None:
@@ -178,6 +190,7 @@ def run_signals(coins_ind: dict, signal_fn, plan_fn, extra=None) -> list[dict]:
             if t is None:
                 continue
             t["sym"] = sym
+            t["cost"] = cost_fn(x, i) if cost_fn else COST_PCT
             if extra is not None:
                 t.update(extra(x, i))
             busy_until = i + t["bars"]
@@ -236,9 +249,9 @@ HEADER = ("| variant | n | PF | win | expR | totR | maxDD R | PF 1st half | PF 2
           "|---|---|---|---|---|---|---|---|---|---|")
 
 
-def prepare(path):
+def prepare(path, min_rows: int = 260):
     """Load history and compute indicators + BTC context for every coin."""
-    coins, btc = load(path)
+    coins, btc = load(path, min_rows)
     ctx = btc_context(btc)
     br = breadth50(coins)
     out = {}
