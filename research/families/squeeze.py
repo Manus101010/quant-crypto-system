@@ -32,7 +32,7 @@ def funding(base: str) -> pd.Series | None:
     while True:
         try:
             r = requests.get(URL, params={"symbol": f"{base}_USDT", "page_num": page,
-                                          "page_size": 100}, timeout=20).json()
+                                          "page_size": 1000}, timeout=10).json()
         except Exception:                               # noqa: BLE001
             fails += 1
             if fails > 3:

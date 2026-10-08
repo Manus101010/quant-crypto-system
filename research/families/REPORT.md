@@ -37,7 +37,7 @@ Harness sanity check: the production Donchian 55d idea reran at n 917, PF 1.34,
 | Pre positioning in the coil (longs) | Fails | see results/breakout.md |
 | Capitulation longs (buy the flush), BTC MIXED | Event driven, not steady | n 256, PF 3.56, but 113 of 282 trades on 10 Oct 2025, 51 distinct days; excluding busy days n 45, PF 1.24 |
 | Grids (hourly paths), any mechanical deployment rule | No edge found | every 10 days PF 0.92; in chop PF 0.71 (worst); long grid on breakout PF 1.03 |
-| Squeeze fuel (funding before breakouts) | Not run yet | MEXC funding history only starts Apr 2025 and paging it for 219 coins was too slow from the research box; run `squeeze.py` at home |
+| Squeeze fuel (funding before breakouts) | No edge from funding | Since Apr 2025 (MEXC funding history start): long breakouts with funding < 0 n 109, PF 0.69 vs funding >= 0 n 283, PF 0.73, both losing; crowded long funding (> +0.01%) before breakdowns only happened 3 to 6 times. Not worth wiring |
 
 ## What this means for the live scanner
 
