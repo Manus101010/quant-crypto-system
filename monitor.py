@@ -212,29 +212,43 @@ def _projection_line(trg: dict, price: float, label: str) -> str:
 
 
 def _bybit_block(trg: dict, price: float, m: dict) -> str:
-    """Exact order setup on Bybit: TP/SL on the order, the partial take-profit,
-    and Bybit's native trailing stop (distance = the initial risk, as tested).
-    Size/leverage come from _sizing_line (your $-margin rules)."""
+    """The exact Bybit order form: limit entry with a slippage cap, SL by Mark
+    price, TP as a limit, partial TP, and the native trailing stop (distance +
+    activation price from config.BYBIT_TRAIL). Size/leverage: _sizing_line."""
     try:
+        from config import BYBIT_TRAIL, ENTRY_MAX_SLIP_PCT
         stop, target = trg.get("stop"), trg.get("target")
         if not stop or not price:
             return ""
         short = (trg.get("direction") or "long") == "short"
-        dist = abs(price - stop)
+        sg = -1 if short else 1
+        risk = abs(price - stop)
         part = m.get("partial") or {}
         trailing = bool(m.get("trailing")) and not target
         f = _fmt_price
-        out = [f"⚙️ <b>On Bybit</b> — open a <b>{'Short' if short else 'Long'}</b> "
-               "(isolated margin) and set on the order:",
-               f"• <b>Stop-loss {f(stop)}</b>" + (f" · <b>Take-profit {f(target)}</b>" if target else "")]
+        cap = price * (1 + sg * ENTRY_MAX_SLIP_PCT / 100)
+        out = [f"⚙️ <b>On Bybit</b> (USDT perp · isolated · {'Short' if short else 'Long'}):",
+               f"1. <b>Entry</b>: Limit {'Sell' if short else 'Buy'} at <b>{f(price)}</b> "
+               f"(or Market if it's still within {ENTRY_MAX_SLIP_PCT:g}% — skip it beyond {f(cap)})",
+               f"2. <b>Stop-loss</b>: trigger <b>{f(stop)}</b>, trigger by <b>Mark price</b>, Market close"]
+        n = 3
+        if target:
+            out.append(f"{n}. <b>Take-profit</b>: trigger <b>{f(target)}</b>, Limit at {f(target)} (whole position)")
+            n += 1
         if part.get("at_r"):
-            ppx = price - part["at_r"] * dist if short else price + part["at_r"] * dist
-            out.append(f"• Partial take-profit: close <b>{part.get('frac', 0.5) * 100:.0f}% at "
-                       f"{f(ppx)}</b>, then move the stop-loss to your entry")
+            ppx = price + sg * part["at_r"] * risk
+            out.append(f"{n}. <b>Partial TP</b> (TP/SL → Partial): {part.get('frac', 0.5) * 100:.0f}% of the "
+                       f"position at <b>{f(ppx)}</b>; after it fills, move the stop-loss to <b>{f(price)}</b> (entry)")
+            n += 1
         if trailing:
-            out.append(f"• <b>Trailing stop</b>: distance <b>{f(dist)}</b> "
-                       f"({dist / price * 100:.1f}%) — Bybit moves it with the price automatically")
-        out.append("Bybit closes the trade at the stop by itself — no need to watch it.")
+            cfg = BYBIT_TRAIL.get(trg.get("setup_label") or "", BYBIT_TRAIL["default"])
+            atr = risk / float(m.get("stop_mult") or 1.0)
+            dist = (cfg["k_atr"] * atr) if cfg.get("k_atr") else risk
+            act_r = float(cfg.get("activate_r") or 0)
+            act = price + sg * act_r * risk
+            out.append(f"{n}. <b>Trailing stop</b>: distance <b>{f(dist)}</b> ({dist / price * 100:.1f}%)"
+                       + (f", <b>activation price {f(act)}</b> (+{act_r:g}R)" if act_r else ", no activation price (trail from entry)"))
+        out.append("Bybit then manages the exit by itself — no need to watch it.")
         return "\n".join(out)
     except Exception as exc:                        # noqa: BLE001 — never block an alert
         log.debug("bybit block failed: %s", exc)

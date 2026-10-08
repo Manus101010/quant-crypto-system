@@ -102,6 +102,12 @@ BRIEF_SCHEDULE = ("Australia/Sydney", "07:00")
 # Trading venue: Bybit USDT perpetuals (native SL/TP + trailing stops, shorts).
 # Candles come from the perp market itself so levels match what you trade.
 EXCHANGE = "bybit"
+# Bybit native trailing stop for trailing setups. k_atr = trailing distance in
+# ATRs (None = the setup's initial stop distance); activate_r = only start
+# trailing once the trade is this many R in profit (0 = immediately).
+# Set from research/bybit_trailing.py (Bybit trails off the best price, not closes).
+BYBIT_TRAIL = {"default": {"k_atr": None, "activate_r": 0.0}}
+ENTRY_MAX_SLIP_PCT = 0.3       # don't chase more than this past the signal price
 CANDLE_VENUE = "bybit"
 AUTO_SCAN_PARAMS = {"source": "bybit_perps", "top_n": 15, "expiry_hours": 72,
                     "min_vol_usd_m": 0.5, "max_stop_pct": 25.0}
