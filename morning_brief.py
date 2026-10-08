@@ -134,10 +134,23 @@ def _track_record() -> str:
     t = ls["total"]
     if not t["n"] and not ls["open"]:
         return ""
-    line = f"📒 <b>Live record:</b> {t['n']} closed"
+    from config import RISK_PER_TRADE_USD as _rpt
+    line = f"📒 <b>Every signal (system):</b> {t['n']} closed"
     if t["n"]:
-        line += f", {t['win_rate']*100:.0f}% win, {t['total_r']:+.2f}R total"
+        line += (f", {t['win_rate']*100:.0f}% win, {t['total_r']:+.2f}R "
+                 f"(${t['total_r']*_rpt:+.2f})")
     line += f" · {len(ls['open'])} open"
+    try:
+        y = outcomes.live_stats(taken_only=True)
+        yt = y["total"]
+        if yt["n"] or y["open"]:
+            line += f"\n🙋 <b>Your trades:</b> {yt['n']} closed"
+            if yt["n"]:
+                line += (f", {yt['win_rate']*100:.0f}% win, {yt['total_r']:+.2f}R "
+                         f"(${yt['total_r']*_rpt:+.2f})")
+            line += f" · {len(y['open'])} open"
+    except Exception:                              # noqa: BLE001
+        pass
     try:
         h = outcomes.portfolio_heat()
         line += (f"\n🔥 Heat ${h['open_risk']:.0f}/${h['cap']:.0f}"

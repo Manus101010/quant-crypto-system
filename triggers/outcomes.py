@@ -200,14 +200,18 @@ def _pf(rs: list[float]) -> float | None:
     return gains / losses
 
 
-def live_stats() -> dict:
-    """Per-setup live record (closed trades) + backtest PF + drift verdict."""
+def live_stats(taken_only: bool = False) -> dict:
+    """Per-setup live record (closed trades) + backtest PF + drift verdict.
+    Default: EVERY fired signal, taken or not (the honest test of the system).
+    taken_only: just the trades you ticked "Took it" (your own execution)."""
     try:
         from backtesting.crypto_validation import load_validation
         bt = (load_validation() or {}).get("stats", {})
     except Exception:                               # noqa: BLE001
         bt = {}
     trades = tdb.get_fired_trades()
+    if taken_only:
+        trades = [t for t in trades if t.get("taken")]
     closed = [t for t in trades if t.get("outcome")]
     by: dict[str, list[float]] = {}
     for t in closed:
