@@ -64,7 +64,7 @@ with c2:
     min_vol_m = st.selectbox("Min 24h volume", [0.0, 0.5, 1.0, 5.0, 10.0], index=2,
                              format_func=lambda v: "off" if v == 0 else f"${v:g}M")
     risk_usd = st.number_input("Risk / trade ($)", min_value=0, max_value=100000,
-                               value=st.session_state.get("risk_usd", 50), step=10,
+                               value=st.session_state.get("risk_usd", __import__("config").RISK_PER_TRADE_USD), step=10,
                                help="Dollars you're willing to lose if the stop hits. "
                                     "Tiles show the position size that risks exactly this — "
                                     "the point of a wide ATR stop is a SMALL position.")
@@ -440,7 +440,7 @@ if res and res.get("candidates"):
                 + (f" ({x['setup']})" if x['verdict'] == 'valid' else "")
                 for sym, x in sorted(hs.items(), key=lambda kv: kv[1]["verdict"] != "gone")))
         cand_candles = _candles_for(tuple(r["ticker"] for r in res["candidates"]))
-        _risk = st.session_state.get("risk_usd", 50)
+        _risk = st.session_state.get("risk_usd", __import__("config").RISK_PER_TRADE_USD)
         cards = []
         _badge = {"armed": "📡 armed", "held": "📌 in trade", "wide_stop": "🛡️ stop too wide",
                   "crowded": "🐑 crowded (funding)", "not_selected": "⏭️ not selected",
@@ -484,7 +484,7 @@ if active:
     st.caption(f"{len(active)} live trigger{'s' if len(active) != 1 else ''} — the monitor "
                f"alerts your phone the moment one fires.")
     act_candles = _candles_for(tuple(t["symbol"] for t in active))
-    _risk = st.session_state.get("risk_usd", 50)
+    _risk = st.session_state.get("risk_usd", __import__("config").RISK_PER_TRADE_USD)
     cards = []
     for t in active:
         is_long = t["direction"] == "long"
@@ -532,7 +532,7 @@ try:
     from triggers import outcomes as _oc
     _ls = _oc.live_stats()
     _tot = _ls["total"]
-    _h = _oc.portfolio_heat(risk_per_trade=float(st.session_state.get("risk_usd", 50)))
+    _h = _oc.portfolio_heat(risk_per_trade=float(st.session_state.get("risk_usd", __import__("config").RISK_PER_TRADE_USD)))
     _pct = min(1.0, _h["open_risk"] / _h["cap"]) if _h["cap"] else 0
     _col = "#f87171" if _h["left"] <= 0 else ("#facc15" if _pct > 0.7 else "#4ade80")
     st.markdown(
@@ -567,6 +567,17 @@ try:
     c3.metric("Total R", f"{_tot['total_r']:+.2f}R" if _tot["n"] else "—")
     _pfv = _tot["pf"]
     c4.metric("Profit factor", "—" if _pfv is None else ("∞" if _pfv == float("inf") else f"{_pfv:.2f}"))
+    _ys = _oc.live_stats(taken_only=True)
+    _yt = _ys["total"]
+    st.caption("🙋 Your trades only (ticked \"Took it\"). Compare with the row above: "
+               "if yours trail the system, the gap is execution or selection, not the edge.")
+    y1, y2, y3, y4 = st.columns(4)
+    y1.metric("Your closed", _yt["n"], help=f"{len(_ys['open'])} still open")
+    y2.metric("Your win rate", f"{_yt['win_rate']*100:.0f}%" if _yt["win_rate"] is not None else "—")
+    from config import RISK_PER_TRADE_USD as _rpt
+    y3.metric("Your total", f"{_yt['total_r']:+.2f}R (${_yt['total_r']*_rpt:+.2f})" if _yt["n"] else "—")
+    _ypf = _yt["pf"]
+    y4.metric("Your profit factor", "—" if _ypf is None else ("∞" if _ypf == float("inf") else f"{_ypf:.2f}"))
     if _ls["by_setup"]:
         import pandas as _pd
         _vcol = {"early": "⏳ early", "holding up": "✅ holding up",
