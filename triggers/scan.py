@@ -199,6 +199,19 @@ def _diversify(rows: list[dict], n: int, max_per_setup: int | None) -> list[dict
     return picked
 
 
+def _exchange_fn(name: str):
+    """
+    Fetch a function from utils.exchange, reloading the module if the running
+    process holds a stale copy (Streamlit Cloud keeps imported modules across a
+    redeploy, so a newly added function can raise ImportError until a reboot).
+    """
+    import importlib
+    import utils.exchange as ex
+    if not hasattr(ex, name):
+        ex = importlib.reload(ex)
+    return getattr(ex, name)
+
+
 def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
                      regime_score: float | None = None,
                      expiry_hours: int = 48,
@@ -219,17 +232,17 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     """
     if source == "bybit_perps":
         # Every Bybit crypto USDT perpetual — the trading venue (perp candles).
-        from utils.exchange import list_perp_symbols
+        list_perp_symbols = _exchange_fn("list_perp_symbols")
         tickers = list_perp_symbols("bybit")
         exchange = "bybit"
     elif source == "mexc_perps":
         # Every MEXC crypto perpetual (what you can actually short), spot candles
         # where a spot pair exists, perp candles otherwise.
-        from utils.exchange import list_perp_symbols
+        list_perp_symbols = _exchange_fn("list_perp_symbols")
         tickers = list_perp_symbols("mexc")
         exchange = "mexc"
     elif source == "mexc":
-        from utils.exchange import list_spot_symbols
+        list_spot_symbols = _exchange_fn("list_spot_symbols")
         tickers = list_spot_symbols("mexc")
         exchange = "mexc"
     else:
