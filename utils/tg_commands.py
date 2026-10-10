@@ -112,11 +112,13 @@ def handle(text: str) -> str:
         from triggers import db
         a = arg.strip().lower()
         if a in ("off", "pause", "stop"):
+            import datetime as _dt
             db.set_state("longs:paused", "1")
+            db.set_state("longs:paused_at", _dt.datetime.utcnow().isoformat())
             for t in db.get_triggers("active"):
                 if t["direction"] == "long":
                     db.set_status(t["id"], "cancelled")
-            return "⛔ Longs switched OFF — no new long alerts, armed longs cancelled. Shorts still alert. /longs on to resume."
+            return "⛔ Longs paused for 24 hours — no new long alerts, armed longs cancelled. Shorts still alert. They switch back on by themselves; /longs on to resume sooner."
         if a in ("on", "resume", "start"):
             db.set_state("longs:paused", "0")
             return "🟢 Longs switched ON — the market filter decides again. Next scan will arm them if it allows."

@@ -58,6 +58,9 @@ def alt_breadth(force: bool = False) -> dict | None:
         return val
 
 
+LONGS_PAUSE_HOURS = 24
+
+
 def long_gate() -> tuple[bool, str]:
     """(longs allowed?, reason). BTC above 200d AND 50d, and alt breadth above the
     threshold. Missing data fails OPEN for breadth (logged), never for BTC data
@@ -65,8 +68,17 @@ def long_gate() -> tuple[bool, str]:
     from config import ALT_BREADTH_MIN, BTC_200D_LONG_GATE
     try:                                   # manual switch: /longs off in Telegram
         from triggers import db
+        # A manual pause is temporary: it lapses on its own after PAUSE_HOURS so
+        # the system never stays switched off by accident. A pause with no start
+        # time (set before this rule) counts as lapsed.
         if db.get_state("longs:paused") == "1":
-            return False, "longs are switched off by you (send /longs on to resume)"
+            import datetime as _dt
+            since = db.get_state("longs:paused_at")
+            if since:
+                until = _dt.datetime.fromisoformat(since) + _dt.timedelta(hours=LONGS_PAUSE_HOURS)
+                if _dt.datetime.utcnow() < until:
+                    return False, (f"longs paused by you until {until:%d %b %H:%M} UTC "
+                                   "(send /longs on to resume sooner)")
     except Exception:                      # noqa: BLE001
         pass
     if not BTC_200D_LONG_GATE:
