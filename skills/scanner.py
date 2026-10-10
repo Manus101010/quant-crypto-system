@@ -1041,8 +1041,8 @@ def _run(tickers: list[str], criteria: ScanCriteria,
                 "vol_usd_m":        round(vol_usd_m, 1),
                 # Mean reversion metrics
                 "bb_pct":           round(bb_pct, 3) if bb_pct is not None else None,
-                "bb_upper":         round(bb_upper, 4) if bb_upper is not None else None,
-                "bb_lower":         round(bb_lower, 4) if bb_lower is not None else None,
+                "bb_upper":         float(bb_upper) if bb_upper is not None else None,   # unrounded: trigger mean for sub-cent coins
+                "bb_lower":         float(bb_lower) if bb_lower is not None else None,
                 "bb_bandwidth":     round(bb_bw, 2)   if bb_bw   is not None else None,
                 "zscore_20":        round(zsc, 2)      if zsc     is not None else None,
                 "williams_r":       round(wil_r, 1)    if wil_r   is not None else None,
@@ -1194,8 +1194,8 @@ def _run_from_bybit(bybit_data: dict, tickers: list[str], criteria: ScanCriteria
                 "atr_14":           float(atr) if atr is not None else None,   # unrounded: sub-cent coins need full precision
                 "vol_usd_m":        round(vol_usd_m, 1),
                 "bb_pct":           round(bb_pct, 3) if bb_pct is not None else None,
-                "bb_upper":         round(bb_upper, 4) if bb_upper is not None else None,
-                "bb_lower":         round(bb_lower, 4) if bb_lower is not None else None,
+                "bb_upper":         float(bb_upper) if bb_upper is not None else None,   # unrounded: trigger mean for sub-cent coins
+                "bb_lower":         float(bb_lower) if bb_lower is not None else None,
                 "bb_bandwidth":     round(bb_bw, 2)   if bb_bw   is not None else None,
                 "zscore_20":        round(zsc, 2)      if zsc     is not None else None,
                 "williams_r":       round(wil_r, 1)    if wil_r   is not None else None,
