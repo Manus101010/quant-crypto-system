@@ -54,8 +54,27 @@ def _mgmt(label: str | None) -> dict:
     return {"trailing": False, "max_hold": 15, "target_r": 3.0}
 
 
-def _simulate(t: dict, df: pd.DataFrame) -> dict | None:
-    """Walk daily bars after the fire date. Returns outcome patch (outcome None = open)."""
+def _fire_day_bar(t: dict, h1: pd.DataFrame | None) -> tuple | None:
+    """Synthetic first bar: the 1h candles that open at/after fired_at, up to the
+    end of that UTC day. Only price action AFTER the fire is used; None when the
+    1h data does not cover the fire (caller then skips the fire day as before)."""
+    if h1 is None or h1.empty or not t.get("fired_at"):
+        return None
+    fired = pd.Timestamp(t["fired_at"]).tz_localize(None) if pd.Timestamp(t["fired_at"]).tzinfo \
+        else pd.Timestamp(t["fired_at"])
+    day_end = fired.normalize() + pd.Timedelta(days=1)
+    if h1.index[0] > fired:                 # history does not reach back to the fire
+        return None
+    w = h1[(h1.index >= fired) & (h1.index < day_end)]
+    if w.empty:
+        return None
+    return (w.index[-1], float(w["open"].iloc[0]), float(w["high"].max()),
+            float(w["low"].min()), float(w["close"].iloc[-1]))
+
+
+def _simulate(t: dict, df: pd.DataFrame, h1: pd.DataFrame | None = None) -> dict | None:
+    """Walk daily bars after the fire date, preceded by the rest of the fire day
+    from 1h candles (`h1`) when available. Returns outcome patch (outcome None = open)."""
     entry, stop = t.get("fired_price"), t.get("stop")
     if not entry or stop is None or not t.get("fired_at"):
         return None
@@ -86,8 +105,11 @@ def _simulate(t: dict, df: pd.DataFrame) -> dict | None:
     trail = stop
     held = 0
     sgn = -1 if short else 1
-    for ts, b in bars.iterrows():
-        o, h, l, c = b["open"], b["high"], b["low"], b["close"]
+    seq = [(ts, b["open"], b["high"], b["low"], b["close"]) for ts, b in bars.iterrows()]
+    first = _fire_day_bar(t, h1)
+    if first:
+        seq.insert(0, first)
+    for ts, o, h, l, c in seq:
         # 1) stop / trail (checked first — conservative)
         if (not short and l <= trail) or (short and h >= trail):
             px = (min(o, trail) if not short else max(o, trail))
@@ -151,7 +173,7 @@ def update_open_trades(notify: bool = True) -> dict:
         df = candles.get(t["symbol"])
         if df is None or df.empty:
             continue
-        patch = _simulate(t, df)
+        patch = _simulate(t, df, _hourly_since_fire(t))
         if patch is None:
             continue
         tdb.set_outcome(t["id"], patch)
@@ -166,6 +188,24 @@ def update_open_trades(notify: bool = True) -> dict:
                 _maybe_partial_msg(t)
             _maybe_nudge_trail(t, patch)
     return {"open": len(open_trades) - closed, "closed": closed}
+
+
+_H1_MAX = 1000     # 1h candles fetched at most (~41 days back)
+
+
+def _hourly_since_fire(t: dict) -> pd.DataFrame | None:
+    """1h candles covering the fire day (for _fire_day_bar). None on any problem."""
+    try:
+        fired = pd.Timestamp(t["fired_at"][:19])
+        hours = int((pd.Timestamp.utcnow().tz_localize(None) - fired.normalize())
+                    / pd.Timedelta(hours=1)) + 2
+        if hours > _H1_MAX:
+            return None
+        h1 = exchange.get_ohlcv(t["symbol"], "1h", limit=hours, exchange=_venue())
+        return h1 if h1 is not None and not h1.empty else None
+    except Exception as exc:                        # noqa: BLE001
+        log.debug("1h fire-day candles failed for %s — %s", t.get("symbol"), exc)
+        return None
 
 
 _EXIT_PLAIN = {"target": "hit the take-profit 🎯", "stop": "hit the stop loss",
