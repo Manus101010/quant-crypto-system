@@ -47,8 +47,8 @@ A **signal-only** crypto intelligence system — it scans, ranks, and alerts;
 ### Quick Start
 1. **Macro Gate** — check the crypto regime.
 2. **Scanner** — run a scan, arm the top setups as triggers.
-3. Run the monitor on an always-on host (`python monitor.py`) for phone alerts.
-4. Log fills in the **Journal**.
+3. The monitor runs in the cloud automatically (GitHub Actions, every 15 min) and sends phone alerts; nothing to start.
+4. When you take a trade for real, tick **Took it** on the Scanner (or send `/took COIN` in Telegram) so it counts toward your risk cap.
 
 ---
 """)
