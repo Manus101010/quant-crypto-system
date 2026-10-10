@@ -12,6 +12,7 @@ paces requests within each venue's public limits.
 """
 from __future__ import annotations
 import os
+import threading
 import time
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -207,6 +208,7 @@ def list_perp_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
         # are US-hosted — and any venue can time out. Either way use the saved
         # universe (if there is one); candles then come from _GEO_FALLBACK perps.
         res = _saved_universe(exchange)
+        _perp_loaded.add(exchange)          # nothing more to load; don't retry per coin
         if res:
             _geo_blocked.add(exchange)
             _market_cache[key] = (now, res)
@@ -217,6 +219,7 @@ def list_perp_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
         return res
     from utils.crypto_universe import _BLOCKLIST
     out = set()
+    info: dict[str, tuple[str, float]] = {}
     for m in markets.values():
         if not (m.get("swap") and m.get("active") and m.get("quote") == quote
                 and m.get("settle") == quote):
@@ -227,7 +230,7 @@ def list_perp_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
             continue
         t = f"{base}-USD"
         out.add(t)
-        _perp_info[f"{exchange}:{t}"] = (m["symbol"], float(m.get("contractSize") or 1.0))
+        info[f"{exchange}:{t}"] = (m["symbol"], float(m.get("contractSize") or 1.0))
     if exchange != "mexc":
         # Venues that don't tag stocks (Bybit): use MEXC's tagging as well.
         try:
@@ -235,6 +238,8 @@ def list_perp_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
             out = {t for t in out if not is_non_crypto(t[:-4], trad, crypto)}
         except Exception as exc:            # noqa: BLE001
             log.warning("exchange: MEXC stock tagging unavailable — %s", exc)
+    _perp_info.update(info)                 # whole venue at once: no half-filled map
+    _perp_loaded.add(exchange)
     res = sorted(out)
     _market_cache[key] = (now, res)
     log.info("exchange: %s has %d crypto %s perps", exchange, len(res), quote)
@@ -263,6 +268,24 @@ def _perp_ohlcv(symbol: str, timeframe: str, limit: int, exchange: str) -> pd.Da
     return df.dropna(subset=["close"])
 
 
+_perp_loaded: set[str] = set()                # venues whose perp map is fully loaded
+_perp_lock = threading.Lock()
+
+
+def _ensure_perp_map(venue: str) -> None:
+    """Load a venue's perp map exactly once, even when many download threads ask
+    at the same moment (a half-loaded map silently dropped most coins)."""
+    if venue in _perp_loaded:
+        return
+    with _perp_lock:
+        if venue in _perp_loaded:
+            return
+        try:
+            list_perp_symbols(venue)
+        except Exception:                      # noqa: BLE001
+            pass
+
+
 _PREFIXES = (1000000, 10000, 1000)          # Bybit-style multiplier prefixes, longest first
 
 
@@ -279,11 +302,7 @@ def _fallback_perp_ohlcv(symbol: str, timeframe: str, limit: int) -> pd.DataFram
     are mapped (Bybit 1000PEPE = MEXC PEPE x 1000) and prices scaled to the
     requested unit, so levels match what you trade. Empty if there is no match."""
     fb = _GEO_FALLBACK
-    if not any(k.startswith(fb + ":") for k in _perp_info):
-        try:
-            list_perp_symbols(fb)
-        except Exception:                      # noqa: BLE001
-            pass
+    _ensure_perp_map(fb)
     base = symbol.strip().upper()
     base = base[:-4] if base.endswith("-USD") else base
     core, mult = _split_prefix(base)
@@ -325,11 +344,8 @@ def get_ohlcv(symbol: str, timeframe: str = "1d", limit: int = 400,
     Tries the spot fallback chain (or a single `exchange` if given). Empty
     DataFrame if every venue fails / lacks the pair.
     """
-    if exchange in ("mexc", "bybit") and not any(k.startswith(exchange + ":") for k in _perp_info):
-        try:
-            list_perp_symbols(exchange)        # cached; fills the perp map once
-        except Exception:                      # noqa: BLE001
-            pass
+    if exchange in ("mexc", "bybit"):
+        _ensure_perp_map(exchange)             # loads once; fills the perp map
     if exchange in _geo_blocked and exchange != _GEO_FALLBACK:
         # Venue unreachable: the fallback venue's perp of the same coin, or nothing.
         return _fallback_perp_ohlcv(symbol, timeframe, limit)
