@@ -23,7 +23,7 @@ log = get_logger(__name__)
 _API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 _HELP = ("🤖 <b>Commands</b>\n/status — market gate, BTC, armed setups, risk\n"
          "/open — your open trades with live R\n/took HYPE — mark a trade as taken\n"
-         "/untook HYPE — undo\n/scan — run a scan now\n<i>Signal only — the bot never trades.</i>")
+         "/untook HYPE — undo\n/longs off | on — switch long alerts off/on\n/scan — run a scan now\n<i>Signal only — the bot never trades.</i>")
 
 
 def _send(text: str) -> None:
@@ -108,6 +108,19 @@ def handle(text: str) -> str:
         return _took(arg, True)
     if cmd == "/untook":
         return _took(arg, False)
+    if cmd == "/longs":
+        from triggers import db
+        a = arg.strip().lower()
+        if a in ("off", "pause", "stop"):
+            db.set_state("longs:paused", "1")
+            for t in db.get_triggers("active"):
+                if t["direction"] == "long":
+                    db.set_status(t["id"], "cancelled")
+            return "⛔ Longs switched OFF — no new long alerts, armed longs cancelled. Shorts still alert. /longs on to resume."
+        if a in ("on", "resume", "start"):
+            db.set_state("longs:paused", "0")
+            return "🟢 Longs switched ON — the market filter decides again. Next scan will arm them if it allows."
+        return "Longs are " + ("OFF" if db.get_state("longs:paused") == "1" else "ON") + ". Use /longs off or /longs on."
     if cmd == "/scan":
         return _scan()
     return "Unknown command. " + _HELP

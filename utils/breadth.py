@@ -63,6 +63,12 @@ def long_gate() -> tuple[bool, str]:
     threshold. Missing data fails OPEN for breadth (logged), never for BTC data
     that loaded and says no."""
     from config import ALT_BREADTH_MIN, BTC_200D_LONG_GATE
+    try:                                   # manual switch: /longs off in Telegram
+        from triggers import db
+        if db.get_state("longs:paused") == "1":
+            return False, "longs are switched off by you (send /longs on to resume)"
+    except Exception:                      # noqa: BLE001
+        pass
     if not BTC_200D_LONG_GATE:
         return True, ""
     from utils import btc_regime
