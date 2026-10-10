@@ -119,7 +119,8 @@ BYBIT_TRAIL = {
 }
 ENTRY_MAX_SLIP_PCT = 0.3       # don't chase more than this past the signal price
 CANDLE_VENUE = "bybit"
-AUTO_SCAN_PARAMS = {"source": "bybit_perps", "top_n": 5,   # max 5 armed per scan: correlated longs lose together "expiry_hours": 72,
+# Max 5 armed per scan (was 15): same-direction alts move together, so a big batch is one bet.
+AUTO_SCAN_PARAMS = {"source": "bybit_perps", "top_n": 5, "expiry_hours": 72,
                     "min_vol_usd_m": 0.5, "max_stop_pct": 25.0}
 
 # ── BTC regime veto hooks (v1 = WARNING only; both default off) ────────────────
