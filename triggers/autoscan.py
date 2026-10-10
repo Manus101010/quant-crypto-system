@@ -97,6 +97,11 @@ def summary(name: str, res: dict, regime_score) -> str:
                      "Shorts still allowed. (Full-cycle backtest: this filter cut the worst "
                      "drawdown by ~44%.)")
     armed = res.get("armed") or []
+    if res.get("slots_limited"):
+        lines.append(f"🧱 {res.get('open_positions', 0)} positions already open (max "
+                     f"{res.get('max_open')}), so at most {res.get('arm_slots', 0)} new "
+                     "armed this scan: more same-way alts at once is one bigger bet, not "
+                     "more diversification.")
     lines.append(f"\n<b>{res.get('actionable', 0)} valid setups → {len(armed)} armed</b>")
     for a in armed:
         arrow = "▲" if a["direction"] == "long" else "▼"

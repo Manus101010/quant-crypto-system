@@ -353,8 +353,14 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
             r["_status"] = "not_selected"
             eligible.append(r)
     held_excluded = sorted({r["ticker"] for r in rows if r["_held"]})
+    # Concurrent cap: open trades (paper or taken, this tracking period: the same
+    # set that blocks coins above) + new arms may not exceed MAX_OPEN_POSITIONS.
+    from config import MAX_OPEN_POSITIONS
+    n_open = len(open_all)
+    slots = max(0, MAX_OPEN_POSITIONS - n_open)
+    n_arm = min(top_n, slots)
     # Diversify: cap any single setup so the armed set is a spread across types.
-    top = _diversify(eligible, top_n, max_per_setup)
+    top = _diversify(eligible, n_arm, max_per_setup) if n_arm > 0 else []
 
     # Verdict per open trade from THIS scan: still in a validated setup (same
     # direction) → hold with confidence; gone → review the position.
@@ -376,6 +382,8 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
               "wide_stop_excluded": wide_stop_excluded,
               "crowded_excluded": crowded_excluded, "held_excluded": held_excluded,
               "held_status": held_status, "btc_below_200d": btc_down,
+              "open_positions": n_open, "max_open": MAX_OPEN_POSITIONS,
+              "slots_limited": n_arm < top_n, "arm_slots": n_arm,
               "long_gate_reason": gate_reason}
 
     # ── Regime gate: the setups' edge is regime-dependent (strong in trend,

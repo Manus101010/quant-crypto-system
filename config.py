@@ -124,6 +124,10 @@ ENTRY_MAX_SLIP_PCT = 0.3       # don't chase more than this past the signal pric
 SIZING_FEE_PCT = 0.15
 CANDLE_VENUE = "bybit"
 # Max 5 armed per scan (was 15): same-direction alts move together, so a big batch is one bet.
+# At most this many positions open at once (paper or taken, current tracking
+# period); research-backed limit. Same-direction alts move together, so more at
+# once is one bigger bet. A scan arms at most (MAX_OPEN_POSITIONS - open) setups.
+MAX_OPEN_POSITIONS = 10
 AUTO_SCAN_PARAMS = {"source": "bybit_perps", "top_n": 5, "expiry_hours": 72,
                     "min_vol_usd_m": 0.5, "max_stop_pct": 25.0}
 
