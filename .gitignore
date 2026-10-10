@@ -18,6 +18,7 @@ data/*.json
 !data/crypto_validation.json
 !data/events_manual.json
 !data/breadth_universe.json
+!data/bybit_perps.json
 *.log
 
 # OS

@@ -11,6 +11,7 @@ degrades gracefully to the next. All clients set enableRateLimit=True so ccxt
 paces requests within each venue's public limits.
 """
 from __future__ import annotations
+import os
 import time
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -117,6 +118,27 @@ def list_spot_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
     return out
 
 
+_geo_blocked: set[str] = set()          # venues that refuse this host's country
+_GEO_FALLBACK = "mexc"                  # perp candles for a blocked venue's coins
+
+
+def _is_geo_block(exc: Exception) -> bool:
+    s = str(exc)
+    return any(k in s for k in ("403", "451", "block access from your country", "restricted location"))
+
+
+def _saved_universe(exchange: str) -> list[str]:
+    """Committed list of a venue's perps (data/<venue>_perps.json), refreshed by
+    scripts/refresh_universe.py from a machine the venue allows."""
+    try:
+        import json
+        from config import ROOT_DIR
+        return list(json.loads((ROOT_DIR / "data" / f"{exchange}_perps.json").read_text())["symbols"])
+    except Exception as exc:                # noqa: BLE001
+        log.warning("exchange: no saved universe for %s — %s", exchange, exc)
+        return []
+
+
 _perp_info: dict[str, tuple[str, float]] = {}            # "venue:BASE-USD" -> (swap symbol, contract size)
 _COMMODITIES = {"XAU", "XAUT", "PAXG", "SILVER", "USOIL", "UKOIL", "NGAS", "COPPER", "XPD", "XPT"}
 
@@ -137,9 +159,21 @@ def list_perp_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
     if ex is None:
         return []
     try:
+        if os.getenv("FORCE_GEO_BLOCK") == exchange:      # test hook: simulate a US host
+            raise RuntimeError("403 Forbidden (simulated geo-block)")
         markets = ex.load_markets()
     except Exception as exc:                # noqa: BLE001
-        log.warning("exchange: load_markets(%s) failed — %s", exchange, exc)
+        log.warning("exchange: load_markets(%s) failed — %s", exchange, str(exc)[:160])
+        if _is_geo_block(exc):
+            # Bybit (and Binance) refuse US IPs — GitHub Actions and Streamlit Cloud
+            # are US-hosted. Use the saved universe; candles come from _GEO_FALLBACK.
+            _geo_blocked.add(exchange)
+            res = _saved_universe(exchange)
+            if res:
+                _market_cache[key] = (now, res)
+                log.info("exchange: %s is geo-blocked here — using the saved list of %d perps",
+                         exchange, len(res))
+            return res
         return []
     from utils.crypto_universe import _BLOCKLIST
     out = set()
@@ -195,6 +229,9 @@ def get_ohlcv(symbol: str, timeframe: str = "1d", limit: int = 400,
             list_perp_symbols(exchange)        # cached; fills the perp map once
         except Exception:                      # noqa: BLE001
             pass
+    if exchange in _geo_blocked:
+        df = get_ohlcv(symbol, timeframe, limit, _GEO_FALLBACK)
+        return df if not df.empty else get_ohlcv(symbol, timeframe, limit, None)
     if exchange and f"{exchange}:{symbol.strip().upper()}" in _perp_info:
         # Perp universe: use the perp's own candles (what is actually traded).
         df = _perp_ohlcv(symbol, timeframe, limit, exchange)
@@ -203,6 +240,8 @@ def get_ohlcv(symbol: str, timeframe: str = "1d", limit: int = 400,
     ccxt_sym = to_ccxt_symbol(symbol)
     chain = [exchange] if exchange else _SPOT_CHAIN
     for name in chain:
+        if name in _geo_blocked and len(chain) > 1:
+            continue                               # don't keep knocking on a blocked door
         ex = _client(name)
         if ex is None:
             continue
@@ -217,6 +256,8 @@ def get_ohlcv(symbol: str, timeframe: str = "1d", limit: int = 400,
                 df[c] = pd.to_numeric(df[c], errors="coerce")
             return df.dropna(subset=["close"])
         except Exception as exc:           # noqa: BLE001
+            if _is_geo_block(exc):
+                _geo_blocked.add(name)
             log.debug("exchange: %s ohlcv %s failed — %s", name, ccxt_sym, exc)
             continue
     log.warning("exchange: no OHLC for %s on any venue", symbol)
