@@ -46,6 +46,18 @@ except Exception as _e:
 st.divider()
 
 # ── Controls ──────────────────────────────────────────────────────────────────
+# Defaults match the scheduled cloud scans (config.AUTO_SCAN_PARAMS), so a manual
+# scan arms the same way the automatic ones do unless you change something.
+from config import AUTO_SCAN_PARAMS as _AP
+
+
+def _opts(options: list, value) -> tuple[list, int]:
+    """Options with the config value included, and its index."""
+    opts = list(options) if value in options else sorted(set(options) | {value},
+                                                         key=lambda v: (isinstance(v, str), v))
+    return opts, opts.index(value)
+
+
 c1, c2, c3 = st.columns([1.4, 1, 1])
 with c1:
     source_lbl = st.selectbox(
@@ -62,8 +74,9 @@ with c1:
     if src == "top_mcap":
         universe = st.selectbox("Top by mcap", [50, 100, 200, 300, 500], index=1)
 with c2:
-    top_n = st.slider("Arm top N", 3, 25, 10)
-    min_vol_m = st.selectbox("Min 24h volume", [0.0, 0.5, 1.0, 5.0, 10.0], index=2,
+    top_n = st.slider("Arm top N", 3, 25, int(_AP["top_n"]))
+    _vol_opts, _vol_i = _opts([0.0, 0.5, 1.0, 5.0, 10.0], float(_AP["min_vol_usd_m"]))
+    min_vol_m = st.selectbox("Min 24h volume", _vol_opts, index=_vol_i,
                              format_func=lambda v: "off" if v == 0 else f"${v:g}M")
     risk_usd = st.number_input("Risk / trade ($)", min_value=0.0, max_value=100000.0,
                                value=float(st.session_state.get("risk_usd",
@@ -74,8 +87,14 @@ with c2:
                                     "the point of a wide ATR stop is a SMALL position.")
     st.session_state["risk_usd"] = risk_usd
 with c3:
-    expiry = st.selectbox("Trigger expiry (h)", [24, 48, 72, 168], index=1)
-    max_stop_lbl = st.selectbox("Max stop distance", ["off", "25%", "40%", "60%"], index=2,
+    _exp_opts, _exp_i = _opts([24, 48, 72, 168], int(_AP["expiry_hours"]))
+    expiry = st.selectbox("Trigger expiry (h)", _exp_opts, index=_exp_i)
+    _ms = _AP.get("max_stop_pct")
+    _ms_lbl = "off" if not _ms else f"{float(_ms):g}%"
+    _ms_opts = ["off", "25%", "40%", "60%"]
+    if _ms_lbl not in _ms_opts:
+        _ms_opts.append(_ms_lbl)
+    max_stop_lbl = st.selectbox("Max stop distance", _ms_opts, index=_ms_opts.index(_ms_lbl),
                                 help="Don't arm setups whose stop is further than this from "
                                      "entry — a full-size position there is a huge single loss.")
     max_stop_pct = None if max_stop_lbl == "off" else float(max_stop_lbl.rstrip("%"))
@@ -98,6 +117,11 @@ if run:
     spin = (f"Scanning {source_lbl} via ccxt … (a minute or two)"
             if is_mexc else f"Scanning top {universe} coins via ccxt … (~20-40s)")
     with st.spinner(spin):
+        if regime_score is None:
+            # Same regime safety as the scheduled scans, whether or not the Macro
+            # Gate page was opened first (autoscan computes it the same way).
+            from triggers.autoscan import _regime_score
+            regime_score = _regime_score()
         from triggers.scan import run_scan_and_arm
         res = run_scan_and_arm(universe_size=universe, top_n=top_n,
                                regime_score=regime_score, expiry_hours=expiry,
@@ -251,7 +275,11 @@ def _bot_hint(direction, entry, stop, target, label, risk_usd) -> str:
         if not e or not sp or not risk_usd:
             return ""
         atr = abs(e - sp) / float(_mgmt(label).get("stop_mult") or 3.0)
-        g = grid_for_signal(direction, e, sp, _price(target), atr, float(risk_usd))
+        from config import POSITION_MARGIN_USD, MAX_LOSS_PCT_OF_MARGIN
+        g = grid_for_signal(direction, e, sp, _price(target), atr, float(risk_usd),
+                            margin_usd=POSITION_MARGIN_USD, max_loss_pct=MAX_LOSS_PCT_OF_MARGIN)
+        if g.get("loss_cap"):
+            return ""                               # would lose > 25% of the margin
         if not g.get("ok"):
             return (f"<div style='margin-top:6px;font-size:12px;color:#8a8f98'>🤖 Grid bot: "
                     f"not suggested ({g.get('note', '')})</div>")
@@ -544,8 +572,8 @@ try:
         f"border-radius:6px;margin-bottom:10px'>🔥 <b>Portfolio heat</b> — "
         f"<b style='color:{_col}'>${_h['open_risk']:.0f}</b> of ${_h['cap']:.0f} at risk across "
         f"{_h['n_open']} trade(s) you took ({_h['n_long']} long / {_h['n_short']} short)"
-        + (f" — correlation-adjusted from ${_h['gross_risk']:.0f} (hedges offset, same-way "
-           f"trades counted as moving together). " if abs(_h['gross_risk'] - _h['open_risk']) >= 1
+        + (f" (correlation-adjusted ${_h['corr_risk']:.0f}, info only: the cap uses the plain sum "
+           f"and at most {_h['max_trades']} taken trades). " if abs(_h['corr_risk'] - _h['open_risk']) >= 1
            else ". ")
         + ("<b>Full — new alerts will say skip.</b>" if _h["left"] <= 0 else
            f"Next trade can risk <b>${_h['next_risk']:.0f}</b>.")
