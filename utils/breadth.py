@@ -61,24 +61,34 @@ def alt_breadth(force: bool = False) -> dict | None:
 LONGS_PAUSE_HOURS = 24
 
 
+def longs_paused_until():
+    """End (UTC, naive) of an active manual /longs off pause, else None. A pause
+    lapses on its own after LONGS_PAUSE_HOURS so the system never stays switched
+    off by accident; a lapsed pause (or one with no start time, set before this
+    rule) is cleared here so every reader sees longs as ON."""
+    import datetime as _dt
+    from triggers import db
+    if db.get_state("longs:paused") != "1":
+        return None
+    since = db.get_state("longs:paused_at")
+    if since:
+        until = _dt.datetime.fromisoformat(since) + _dt.timedelta(hours=LONGS_PAUSE_HOURS)
+        if _dt.datetime.utcnow() < until:
+            return until
+    db.set_state("longs:paused", "0")
+    return None
+
+
 def long_gate() -> tuple[bool, str]:
     """(longs allowed?, reason). BTC above 200d AND 50d, and alt breadth above the
     threshold. Missing data fails OPEN for breadth (logged), never for BTC data
     that loaded and says no."""
     from config import ALT_BREADTH_MIN, BTC_200D_LONG_GATE
     try:                                   # manual switch: /longs off in Telegram
-        from triggers import db
-        # A manual pause is temporary: it lapses on its own after PAUSE_HOURS so
-        # the system never stays switched off by accident. A pause with no start
-        # time (set before this rule) counts as lapsed.
-        if db.get_state("longs:paused") == "1":
-            import datetime as _dt
-            since = db.get_state("longs:paused_at")
-            if since:
-                until = _dt.datetime.fromisoformat(since) + _dt.timedelta(hours=LONGS_PAUSE_HOURS)
-                if _dt.datetime.utcnow() < until:
-                    return False, (f"longs paused by you until {until:%d %b %H:%M} UTC "
-                                   "(send /longs on to resume sooner)")
+        until = longs_paused_until()
+        if until:
+            return False, (f"longs paused by you until {until:%d %b %H:%M} UTC "
+                           "(send /longs on to resume sooner)")
     except Exception:                      # noqa: BLE001
         pass
     if not BTC_200D_LONG_GATE:

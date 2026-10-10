@@ -122,7 +122,11 @@ def handle(text: str) -> str:
         if a in ("on", "resume", "start"):
             db.set_state("longs:paused", "0")
             return "🟢 Longs switched ON — the market filter decides again. Next scan will arm them if it allows."
-        return "Longs are " + ("OFF" if db.get_state("longs:paused") == "1" else "ON") + ". Use /longs off or /longs on."
+        from utils.breadth import longs_paused_until
+        until = longs_paused_until()           # clears a pause that has lapsed
+        return ((f"Longs are OFF (paused by you until {until:%d %b %H:%M} UTC)." if until
+                 else "Longs are ON (the market filter decides).")
+                + " Use /longs off or /longs on.")
     if cmd == "/scan":
         return _scan()
     return "Unknown command. " + _HELP
