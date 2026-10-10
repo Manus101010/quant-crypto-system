@@ -165,8 +165,9 @@ def update_open_trades(notify: bool = True) -> dict:
         return {"open": 0, "closed": 0}
     syms = sorted({t["symbol"] for t in open_trades})
     candles = exchange.get_ohlcv_batch(syms, timeframe="1d", limit=120, exchange=_venue())
-    missing = [s for s in syms if s not in candles]
-    if missing:   # not on the trading venue → default chain
+    missing = [s for s in syms if s not in candles
+               and not exchange.in_perp_universe(s, _venue())]
+    if missing:   # not on the trading venue → default chain (never for perp-universe coins)
         candles.update(exchange.get_ohlcv_batch(missing, timeframe="1d", limit=120))
     closed = 0
     for t in open_trades:
@@ -365,7 +366,7 @@ def open_marks(trades: list[dict] | None = None) -> dict:
     syms = sorted({t["symbol"] for t in trades})
     px = {}
     got = exchange.get_ohlcv_batch(syms, timeframe="1d", limit=2, exchange=_venue())
-    missing = [s for s in syms if s not in got]
+    missing = [s for s in syms if s not in got and not exchange.in_perp_universe(s, _venue())]
     if missing:
         got.update(exchange.get_ohlcv_batch(missing, timeframe="1d", limit=2))
     for s, df in got.items():

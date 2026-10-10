@@ -76,6 +76,13 @@ def summary(name: str, res: dict, regime_score) -> str:
     syd = _n.strftime("%a ") + _n.strftime("%-I:%M%p").lower()
     label = {"morning": "Morning scan", "close": "Daily-close scan", "arvo": "Afternoon scan"}.get(name, "Scan")
     lines = [f"🛰 <b>{label}</b> — {syd} Sydney"]
+    if res.get("universe_empty"):
+        n = res.get("universe_size") or 0
+        lines.append("⚠️ <b>Scan saw no market data</b>: "
+                     + (f"no candles loaded for any of {n} coins" if n else
+                        f"the coin list ({res.get('source')}) came back empty")
+                     + ". The exchange is probably unreachable from here. Nothing was "
+                       "scanned; existing triggers are kept.")
     try:
         from utils import btc_regime
         r = btc_regime.get_btc_regime()

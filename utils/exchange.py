@@ -140,7 +140,46 @@ def _saved_universe(exchange: str) -> list[str]:
 
 
 _perp_info: dict[str, tuple[str, float]] = {}            # "venue:BASE-USD" -> (swap symbol, contract size)
-_COMMODITIES = {"XAU", "XAUT", "PAXG", "SILVER", "USOIL", "UKOIL", "NGAS", "COPPER", "XPD", "XPT"}
+_COMMODITIES = {"XAU", "XAUT", "PAXG", "SILVER", "USOIL", "UKOIL", "NGAS", "COPPER", "XPD", "XPT",
+                "XAG", "CL", "BZ"}
+# Stock / ETF / forex perps some venues list next to crypto (Bybit has AAPL, NVDA,
+# EURUSD...). Venues that tag them (MEXC conceptPlate) are filtered by tag; this
+# is the conservative backstop for names a venue does not tag. Crypto only.
+_NON_CRYPTO = {"NVDA", "TSLA", "COIN", "HOOD", "IBIT", "JNJ", "NOKIA", "LENOVO", "BYD",
+               "MAGS", "SPXL", "XLF", "XLP", "CVNA", "CORZ", "BTDR", "CONL", "BMNU", "CGNX",
+               "HUAHONG", "SENSETIME", "MEITU", "LAOPU", "YOFC", "GIGADEVICE", "SDGR",
+               "EURUSD", "GBPUSD", "USDJPY"}
+_STOCK_WORDS = ("stock", "tradfi", "etf", "equity")
+
+
+def _is_tradfi_market(m: dict) -> bool:
+    """True when a venue's own market metadata marks it as a stock/ETF/index."""
+    info = m.get("info") or {}
+    zones = " ".join(map(str, info.get("conceptPlate") or []))
+    tags = " ".join(str(info.get(k) or "") for k in ("symbolType", "contractType", "category"))
+    return ("tradfi" in zones or "Stock" in zones or "ETF" in zones or "stockindex" in zones
+            or any(w in tags.lower() for w in _STOCK_WORDS))
+
+
+def mexc_tradfi_bases() -> tuple[set[str], set[str]]:
+    """(bases MEXC tags as stock/ETF/tradfi, bases MEXC lists as crypto perps)."""
+    ex = _client("mexc")
+    trad, crypto = set(), set()
+    for m in (ex.load_markets() if ex else {}).values():
+        if not m.get("swap"):
+            continue
+        b = str(m.get("base", "")).upper()
+        (trad if _is_tradfi_market(m) else crypto).add(b)
+    return trad, crypto
+
+
+def is_non_crypto(base: str, trad: set[str], crypto: set[str]) -> bool:
+    """Stock/ETF/forex check for another venue's base, using MEXC's tagging. MEXC
+    names stocks 'XXXSTOCK'; a plain 'XXX' counts as a stock only when MEXC has
+    no crypto perp of that name (so DASH, QNT, STX stay; ADI, ACN, AAPL go)."""
+    b = base.upper()
+    return (b in trad or b.endswith("STOCK") or b in _NON_CRYPTO or b in _COMMODITIES
+            or (b + "STOCK" in trad and b not in crypto))
 
 
 def list_perp_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
@@ -164,17 +203,18 @@ def list_perp_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
         markets = ex.load_markets()
     except Exception as exc:                # noqa: BLE001
         log.warning("exchange: load_markets(%s) failed — %s", exchange, str(exc)[:160])
-        if _is_geo_block(exc):
-            # Bybit (and Binance) refuse US IPs — GitHub Actions and Streamlit Cloud
-            # are US-hosted. Use the saved universe; candles come from _GEO_FALLBACK.
+        # Bybit (and Binance) refuse US IPs — GitHub Actions and Streamlit Cloud
+        # are US-hosted — and any venue can time out. Either way use the saved
+        # universe (if there is one); candles then come from _GEO_FALLBACK perps.
+        res = _saved_universe(exchange)
+        if res:
             _geo_blocked.add(exchange)
-            res = _saved_universe(exchange)
-            if res:
-                _market_cache[key] = (now, res)
-                log.info("exchange: %s is geo-blocked here — using the saved list of %d perps",
-                         exchange, len(res))
-            return res
-        return []
+            _market_cache[key] = (now, res)
+            log.info("exchange: %s unavailable here (%s) — using the saved list of %d perps",
+                     exchange, "geo-blocked" if _is_geo_block(exc) else "load failed", len(res))
+        elif _is_geo_block(exc):
+            _geo_blocked.add(exchange)
+        return res
     from utils.crypto_universe import _BLOCKLIST
     out = set()
     for m in markets.values():
@@ -182,13 +222,19 @@ def list_perp_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
                 and m.get("settle") == quote):
             continue
         base = str(m.get("base", "")).upper()
-        zones = " ".join(map(str, (m.get("info") or {}).get("conceptPlate") or []))
-        if ("tradfi" in zones or "Stock" in zones or not base or base in _BLOCKLIST
-                or base in _COMMODITIES or base.endswith(_LEV_SUFFIXES)):
+        if (_is_tradfi_market(m) or not base or base in _BLOCKLIST or base in _COMMODITIES
+                or base in _NON_CRYPTO or base.endswith("STOCK") or base.endswith(_LEV_SUFFIXES)):
             continue
         t = f"{base}-USD"
         out.add(t)
         _perp_info[f"{exchange}:{t}"] = (m["symbol"], float(m.get("contractSize") or 1.0))
+    if exchange != "mexc":
+        # Venues that don't tag stocks (Bybit): use MEXC's tagging as well.
+        try:
+            trad, crypto = mexc_tradfi_bases()
+            out = {t for t in out if not is_non_crypto(t[:-4], trad, crypto)}
+        except Exception as exc:            # noqa: BLE001
+            log.warning("exchange: MEXC stock tagging unavailable — %s", exc)
     res = sorted(out)
     _market_cache[key] = (now, res)
     log.info("exchange: %s has %d crypto %s perps", exchange, len(res), quote)
@@ -217,6 +263,61 @@ def _perp_ohlcv(symbol: str, timeframe: str, limit: int, exchange: str) -> pd.Da
     return df.dropna(subset=["close"])
 
 
+_PREFIXES = (1000000, 10000, 1000)          # Bybit-style multiplier prefixes, longest first
+
+
+def _split_prefix(base: str) -> tuple[str, int]:
+    for p in _PREFIXES:
+        if base.startswith(str(p)) and len(base) > len(str(p)):
+            return base[len(str(p)):], p
+    return base, 1
+
+
+def _fallback_perp_ohlcv(symbol: str, timeframe: str, limit: int) -> pd.DataFrame:
+    """Candles for a blocked venue's perp from _GEO_FALLBACK's PERP of the SAME
+    coin — never a spot pair or a same-ticker different asset. Multiplier prefixes
+    are mapped (Bybit 1000PEPE = MEXC PEPE x 1000) and prices scaled to the
+    requested unit, so levels match what you trade. Empty if there is no match."""
+    fb = _GEO_FALLBACK
+    if not any(k.startswith(fb + ":") for k in _perp_info):
+        try:
+            list_perp_symbols(fb)
+        except Exception:                      # noqa: BLE001
+            pass
+    base = symbol.strip().upper()
+    base = base[:-4] if base.endswith("-USD") else base
+    core, mult = _split_prefix(base)
+    cands = [(base, 1.0)]
+    if mult > 1:                               # only a prefixed name may map across units
+        cands += [(f"{p}{core}" if p > 1 else core, mult / p)
+                  for p in (*_PREFIXES, 1) if p != mult]
+    for b, factor in cands:
+        if f"{fb}:{b}-USD" not in _perp_info:
+            continue
+        df = _perp_ohlcv(f"{b}-USD", timeframe, limit, fb)
+        if df.empty:
+            return df
+        if factor != 1.0:
+            df = df.copy()
+            for c in ("open", "high", "low", "close"):
+                df[c] = df[c] * factor
+            df["volume"] = df["volume"] / factor
+        return df
+    return pd.DataFrame()
+
+
+def in_perp_universe(symbol: str, exchange: str | None) -> bool:
+    """True when `symbol` belongs to `exchange`'s perp universe (live or saved list).
+    Such symbols must only ever get that perp's candles (or the fallback venue's
+    perp of the same coin), never a spot pair of the same ticker elsewhere."""
+    if exchange not in ("bybit", "mexc"):
+        return False
+    try:
+        return symbol.strip().upper() in set(list_perp_symbols(exchange))
+    except Exception:                          # noqa: BLE001
+        return False
+
+
 def get_ohlcv(symbol: str, timeframe: str = "1d", limit: int = 400,
               exchange: str | None = None) -> pd.DataFrame:
     """
@@ -229,14 +330,13 @@ def get_ohlcv(symbol: str, timeframe: str = "1d", limit: int = 400,
             list_perp_symbols(exchange)        # cached; fills the perp map once
         except Exception:                      # noqa: BLE001
             pass
-    if exchange in _geo_blocked:
-        df = get_ohlcv(symbol, timeframe, limit, _GEO_FALLBACK)
-        return df if not df.empty else get_ohlcv(symbol, timeframe, limit, None)
+    if exchange in _geo_blocked and exchange != _GEO_FALLBACK:
+        # Venue unreachable: the fallback venue's perp of the same coin, or nothing.
+        return _fallback_perp_ohlcv(symbol, timeframe, limit)
     if exchange and f"{exchange}:{symbol.strip().upper()}" in _perp_info:
-        # Perp universe: use the perp's own candles (what is actually traded).
-        df = _perp_ohlcv(symbol, timeframe, limit, exchange)
-        if not df.empty:
-            return df
+        # Perp universe: only the perp's own candles (what is actually traded);
+        # no spot fallback, which can be a different asset with the same ticker.
+        return _perp_ohlcv(symbol, timeframe, limit, exchange)
     ccxt_sym = to_ccxt_symbol(symbol)
     chain = [exchange] if exchange else _SPOT_CHAIN
     for name in chain:

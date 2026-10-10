@@ -518,7 +518,10 @@ def poll_once() -> dict:
     from config import CANDLE_VENUE
     candles = exchange.get_ohlcv_batch(symbols, timeframe="1d", limit=_CANDLE_LIMIT,
                                        exchange=CANDLE_VENUE)
-    missing = [s_ for s_ in symbols if s_ not in candles]
+    # Coins of the venue's perp universe never fall back to another venue's
+    # same-ticker SPOT pair (can be a different asset); older triggers still can.
+    missing = [s_ for s_ in symbols if s_ not in candles
+               and not exchange.in_perp_universe(s_, CANDLE_VENUE)]
     if missing:
         candles.update(exchange.get_ohlcv_batch(missing, timeframe="1d", limit=_CANDLE_LIMIT))
 

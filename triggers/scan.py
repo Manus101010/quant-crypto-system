@@ -235,6 +235,11 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     else:
         tickers = get_top_crypto(universe_size)
         exchange = None
+    if not tickers:
+        # Venue unreachable and no saved list: say so instead of a silent "0 of 0".
+        log.warning("scan_and_arm: empty universe for source %s", source)
+        return {"candidates": [], "armed": [], "actionable": 0, "universe_empty": True,
+                "universe_size": 0, "source": source}
     df = run_crypto_scan(
         tickers=tickers,
         criteria=ScanCriteria(min_price=0.0, above_sma200=False,
@@ -243,7 +248,9 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         exchange=exchange,
     )
     if df.empty:
-        return {"candidates": [], "armed": []}
+        log.warning("scan_and_arm: no candles for any of %d coins", len(tickers))
+        return {"candidates": [], "armed": [], "actionable": 0, "universe_empty": True,
+                "universe_size": len(tickers), "source": source}
 
     # BUY = long entry, SELL = short entry (MEXC futures/perp). SELL/EXIT is a
     # take-profit flag on an open long, not an entry — excluded.
