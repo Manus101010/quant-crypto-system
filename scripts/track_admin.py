@@ -23,9 +23,8 @@ from triggers import db as tdb  # noqa: E402
 
 
 def export(path: str = "track_export.json") -> None:
-    rows = []
-    for st in ("active", "fired", "expired", "cancelled", "invalidated"):
-        rows += tdb.get_triggers(st, limit=100000)
+    # Every row, whatever its status (too_extended etc. included): it is a backup.
+    rows = tdb.get_triggers(None, limit=10_000_000)
     seen, uniq = set(), []
     for r in rows:
         if r["id"] not in seen:
