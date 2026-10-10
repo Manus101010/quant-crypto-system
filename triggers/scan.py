@@ -16,6 +16,7 @@ Signal-only: arming a trigger sends the user an alert later; it never trades.
 from __future__ import annotations
 import re
 import json
+import math
 import datetime
 from triggers import db as tdb
 from skills.scanner import run_crypto_scan, ScanCriteria
@@ -146,8 +147,8 @@ def _diversify(rows: list[dict], n: int, max_per_setup: int | None) -> list[dict
       1. DEDUPE BY SYMBOL — one trigger per coin, keep its highest-composite setup.
       2. PER-SETUP CAP — round-robin across setup types (best of each first), no
          type exceeds `max_per_setup`, so the set is a spread not 20 copies.
-      3. HARD 50% CEILING — no single setup type may ever exceed half of `n`, even
-         via backfill. When only one type is firing we LEAVE SLOTS EMPTY rather
+      3. HARD 50% CEILING — no single setup type may ever exceed half of `n`
+         (rounded up: 3 of 5), even via backfill. When only one type is firing we LEAVE SLOTS EMPTY rather
          than fake diversity — that is deliberate, not a bug.
     """
     from collections import defaultdict
@@ -165,7 +166,7 @@ def _diversify(rows: list[dict], n: int, max_per_setup: int | None) -> list[dict
     if not max_per_setup or max_per_setup <= 0:
         return rows[:n]
 
-    ceiling = max(1, n // 2)                 # hard: no type past 50% of slots
+    ceiling = max(1, math.ceil(n / 2))       # hard: no type past 50% of slots (3 of 5)
     cap = min(max_per_setup, ceiling)
 
     buckets: dict[tuple, list] = defaultdict(list)
