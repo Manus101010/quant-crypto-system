@@ -261,13 +261,18 @@ def _grid_block(trg: dict, price: float, m: dict) -> str:
     try:
         from desk.gridplan import grid_for_signal
         from triggers.outcomes import portfolio_heat
+        from config import POSITION_MARGIN_USD, MAX_LOSS_PCT_OF_MARGIN
         risk = portfolio_heat()["next_risk"]
         if risk <= 0:
             return ""
         stop = trg.get("stop")
         atr = abs(price - stop) / float(m.get("stop_mult") or 3.0) if stop else None
+        # Same rule as the plain trade: $50 margin, worst case <= 25% of it.
         g = grid_for_signal(trg.get("direction") or "long", price, stop,
-                            trg.get("target"), atr, risk)
+                            trg.get("target"), atr, risk, margin_usd=POSITION_MARGIN_USD,
+                            max_loss_pct=MAX_LOSS_PCT_OF_MARGIN)
+        if g.get("loss_cap"):
+            return ""                              # would lose > 25% of margin: hidden
         if not g.get("ok"):
             return f"🤖 <b>Grid bot:</b> not suggested here ({g.get('note', '')})."
         f = _fmt_price
@@ -310,15 +315,18 @@ def _sizing_line(trg: dict, price: float) -> str:
         if h["next_risk"] <= 0:
             return (f"{budget}\n⚠️ <b>You're at your limit</b> — skip this one, or wait "
                     f"until an open trade is closed or safe.")
-        from config import POSITION_MARGIN_USD, MAX_LOSS_PCT_OF_MARGIN, MAX_LEVERAGE
+        from config import (POSITION_MARGIN_USD, MAX_LOSS_PCT_OF_MARGIN, MAX_LEVERAGE,
+                            ENTRY_MAX_SLIP_PCT, SIZING_FEE_PCT)
         coin = trg["symbol"].replace("-USD", "")
-        # Fixed margin, leverage chosen so the stop loses at most MAX_LOSS_PCT of it.
-        lev = int(min(MAX_LEVERAGE, (MAX_LOSS_PCT_OF_MARGIN / 100) / frac))
+        # Fixed margin, leverage chosen so the WORST allowed case (entry filled at
+        # the slip cap, plus round-trip fees) loses at most MAX_LOSS_PCT of it.
+        worst = frac + (ENTRY_MAX_SLIP_PCT + SIZING_FEE_PCT) / 100
+        lev = int(min(MAX_LEVERAGE, (MAX_LOSS_PCT_OF_MARGIN / 100) / worst))
         if lev < 1:
-            return (f"💰 <b>Size:</b> skip. The stop is {frac * 100:.1f}% away, more than "
-                    f"your {MAX_LOSS_PCT_OF_MARGIN:.0f}% max loss even at 1x.\n{budget}")
+            return (f"💰 <b>Size:</b> skip. The stop is {frac * 100:.1f}% away (plus slip and fees), "
+                    f"more than your {MAX_LOSS_PCT_OF_MARGIN:.0f}% max loss even at 1x.\n{budget}")
         pos = POSITION_MARGIN_USD * lev
-        loss = pos * frac
+        loss = pos * worst
         if loss > h["next_risk"] + 1e-9:
             return (f"{budget}\n⚠️ <b>You're at your limit</b> — skip this one, or wait "
                     f"until an open trade is closed or safe.")
@@ -326,8 +334,9 @@ def _sizing_line(trg: dict, price: float) -> str:
         win = f", hit the target and you make ~${pos * abs(tgt - price) / price:,.2f}" if tgt else ""
         return (f"💰 <b>Size:</b> <b>${POSITION_MARGIN_USD:,.0f} margin at {lev}x</b> "
                 f"(isolated) = a ${pos:,.0f} position in {coin}\n"
-                f"    If the stop hits you lose ~${loss:,.2f} "
-                f"({loss / POSITION_MARGIN_USD * 100:.0f}% of the margin){win}.\n{budget}")
+                f"    If the stop hits you lose ~${pos * frac:,.2f}, at most ~${loss:,.2f} "
+                f"({loss / POSITION_MARGIN_USD * 100:.0f}% of the margin) with a "
+                f"{ENTRY_MAX_SLIP_PCT:g}% worse entry and fees{win}.\n{budget}")
     except Exception as exc:                        # noqa: BLE001
         log.debug("sizing line failed: %s", exc)
         return ""

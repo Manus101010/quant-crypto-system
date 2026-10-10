@@ -251,7 +251,11 @@ def _bot_hint(direction, entry, stop, target, label, risk_usd) -> str:
         if not e or not sp or not risk_usd:
             return ""
         atr = abs(e - sp) / float(_mgmt(label).get("stop_mult") or 3.0)
-        g = grid_for_signal(direction, e, sp, _price(target), atr, float(risk_usd))
+        from config import POSITION_MARGIN_USD, MAX_LOSS_PCT_OF_MARGIN
+        g = grid_for_signal(direction, e, sp, _price(target), atr, float(risk_usd),
+                            margin_usd=POSITION_MARGIN_USD, max_loss_pct=MAX_LOSS_PCT_OF_MARGIN)
+        if g.get("loss_cap"):
+            return ""                               # would lose > 25% of the margin
         if not g.get("ok"):
             return (f"<div style='margin-top:6px;font-size:12px;color:#8a8f98'>🤖 Grid bot: "
                     f"not suggested ({g.get('note', '')})</div>")

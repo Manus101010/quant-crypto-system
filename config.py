@@ -118,6 +118,10 @@ BYBIT_TRAIL = {
     "Volume Breakout":           {"k_atr": 6.0,  "activate_r": 0.0},
 }
 ENTRY_MAX_SLIP_PCT = 0.3       # don't chase more than this past the signal price
+# Round-trip fees (entry + stop, taker) as % of the position, added to the stop
+# distance with ENTRY_MAX_SLIP_PCT when choosing leverage, so the WORST allowed
+# fill still loses at most MAX_LOSS_PCT_OF_MARGIN of the margin.
+SIZING_FEE_PCT = 0.15
 CANDLE_VENUE = "bybit"
 # Max 5 armed per scan (was 15): same-direction alts move together, so a big batch is one bet.
 AUTO_SCAN_PARAMS = {"source": "bybit_perps", "top_n": 5, "expiry_hours": 72,
