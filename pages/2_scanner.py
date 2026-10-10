@@ -544,8 +544,8 @@ try:
         f"border-radius:6px;margin-bottom:10px'>🔥 <b>Portfolio heat</b> — "
         f"<b style='color:{_col}'>${_h['open_risk']:.0f}</b> of ${_h['cap']:.0f} at risk across "
         f"{_h['n_open']} trade(s) you took ({_h['n_long']} long / {_h['n_short']} short)"
-        + (f" — correlation-adjusted from ${_h['gross_risk']:.0f} (hedges offset, same-way "
-           f"trades counted as moving together). " if abs(_h['gross_risk'] - _h['open_risk']) >= 1
+        + (f" (correlation-adjusted ${_h['corr_risk']:.0f}, info only: the cap uses the plain sum "
+           f"and at most {_h['max_trades']} taken trades). " if abs(_h['corr_risk'] - _h['open_risk']) >= 1
            else ". ")
         + ("<b>Full — new alerts will say skip.</b>" if _h["left"] <= 0 else
            f"Next trade can risk <b>${_h['next_risk']:.0f}</b>.")

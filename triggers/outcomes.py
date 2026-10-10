@@ -345,10 +345,15 @@ def portfolio_heat(risk_per_trade: float | None = None,
     start = track_from()
     paper = [t for t in paper if _in_period(t, start)]
     gross = sum(_open_risk_frac(t) * rpt for t in open_)
-    at_risk = _correlated_risk(open_, rpt, gross)
+    # The cap is enforced on the PLAIN SUM of risk (your rule: $125 = 10 x $12.50)
+    # and on the number of taken trades (each uses margin even once its stop is
+    # past entry). The correlation-weighted figure is shown for information only.
+    corr = _correlated_risk(open_, rpt, gross)
     n_long = sum(1 for t in open_ if t.get("direction") != "short")
-    left = max(0.0, cap - at_risk)
-    return {"open_risk": round(at_risk, 2), "gross_risk": round(gross, 2),
+    max_n = int(cap // rpt) if rpt > 0 else 0
+    left = max(0.0, cap - gross) if len(open_) < max_n else 0.0
+    return {"open_risk": round(gross, 2), "gross_risk": round(gross, 2),
+            "corr_risk": round(corr, 2), "max_trades": max_n,
             "cap": cap, "left": round(left, 2),
             "n_open": len(open_), "n_long": n_long, "n_short": len(open_) - n_long,
             "next_risk": round(min(rpt, left), 2), "risk_per_trade": rpt,
