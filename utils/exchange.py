@@ -252,11 +252,17 @@ def _perp_ohlcv(symbol: str, timeframe: str, limit: int, exchange: str) -> pd.Da
     ex = _client(exchange)
     if not info or ex is None:
         return pd.DataFrame()
-    try:
-        rows = ex.fetch_ohlcv(info[0], timeframe=timeframe, limit=limit)
-    except Exception as exc:               # noqa: BLE001
-        log.debug("exchange: %s perp ohlcv %s failed — %s", exchange, info[0], exc)
-        return pd.DataFrame()
+    rows = None
+    for attempt in range(4):                # cloud hosts get throttled: retry with backoff
+        try:
+            rows = ex.fetch_ohlcv(info[0], timeframe=timeframe, limit=limit)
+            break
+        except Exception as exc:           # noqa: BLE001
+            _perp_fail[type(exc).__name__ + ": " + str(exc)[:90]] += 1
+            if attempt == 3:
+                log.debug("exchange: %s perp ohlcv %s failed — %s", exchange, info[0], exc)
+                return pd.DataFrame()
+            time.sleep(1.5 * (attempt + 1))
     if not rows:
         return pd.DataFrame()
     df = pd.DataFrame(rows, columns=["ts", "open", "high", "low", "close", "volume"])
@@ -268,6 +274,8 @@ def _perp_ohlcv(symbol: str, timeframe: str, limit: int, exchange: str) -> pd.Da
     return df.dropna(subset=["close"])
 
 
+import collections as _collections
+_perp_fail: "_collections.Counter[str]" = _collections.Counter()   # retry reasons (logged per batch)
 _perp_loaded: set[str] = set()                # venues whose perp map is fully loaded
 _perp_lock = threading.Lock()
 
@@ -398,6 +406,9 @@ def get_ohlcv_batch(symbols: list[str], timeframe: str = "1d", limit: int = 400,
             except Exception as exc:       # noqa: BLE001
                 log.debug("exchange: batch %s failed — %s", s, exc)
     log.info("exchange: OHLC for %d/%d symbols", len(out), len(symbols))
+    if _perp_fail:
+        log.info("exchange: perp candle retries — %s", dict(_perp_fail.most_common(3)))
+        _perp_fail.clear()
     return out
 
 
