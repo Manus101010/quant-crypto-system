@@ -27,11 +27,6 @@ const Pages = {
           <div class="metric-value" id="m-setups" style="color:#c084fc">—</div>
           <div class="metric-sub" id="m-scan-ts">Run scanner to populate</div>
         </div>
-        <div class="metric-card" style="--card-top:#f59e0b">
-          <div class="metric-label">Journal Win Rate</div>
-          <div class="metric-value" id="m-winrate" style="color:#fbbf24">—</div>
-          <div class="metric-sub" id="m-pnl">—</div>
-        </div>
       </div>
 
       <div class="row-3">
@@ -81,15 +76,6 @@ const Pages = {
       document.getElementById('m-picks').style.color  = '#60a5fa';
       document.getElementById('m-top-pick').textContent = `Top: ${top.ticker} (${top.blended_score})`;
     }
-
-    // Journal stats
-    try {
-      const stats = await API.getJournalStats();
-      document.getElementById('m-winrate').textContent = stats.total_trades > 0 ? stats.win_rate + '%' : '—';
-      document.getElementById('m-winrate').style.color = stats.win_rate >= 50 ? '#4ade80' : '#f87171';
-      document.getElementById('m-pnl').textContent =
-        stats.total_trades > 0 ? `${stats.total_trades} trades · Total P&L ${stats.total_pnl > 0 ? '+' : ''}${stats.total_pnl.toFixed(1)}%` : 'No trades logged';
-    } catch (_) {}
 
     startLogPoller('terminal-log');
   },
@@ -325,24 +311,6 @@ const Pages = {
       finally { if (btn) { btn.disabled = false; btn.textContent = '₿ Scan Crypto'; } }
     };
 
-    // ── Journal helpers (defined on window so _scanCards onclick can call them) ──
-    window.logScanIdea = async (btn, ticker, price, setupLabel, mom3m, rsi14) => {
-      const macro = State.macroResult;
-      try {
-        await API.addJournal({
-          entry_type:   'idea',
-          ticker:       ticker,
-          rationale:    `Scanner setup: ${setupLabel}. Price $${price}. RSI ${parseFloat(rsi14).toFixed(1)}. 3M momentum ${parseFloat(mom3m) >= 0 ? '+' : ''}${parseFloat(mom3m).toFixed(1)}%.`,
-          tags:         'scanner,idea',
-          deploy_score: macro?.deployment_score ?? null,
-          regime:       macro?.regime ?? null,
-        });
-        btn.textContent = '✓ Logged';
-        btn.disabled = true;
-        btn.style.color = '#4ade80';
-      } catch (e) { alert('Journal log failed: ' + e.message); }
-    };
-
     // Strategy filter (client-side, no re-scan needed)
     window._filterScanResults = (tab, strat) => {
       const rows = window._lastScanRows || [];
@@ -356,30 +324,6 @@ const Pages = {
       document.querySelectorAll('.scan-strat-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.strat === strat);
       });
-    };
-
-    window.logAllScanIdeas = async (btn) => {
-      const rows = window._lastScanRows || [];
-      if (!rows.length) return;
-      const macro = State.macroResult;
-      let count = 0;
-      btn.disabled = true;
-      btn.textContent = '⏳ Logging…';
-      for (const r of rows) {
-        try {
-          await API.addJournal({
-            entry_type:   'idea',
-            ticker:       r.ticker,
-            rationale:    `Scanner: ${r.setup_label}. Price $${r.price}. RSI ${r.rsi_14?.toFixed(1)}. 3M momentum ${r.mom_3m_pct >= 0 ? '+' : ''}${r.mom_3m_pct?.toFixed(1)}%.`,
-            tags:         'scanner,batch,idea',
-            deploy_score: macro?.deployment_score ?? null,
-            regime:       macro?.regime ?? null,
-          });
-          count++;
-        } catch (_) {}
-      }
-      btn.textContent = `✓ Logged ${count}`;
-      btn.style.color = '#4ade80';
     };
   },
 
@@ -718,87 +662,6 @@ const Pages = {
           line: { color: '#00d4aa', width: 2 }, marker: { color: '#00d4aa', size: 7 } },
       ], { barmode: 'group', height: 300, yaxis: { range: [0, 110] } });
     }, 50);
-  },
-
-  // ── Journal ───────────────────────────────────────────────────────────────
-  async journal(container) {
-    setTopbar('Journal',
-      `<button class="btn btn-primary btn-sm" onclick="toggleJournalForm()">➕ New Entry</button>`
-    );
-
-    container.innerHTML = `
-      <div id="journal-form-wrap" style="display:none;margin-bottom:18px">
-        <div class="panel">
-          <div class="panel-header"><div class="panel-title">New Journal Entry</div></div>
-          <div class="panel-body">
-            <div class="form-grid">
-              <div class="form-group"><label>Type</label>
-                <select id="j-type" class="form-select"><option>trade</option><option>idea</option><option>note</option><option>review</option></select>
-              </div>
-              <div class="form-group"><label>Ticker</label><input id="j-ticker" class="form-input" placeholder="AAPL"></div>
-              <div class="form-group"><label>Direction</label>
-                <select id="j-dir" class="form-select"><option value="">—</option><option>long</option><option>short</option><option>flat</option></select>
-              </div>
-              <div class="form-group"><label>Entry Price</label><input id="j-entry" class="form-input" type="number" step="0.01"></div>
-              <div class="form-group"><label>Exit Price</label><input id="j-exit" class="form-input" type="number" step="0.01"></div>
-              <div class="form-group"><label>Size %</label><input id="j-size" class="form-input" type="number" step="0.5"></div>
-            </div>
-            <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
-              <div class="form-group"><label>Tags</label><input id="j-tags" class="form-input" placeholder="momentum, earnings"></div>
-              <div class="form-group"><label>Deploy Score</label>
-                <input id="j-deploy" class="form-input" type="number" step="0.1"
-                  value="${State.macroResult ? State.macroResult.deployment_score.toFixed(1) : 50}">
-              </div>
-            </div>
-            <div class="form-group" style="margin-bottom:10px"><label>Rationale</label><textarea id="j-rat" class="form-textarea" rows="3"></textarea></div>
-            <div class="form-group" style="margin-bottom:14px"><label>Outcome / Notes</label><textarea id="j-out" class="form-textarea" rows="2"></textarea></div>
-            <div style="display:flex;gap:10px">
-              <button class="btn btn-primary" onclick="saveJournalEntry()">💾 Save Entry</button>
-              <button class="btn btn-secondary" onclick="toggleJournalForm()">Cancel</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div id="journal-stats" style="margin-bottom:18px"></div>
-      <div id="journal-entries"></div>
-    `;
-
-    await _loadJournal();
-
-    window.toggleJournalForm = () => {
-      const el = document.getElementById('journal-form-wrap');
-      el.style.display = el.style.display === 'none' ? 'block' : 'none';
-    };
-
-    window.saveJournalEntry = async () => {
-      const body = {
-        entry_type:  document.getElementById('j-type').value,
-        ticker:      document.getElementById('j-ticker').value.toUpperCase() || null,
-        direction:   document.getElementById('j-dir').value || null,
-        entry_price: parseFloat(document.getElementById('j-entry').value) || null,
-        exit_price:  parseFloat(document.getElementById('j-exit').value) || null,
-        size_pct:    parseFloat(document.getElementById('j-size').value) || null,
-        tags:        document.getElementById('j-tags').value || null,
-        deploy_score:parseFloat(document.getElementById('j-deploy').value) || null,
-        regime:      State.macroResult ? State.macroResult.regime : null,
-        rationale:   document.getElementById('j-rat').value || null,
-        outcome:     document.getElementById('j-out').value || null,
-      };
-      try {
-        await API.addJournal(body);
-        document.getElementById('journal-form-wrap').style.display = 'none';
-        await _loadJournal();
-      } catch (err) {
-        alert('Save failed: ' + err.message);
-      }
-    };
-
-    window.deleteJournalEntry = async (id) => {
-      if (!confirm('Delete this entry?')) return;
-      await API.deleteJournal(id);
-      await _loadJournal();
-    };
   },
 
   // ── Paper Trades ──────────────────────────────────────────────────────────
@@ -1275,9 +1138,6 @@ function _scanCards(rows, type = 'stock', totalScanned = 0) {
         ${scanAge ? ` <span style="color:${scanStale?'#f59e0b':'#475569'}">· ${scanAge}${scanStale?' ⚠ stale':''}</span>` : ''}
         <span style="color:#475569"> — sorted by conviction</span>
       </div>
-      <button class="btn btn-secondary btn-sm" onclick="logAllScanIdeas(this)">
-        📔 Log All ${rows.length} to Journal
-      </button>
     </div>`;
 
   const cards = rows.map(r => {
@@ -1438,10 +1298,6 @@ function _scanCards(rows, type = 'stock', totalScanned = 0) {
         })()}
 
         <div style="display:flex;gap:6px">
-          <button class="btn btn-secondary btn-sm" style="flex:1;font-size:10.5px;padding:5px 10px"
-            onclick="logScanIdea(this,'${r.ticker}','${priceStr}','${r.setup_label.replace(/'/g,'')}','${r.mom_3m_pct}','${r.rsi_14}')">
-            📔 Journal
-          </button>
           ${r.trade && r.trade.action !== 'WAIT' ? `<button class="btn btn-primary btn-sm" style="flex:1;font-size:10.5px;padding:5px 10px"
             onclick="openPaperTradeModal(${JSON.stringify(r).replace(/"/g,'&quot;')})">
             ◎ Paper Trade
@@ -1958,67 +1814,5 @@ async function checkPaperTrades(btn) {
     // Reload the page to show updated state
     const container = document.getElementById('content');
     if (container) await Pages.papertrades(container);
-  }
-}
-
-async function _loadJournal() {
-  try {
-    const [jData, stats] = await Promise.all([API.getJournal(), API.getJournalStats()]);
-    const entries = jData.entries || [];
-
-    // Stats row
-    const sEl = document.getElementById('journal-stats');
-    if (sEl && stats.total_trades > 0) {
-      sEl.innerHTML = `
-        <div class="metrics-row" style="grid-template-columns:repeat(4,1fr)">
-          <div class="metric-card" style="--card-top:#00d4aa"><div class="metric-label">Trades</div><div class="metric-value" style="color:#00d4aa">${stats.total_trades}</div></div>
-          <div class="metric-card" style="--card-top:${stats.win_rate>=50?'#4ade80':'#f87171'}">
-            <div class="metric-label">Win Rate</div>
-            <div class="metric-value" style="color:${stats.win_rate>=50?'#4ade80':'#f87171'}">${stats.win_rate}%</div>
-          </div>
-          <div class="metric-card" style="--card-top:${stats.avg_pnl>=0?'#4ade80':'#f87171'}">
-            <div class="metric-label">Avg P&L</div>
-            <div class="metric-value" style="color:${stats.avg_pnl>=0?'#4ade80':'#f87171'}">${stats.avg_pnl>=0?'+':''}${stats.avg_pnl.toFixed(2)}%</div>
-          </div>
-          <div class="metric-card" style="--card-top:${stats.total_pnl>=0?'#4ade80':'#f87171'}">
-            <div class="metric-label">Total P&L</div>
-            <div class="metric-value" style="color:${stats.total_pnl>=0?'#4ade80':'#f87171'}">${stats.total_pnl>=0?'+':''}${stats.total_pnl.toFixed(2)}%</div>
-          </div>
-        </div>`;
-    }
-
-    const eEl = document.getElementById('journal-entries');
-    if (!eEl) return;
-    if (!entries.length) { eEl.innerHTML = '<div class="empty-state">No entries yet. Click ➕ New Entry to log a trade.</div>'; return; }
-
-    const icons = { trade:'🔵', idea:'💡', note:'📝', review:'🔍' };
-    eEl.innerHTML = entries.map(e => {
-      const pnl = e.pnl_pct;
-      const pnlStr = pnl != null ? `<span style="color:${pnl>=0?'#4ade80':'#f87171'};font-weight:700">${pnl>=0?'+':''}${pnl.toFixed(2)}%</span>` : '';
-      return `
-        <div class="journal-entry">
-          <div class="entry-header">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span style="font-size:15px">${icons[e.entry_type]||'📌'}</span>
-              <span style="font-weight:700;font-size:13.5px">${e.ticker||e.entry_type.toUpperCase()}</span>
-              ${e.direction ? `<span class="tag tag-blue" style="font-size:10px">${e.direction}</span>` : ''}
-              ${pnlStr}
-            </div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <span style="font-size:11px;color:#475569;font-family:var(--font-mono)">${e.created_at.slice(0,10)}</span>
-              <button class="btn btn-danger btn-sm btn-icon" onclick="deleteJournalEntry(${e.id})" title="Delete">✕</button>
-            </div>
-          </div>
-          <div class="entry-body">
-            ${e.rationale ? `<div style="margin-bottom:4px">${escHtml(e.rationale)}</div>` : ''}
-            ${e.outcome   ? `<div style="color:#60a5fa">${escHtml(e.outcome)}</div>` : ''}
-            ${e.tags ? `<div style="margin-top:6px">${e.tags.split(',').map(t=>`<span class="tag tag-purple" style="margin-right:4px;font-size:9.5px">${t.trim()}</span>`).join('')}</div>` : ''}
-            ${e.deploy_score ? `<div style="margin-top:5px;font-size:10.5px;color:#475569;font-family:var(--font-mono)">Deploy score at entry: ${e.deploy_score} · ${e.regime||''}</div>` : ''}
-          </div>
-        </div>`;
-    }).join('');
-  } catch (err) {
-    const eEl = document.getElementById('journal-entries');
-    if (eEl) eEl.innerHTML = errorHTML(err.message);
   }
 }

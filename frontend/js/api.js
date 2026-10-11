@@ -51,11 +51,6 @@ const API = {
   latestScanner:    ()            => API._get('/api/scanner/latest'),
   latestCrypto:     ()            => API._get('/api/scanner/latest/crypto'),
 
-  // ── Journal ───────────────────────────────────────────────────────────
-  getJournal:   (params = '') => API._get('/api/journal/entries' + (params ? '?' + params : '')),
-  getJournalStats: ()         => API._get('/api/journal/stats'),
-  addJournal:   body          => API._post('/api/journal/entries', body),
-  deleteJournal: id           => API._delete(`/api/journal/entries/${id}`),
 
   // ── Paper Trades ──────────────────────────────────────────────────────
   getPaperTrades:    (status) => API._get(`/api/paper_trades${status ? '?status='+status : ''}`),

@@ -18,14 +18,13 @@ st.markdown(DARK_THEME_CSS, unsafe_allow_html=True)
 # ── Sidebar branding ──────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 📊 Quant Crypto System")
-    st.caption("Macro Gate · Scanner · Journal")
+    st.caption("Macro Gate · Scanner · Trade Desk")
     st.divider()
     st.markdown("**Navigation**")
     st.page_link("pages/1_macro_gate.py", label="🌐 Macro Gate", icon="🌐")
     st.page_link("pages/2_scanner.py",    label="🛰️ Scanner",     icon="🛰️")
     st.page_link("pages/5_trade_desk.py", label="🎯 Trade Desk",  icon="🎯")
     st.page_link("pages/4_validation.py", label="🔬 Validation",  icon="🔬")
-    st.page_link("pages/3_journal.py",    label="📓 Journal",     icon="📓")
     st.divider()
     st.caption("Signal-only · you execute manually")
 
@@ -40,7 +39,6 @@ A **signal-only** crypto intelligence system — it scans, ranks, and alerts;
 | **🌐 Macro Gate** | 8-signal crypto deployment score — *is the regime risk-on right now?* |
 | **🛰️ Scanner** | Screens liquid coins for mean-reversion & momentum setups, arms triggers |
 | **📱 Monitor** | Standalone `monitor.py` watches triggers and pushes Telegram alerts |
-| **📓 Journal** | Log your manual trades and ideas |
 
 ---
 
@@ -48,7 +46,6 @@ A **signal-only** crypto intelligence system — it scans, ranks, and alerts;
 1. **Macro Gate** — check the crypto regime.
 2. **Scanner** — run a scan, arm the top setups as triggers.
 3. Run the monitor on an always-on host (`python monitor.py`) for phone alerts.
-4. Log fills in the **Journal**.
 
 ---
 """)

@@ -30,7 +30,6 @@ claude-trading-sytem/
 │   ├── analyst.py          — /api/analyst/analyze/stream, /api/analyst/latest
 │   ├── scanner.py          — /api/scanner/run, /api/scanner/run/crypto, /api/scanner/universe/crypto
 │   ├── backtest_api.py     — /api/backtest/run
-│   ├── journal_api.py      — /api/journal/entries (CRUD)
 │   └── log_store.py        — in-memory system log ring buffer
 │
 ├── signals/                — Macro Gate: 10 signals, each returns score 0-100
@@ -63,7 +62,6 @@ claude-trading-sytem/
 ├── backtesting/
 │   └── engine.py           — vectorbt engine, returns SMA + entry/exit signals
 │
-├── journal/                — SQLite-based trade journal
 │
 └── frontend/
     ├── index.html
@@ -81,12 +79,11 @@ claude-trading-sytem/
 | Page | Route | Status |
 |------|-------|--------|
 | Dashboard | `/` | Shows deployment score, analyst picks, scanner summary, macro regime |
-| Scanner | `scanner` | **Stocks + Crypto tabs**, setup cards, Mean Reversion + Momentum, journal logging |
+| Scanner | `scanner` | **Stocks + Crypto tabs**, setup cards, Mean Reversion + Momentum |
 | Macro Gate | `macro` | 10-signal deployment score, gauges, what-if sliders |
 | Analyst Rankings | `analyst` | SSE streaming analysis, deep-dive radar, peer benchmarks |
 | Rank Deltas | `deltas` | Score breakdown (Quant 60%/Claude 40%), rank changes, collapsible table |
 | Backtests | `backtests` | Price chart with SMA + buy/sell signals, equity curve, drawdown |
-| Journal | `journal` | Trade/idea log, P&L tracking, stats |
 
 ---
 
@@ -189,6 +186,5 @@ DEPLOY_THRESHOLDS = {
 1. **Add TA scoring leg to Analyst Rankings** — RSI, SMA position, 3M momentum alongside FA metrics
 2. **ISM PMI signal** — scrape/add industrial production proxy as Signal 11
 3. **Persistent server** — set up launchd to start server on login
-4. **Portfolio tracker tab** — track open positions, link to journal entries
 5. **Backtest: multi-ticker comparison** — run same strategy on multiple tickers side-by-side
 6. **Price alerts** — notify when a scanner setup appears for a watchlist ticker
