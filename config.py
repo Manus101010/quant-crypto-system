@@ -118,8 +118,17 @@ BYBIT_TRAIL = {
     "Volume Breakout":           {"k_atr": 6.0,  "activate_r": 0.0},
 }
 ENTRY_MAX_SLIP_PCT = 0.3       # don't chase more than this past the signal price
+# Round-trip fees (entry + stop, taker) as % of the position, added to the stop
+# distance with ENTRY_MAX_SLIP_PCT when choosing leverage, so the WORST allowed
+# fill still loses at most MAX_LOSS_PCT_OF_MARGIN of the margin.
+SIZING_FEE_PCT = 0.15
 CANDLE_VENUE = "bybit"
-AUTO_SCAN_PARAMS = {"source": "bybit_perps", "top_n": 15, "expiry_hours": 72,
+# Max 5 armed per scan (was 15): same-direction alts move together, so a big batch is one bet.
+# At most this many positions open at once (paper or taken, current tracking
+# period); research-backed limit. Same-direction alts move together, so more at
+# once is one bigger bet. A scan arms at most (MAX_OPEN_POSITIONS - open) setups.
+MAX_OPEN_POSITIONS = 10
+AUTO_SCAN_PARAMS = {"source": "bybit_perps", "top_n": 5, "expiry_hours": 72,
                     "min_vol_usd_m": 0.5, "max_stop_pct": 25.0}
 
 # ── BTC regime veto hooks (v1 = WARNING only; both default off) ────────────────

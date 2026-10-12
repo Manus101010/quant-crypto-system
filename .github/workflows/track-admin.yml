@@ -1,12 +1,18 @@
 name: Track record admin
 
-# Manual only. "export" saves every trigger row as a short-lived run artifact
-# (deleted after 1 day) for analysis; "reset" starts a new tracking period now.
+# "export" saves every trigger row as a run artifact; "reset" starts a new
+# tracking period now; "scan" runs a full scan and arm.
+# Nightly backup: the schedule below runs "export" every day and keeps it 7 days,
+# so a wiped table can be restored from the last good night. The repo is PUBLIC:
+# artifacts can be downloaded by anyone signed in to GitHub. The export holds the
+# signal history only (no keys or secrets), so a 7 day retention is the trade-off.
 on:
+  schedule:
+    - cron: "17 17 * * *"     # daily 17:17 UTC (about 3-4am Sydney)
   workflow_dispatch:
     inputs:
       action:
-        description: "export or reset"
+        description: "export, reset or scan"
         required: true
         default: "export"
 
@@ -16,7 +22,7 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,11 +34,15 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python scripts/track_admin.py ${{ github.event.inputs.action }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: python scripts/track_admin.py ${{ github.event.inputs.action || 'export' }}
       - name: Save export
-        if: ${{ github.event.inputs.action == 'export' }}
+        if: ${{ (github.event.inputs.action || 'export') == 'export' }}
         uses: actions/upload-artifact@v4
         with:
           name: track-export
           path: track_export.json
-          retention-days: 1
+          retention-days: 7
