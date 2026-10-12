@@ -557,80 +557,80 @@ st.divider()
 
 # ── Live track record: what fired signals actually did (vs backtest) ──────────
 st.subheader("📒 Live track record")
-st.caption("Every fired signal is followed as a paper trade under its backtested exit "
-           "rules until target / stop / trail / time. R = profit in units of the risk "
-           "taken (+1R = made what the stop would have lost). Needs ~30 trades to mean much.")
 try:
     from triggers import outcomes as _oc
+    from config import (RISK_PER_TRADE_USD as _rpt_default, POSITION_MARGIN_USD as _margin)
+    _rpt = float(st.session_state.get("risk_usd", _rpt_default))
+
+    def _usd(r) -> str:
+        """An R result as dollars at the standard trade size."""
+        if r is None:
+            return "—"
+        v = r * _rpt
+        return f"{'+' if v >= 0 else '−'}${abs(v):,.2f}"
+
+    def _per_dollar(pf) -> str:
+        return "—" if pf is None else ("no losses yet" if pf == float("inf") else f"${pf:.2f}")
+
+    st.caption(f"All dollar figures assume your standard trade: \\${_margin:.0f} put in, "
+               f"losing at most \\${_rpt:.2f} if the stop is hit. Needs about 30 finished "
+               "trades before the numbers mean much.")
+
     _ls = _oc.live_stats()
     _tot = _ls["total"]
-    _h = _oc.portfolio_heat(risk_per_trade=float(st.session_state.get("risk_usd", __import__("config").RISK_PER_TRADE_USD)))
-    _pct = min(1.0, _h["open_risk"] / _h["cap"]) if _h["cap"] else 0
-    _col = "#f87171" if _h["left"] <= 0 else ("#facc15" if _pct > 0.7 else "#4ade80")
-    st.markdown(
-        f"<div style='border-left:4px solid {_col};padding:8px 12px;background:#161b22;"
-        f"border-radius:6px;margin-bottom:10px'>🔥 <b>Portfolio heat</b> — "
-        f"<b style='color:{_col}'>${_h['open_risk']:.0f}</b> of ${_h['cap']:.0f} at risk across "
-        f"{_h['n_open']} trade(s) you took ({_h['n_long']} long / {_h['n_short']} short)"
-        + (f" (correlation-adjusted ${_h['corr_risk']:.0f}, info only: the cap uses the plain sum "
-           f"and at most {_h['max_trades']} taken trades). " if abs(_h['corr_risk'] - _h['open_risk']) >= 1
-           else ". ")
-        + ("<b>Full — new alerts will say skip.</b>" if _h["left"] <= 0 else
-           f"Next trade can risk <b>${_h['next_risk']:.0f}</b>.")
-        + "<br><span style='color:#8b949e;font-size:0.85em'>Real money only — tick "
-          f"<b>Took it</b> below for trades you actually entered ({_h['n_paper']} paper-tracked "
-          f"open). Each counts ${_h['risk_per_trade']:.0f} until its trailing stop passes "
-          "entry. Cap = MAX_PORTFOLIO_RISK_USD.</span></div>",
-        unsafe_allow_html=True)
+    _ys = _oc.live_stats(taken_only=True)
+    _yt = _ys["total"]
+    _h = _oc.portfolio_heat(risk_per_trade=_rpt)
+
     @st.cache_data(ttl=900, show_spinner=False)
     def _marks(_ids: tuple) -> dict:
         return _oc.open_marks()
     _mk = _marks(tuple(t["id"] for t in _ls["open"])) if _ls["open"] else {}
-    _ur = sum(_mk.values())
-    o1, o2, o3 = st.columns(3)
-    o1.metric("Signals fired", _tot["n"] + len(_ls["open"]))
-    o2.metric("Still open", len(_ls["open"]),
-              help="Fired but not yet at stop / target / time limit — no final result yet.")
-    o3.metric("Open P&L now", f"{_ur:+.2f}R" if _mk else "—",
-              help="Paper profit/loss of the open trades at the latest price, in R.")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Closed trades", _tot["n"])
-    c2.metric("Win rate", f"{_tot['win_rate']*100:.0f}%" if _tot["win_rate"] is not None else "—")
-    c3.metric("Total R", f"{_tot['total_r']:+.2f}R" if _tot["n"] else "—")
-    _pfv = _tot["pf"]
-    c4.metric("Profit factor", "—" if _pfv is None else ("∞" if _pfv == float("inf") else f"{_pfv:.2f}"))
-    _ys = _oc.live_stats(taken_only=True)
-    _yt = _ys["total"]
-    st.caption("🙋 Your trades only (ticked \"Took it\"). Compare with the row above: "
-               "if yours trail the system, the gap is execution or selection, not the edge.")
+
+    # 1) Your real trades
+    st.markdown("#### 🙋 Your real trades")
     y1, y2, y3, y4 = st.columns(4)
-    y1.metric("Your closed", _yt["n"], help=f"{len(_ys['open'])} still open")
-    y2.metric("Your win rate", f"{_yt['win_rate']*100:.0f}%" if _yt["win_rate"] is not None else "—")
-    from config import RISK_PER_TRADE_USD as _rpt
-    y3.metric("Your total", f"{_yt['total_r']:+.2f}R (${_yt['total_r']*_rpt:+.2f})" if _yt["n"] else "—")
-    _ypf = _yt["pf"]
-    y4.metric("Your profit factor", "—" if _ypf is None else ("∞" if _ypf == float("inf") else f"{_ypf:.2f}"))
-    if _ls["by_setup"]:
-        import pandas as _pd
-        _vcol = {"early": "⏳ early", "holding up": "✅ holding up",
-                 "lagging backtest": "⚠️ lagging backtest", "no edge live": "❌ no edge live"}
-        st.dataframe(_pd.DataFrame([{
-            "Setup": r["setup"], "Trades": r["n"], "Win %": f"{r['win_rate']*100:.0f}%",
-            "Avg R": f"{r['avg_r']:+.2f}", "Total R": f"{r['total_r']:+.2f}",
-            "Live PF": "∞" if r["pf"] == float("inf") else ("—" if r["pf"] is None else f"{r['pf']:.2f}"),
-            "Backtest PF": "—" if r["bt_pf"] is None else f"{r['bt_pf']:.2f}",
-            "Verdict": _vcol.get(r["verdict"], r["verdict"]),
-        } for r in _ls["by_setup"]]), hide_index=True, width="stretch")
+    y1.metric("Open now", len(_ys["open"]))
+    y2.metric("Finished", _yt["n"])
+    y3.metric("Winners", f"{_yt['win_rate']*100:.0f}%" if _yt["win_rate"] is not None else "—")
+    y4.metric("Profit / loss", _usd(_yt["total_r"]) if _yt["n"] else "—")
+    _col = "#f87171" if _h["left"] <= 0 else "#4ade80"
+    st.markdown(
+        f"<div style='border-left:4px solid {_col};padding:8px 12px;background:#161b22;"
+        f"border-radius:6px;margin-bottom:10px'>💰 <b>Money at risk right now:</b> "
+        f"<b style='color:{_col}'>${_h['open_risk']:.2f}</b> of your ${_h['cap']:.0f} limit "
+        f"({_h['n_open']} open trade(s) you took). "
+        + ("<b>Limit reached — skip new alerts until one closes.</b>" if _h["left"] <= 0 else
+           f"Room for <b>{int(_h['left'] // _rpt) if _rpt else 0}</b> more trade(s).")
+        + "</div>", unsafe_allow_html=True)
+
+    # 2) Every alert, followed on paper
+    st.markdown("#### 🧪 Every alert the system sent (practice trades)")
+    st.caption("Each alert is followed on paper using its own exit rules, whether or not "
+               "you took it. This is the honest test of the system.")
+    _ur = sum(_mk.values()) if _mk else None
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Open now", len(_ls["open"]))
+    c2.metric("Open trades are currently", _usd(_ur),
+              help="Profit or loss of the open practice trades if they closed at the latest price.")
+    c3.metric("Finished", _tot["n"])
+    c4, c5, c6 = st.columns(3)
+    c4.metric("Winners", f"{_tot['win_rate']*100:.0f}%" if _tot["win_rate"] is not None else "—")
+    c5.metric("Finished trades made / lost", _usd(_tot["total_r"]) if _tot["n"] else "—")
+    c6.metric("Won for every $1 lost", _per_dollar(_tot["pf"]),
+              help="Above $1.00 = the wins are bigger than the losses. Below $1.00 = losing overall.")
+
     if _ls["open"]:
         import pandas as _pd2
-        st.markdown("**Open trades** — every alert is paper-tracked; tick **Took it** for the "
-                    "ones you really entered so heat counts real risk.")
+        st.markdown("**Open trades** — tick **Took it** for the ones you really entered.")
         _odf = _pd2.DataFrame([{
-            "id": t["id"], "Took it": bool(t.get("taken")), "Coin": t["symbol"],
-            "Setup": t.get("setup_label") or "", "Fired": (t.get("fired_at") or "")[:10],
+            "id": t["id"], "Took it": bool(t.get("taken")),
+            "Coin": t["symbol"].replace("-USD", ""),
+            "Side": "Short" if t.get("direction") == "short" else "Long",
+            "Profit / loss now": _usd(_mk.get(t["id"])),
             "Entry": t.get("fired_price"), "Stop now": t.get("trail_stop") or t.get("stop"),
-            "Days": t.get("bars_held") or 0,
-            "R now": _mk.get(t["id"]),
+            "Days open": t.get("bars_held") or 0,
+            "Setup": t.get("setup_label") or "",
         } for t in _ls["open"]])
         _ed = st.data_editor(_odf, hide_index=True, width="stretch",
                              disabled=[c for c in _odf.columns if c != "Took it"],
@@ -640,6 +640,19 @@ try:
             for _, _row in _chg.iterrows():
                 tdb.set_outcome(int(_row["id"]), {"taken": bool(_row["Took it"])})
             st.rerun()
+
+    if _ls["by_setup"]:
+        import pandas as _pd
+        _vcol = {"early": "⏳ too early to say", "holding up": "✅ working",
+                 "lagging backtest": "⚠️ worse than its history", "no edge live": "❌ not working"}
+        with st.expander("Results by setup type (finished practice trades)"):
+            st.dataframe(_pd.DataFrame([{
+                "Setup": r["setup"], "Trades": r["n"], "Winners": f"{r['win_rate']*100:.0f}%",
+                "Average per trade": _usd(r["avg_r"]), "Total": _usd(r["total_r"]),
+                "Won per $1 lost": _per_dollar(r["pf"]),
+                "Same, in past testing": _per_dollar(r["bt_pf"]),
+                "Verdict": _vcol.get(r["verdict"], r["verdict"]),
+            } for r in _ls["by_setup"]]), hide_index=True, width="stretch")
 except Exception as _e:                            # noqa: BLE001
     st.caption(f"Track record unavailable ({_e}).")
 
