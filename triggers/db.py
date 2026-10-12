@@ -4,8 +4,7 @@ Monitor. The scanner writes ranked setups here as *armed conditions*; the
 monitor evaluates each active trigger every poll and fires a Telegram alert when
 the condition is met. Signal-only: a trigger is a notification, never an order.
 
-Lives in the existing SQLite db (config.DB_PATH — data/trading.db), alongside
-the journal.
+Lives in the existing SQLite db (config.DB_PATH — data/trading.db).
 """
 from __future__ import annotations
 import sqlite3

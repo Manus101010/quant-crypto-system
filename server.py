@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import uvicorn
 
-from api import macro, analyst, scanner, journal_api, backtest_api, log_store as L
+from api import macro, analyst, scanner, backtest_api, log_store as L
 from api import paper_trades_api, loop_api, webhooks_api, setup_validation_api, monitoring_api
 
 
@@ -63,7 +63,6 @@ app = FastAPI(title="QuantCore API", version="2.0", docs_url="/api/docs", lifesp
 app.include_router(macro.router,              prefix="/api/macro",         tags=["macro"])
 app.include_router(analyst.router,            prefix="/api/analyst",       tags=["analyst"])
 app.include_router(scanner.router,            prefix="/api/scanner",       tags=["scanner"])
-app.include_router(journal_api.router,        prefix="/api/journal",       tags=["journal"])
 app.include_router(backtest_api.router,       prefix="/api/backtest",      tags=["backtest"])
 app.include_router(paper_trades_api.router,                                tags=["paper_trades"])
 app.include_router(loop_api.router,                                        tags=["loop"])
