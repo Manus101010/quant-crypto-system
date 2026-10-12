@@ -18,7 +18,11 @@ from config import GRID_MAX_LEVERAGE, GRID_LIQ_BUFFER, GRID_MMR, GRID_FEE_PCT
 
 
 def grid_for_signal(direction: str, price: float, stop: float, target: float | None,
-                    atr: float | None, risk_usd: float) -> dict:
+                    atr: float | None, risk_usd: float, margin_usd: float | None = None,
+                    max_loss_pct: float | None = None) -> dict:
+    """With `margin_usd`, the bot uses exactly that margin and the highest leverage
+    whose fully-filled stop-out loses at most min(risk_usd, max_loss_pct of the
+    margin); if even 1x loses more, it is not suggested (note 'loss_cap')."""
     out = {"ok": False}
     if not price or not stop or stop <= 0:
         return {**out, "note": "no usable stop"}
@@ -57,21 +61,32 @@ def grid_for_signal(direction: str, price: float, stop: float, target: float | N
     lf_stop = loss_frac(stop)
     if lf_stop <= 0:
         return {**out, "note": "cannot size"}
-    notional = risk_usd / lf_stop              # stop-out with every rung filled ≈ risk_usd
-    qty = sum((notional / count) / c for c in costs)
 
     # Leverage: the highest (≤ cap) where the FULLY-FILLED position still has
     # margin left GRID_LIQ_BUFFER beyond the stop — so the stop always hits first.
     probe = stop * (1 + GRID_LIQ_BUFFER) if short else stop * (1 - GRID_LIQ_BUFFER)
 
-    def survives(L: int) -> bool:
+    def survives(L: int, notional: float) -> bool:
+        qty_ = sum((notional / count) / c for c in costs)
         equity = notional / L - notional * loss_frac(probe)
-        return equity > GRID_MMR * qty * probe
+        return equity > GRID_MMR * qty_ * probe
 
-    lev = next((L for L in range(GRID_MAX_LEVERAGE, 0, -1) if survives(L)), 0)
-    if not lev:
-        return {**out, "note": "too volatile for a leveraged grid — use spot or skip"}
-    margin = notional / lev
+    if margin_usd:
+        # Fixed margin: the loss limit is the smaller of the $ risk and the % cap.
+        max_loss = min(risk_usd, margin_usd * (max_loss_pct or 100.0) / 100)
+        lev = next((L for L in range(GRID_MAX_LEVERAGE, 0, -1)
+                    if margin_usd * L * lf_stop <= max_loss + 1e-9
+                    and survives(L, margin_usd * L)), 0)
+        if not lev:
+            return {**out, "note": "loss_cap", "loss_cap": True}
+        margin, notional = margin_usd, margin_usd * lev
+    else:
+        notional = risk_usd / lf_stop          # stop-out with every rung filled ≈ risk_usd
+        lev = next((L for L in range(GRID_MAX_LEVERAGE, 0, -1) if survives(L, notional)), 0)
+        if not lev:
+            return {**out, "note": "too volatile for a leveraged grid — use spot or skip"}
+        margin = notional / lev
+    qty = sum((notional / count) / c for c in costs)
 
     # Estimated liquidation of the fully-filled position (bisection on price).
     lo_p, hi_p = (probe, price * 3) if short else (0.0, probe)
@@ -89,4 +104,4 @@ def grid_for_signal(direction: str, price: float, stop: float, target: float | N
             "grids": count, "step_pct": step_pct, "net_per_grid_pct": net_per_grid,
             "leverage": lev, "lev_max": lev_max, "liq_est": liq, "stop_loss": stop,
             "take_profit": (target if target else None), "margin": margin,
-            "notional": notional, "worst_loss": risk_usd}
+            "notional": notional, "worst_loss": notional * lf_stop}

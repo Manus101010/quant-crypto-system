@@ -16,6 +16,7 @@ Signal-only: arming a trigger sends the user an alert later; it never trades.
 from __future__ import annotations
 import re
 import json
+import math
 import datetime
 from triggers import db as tdb
 from skills.scanner import run_crypto_scan, ScanCriteria
@@ -146,8 +147,8 @@ def _diversify(rows: list[dict], n: int, max_per_setup: int | None) -> list[dict
       1. DEDUPE BY SYMBOL — one trigger per coin, keep its highest-composite setup.
       2. PER-SETUP CAP — round-robin across setup types (best of each first), no
          type exceeds `max_per_setup`, so the set is a spread not 20 copies.
-      3. HARD 50% CEILING — no single setup type may ever exceed half of `n`, even
-         via backfill. When only one type is firing we LEAVE SLOTS EMPTY rather
+      3. HARD 50% CEILING — no single setup type may ever exceed half of `n`
+         (rounded up: 3 of 5), even via backfill. When only one type is firing we LEAVE SLOTS EMPTY rather
          than fake diversity — that is deliberate, not a bug.
     """
     from collections import defaultdict
@@ -165,7 +166,7 @@ def _diversify(rows: list[dict], n: int, max_per_setup: int | None) -> list[dict
     if not max_per_setup or max_per_setup <= 0:
         return rows[:n]
 
-    ceiling = max(1, n // 2)                 # hard: no type past 50% of slots
+    ceiling = max(1, math.ceil(n / 2))       # hard: no type past 50% of slots (3 of 5)
     cap = min(max_per_setup, ceiling)
 
     buckets: dict[tuple, list] = defaultdict(list)
@@ -235,6 +236,11 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     else:
         tickers = get_top_crypto(universe_size)
         exchange = None
+    if not tickers:
+        # Venue unreachable and no saved list: say so instead of a silent "0 of 0".
+        log.warning("scan_and_arm: empty universe for source %s", source)
+        return {"candidates": [], "armed": [], "actionable": 0, "universe_empty": True,
+                "universe_size": 0, "source": source}
     df = run_crypto_scan(
         tickers=tickers,
         criteria=ScanCriteria(min_price=0.0, above_sma200=False,
@@ -243,7 +249,9 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         exchange=exchange,
     )
     if df.empty:
-        return {"candidates": [], "armed": []}
+        log.warning("scan_and_arm: no candles for any of %d coins", len(tickers))
+        return {"candidates": [], "armed": [], "actionable": 0, "universe_empty": True,
+                "universe_size": len(tickers), "source": source}
 
     # BUY = long entry, SELL = short entry (MEXC futures/perp). SELL/EXIT is a
     # take-profit flag on an open long, not an entry — excluded.
@@ -297,6 +305,11 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     # valid setups are already held, few new arms is the honest answer.
     try:
         open_all = tdb.get_fired_trades(open_only=True)
+        # Paper trades from before the last tracking reset are no longer followed,
+        # so they must not block coins either. Trades you took always count.
+        from triggers.outcomes import track_from, _in_period
+        _start = track_from()
+        open_all = [t for t in open_all if t.get("taken") or _in_period(t, _start)]
         held = {t["symbol"] for t in open_all}
     except Exception as exc:                       # noqa: BLE001
         log.warning("scan_and_arm: open-trade lookup failed — %s", exc)
@@ -341,8 +354,14 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
             r["_status"] = "not_selected"
             eligible.append(r)
     held_excluded = sorted({r["ticker"] for r in rows if r["_held"]})
+    # Concurrent cap: open trades (paper or taken, this tracking period: the same
+    # set that blocks coins above) + new arms may not exceed MAX_OPEN_POSITIONS.
+    from config import MAX_OPEN_POSITIONS
+    n_open = len(open_all)
+    slots = max(0, MAX_OPEN_POSITIONS - n_open)
+    n_arm = min(top_n, slots)
     # Diversify: cap any single setup so the armed set is a spread across types.
-    top = _diversify(eligible, top_n, max_per_setup)
+    top = _diversify(eligible, n_arm, max_per_setup) if n_arm > 0 else []
 
     # Verdict per open trade from THIS scan: still in a validated setup (same
     # direction) → hold with confidence; gone → review the position.
@@ -364,6 +383,8 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
               "wide_stop_excluded": wide_stop_excluded,
               "crowded_excluded": crowded_excluded, "held_excluded": held_excluded,
               "held_status": held_status, "btc_below_200d": btc_down,
+              "open_positions": n_open, "max_open": MAX_OPEN_POSITIONS,
+              "slots_limited": n_arm < top_n, "arm_slots": n_arm,
               "long_gate_reason": gate_reason}
 
     # ── Regime gate: the setups' edge is regime-dependent (strong in trend,

@@ -42,6 +42,7 @@ log = get_logger("revalidate")
 
 # Match the universe/window the baseline was validated on.
 _SOURCE, _DAYS, _MAX_COINS, _COST = "mexc", 600, 400, 0.36
+_NEAR_MISS_PF = 0.95            # provisional + PF in [0.95, 1.0): warn before deactivating
 _PROVISIONAL_MAX = 50          # 25 ≤ n < 50 = provisional; n ≥ 50 = established
 
 
@@ -85,6 +86,12 @@ def run_revalidation(dry_run: bool = False) -> dict:
             action = "kept"
         elif band == "established":
             # Two consecutive failing runs before killing a proven setup.
+            prev_warned = tdb.last_edge_action(setup) == "warned"
+            action = "deactivated" if prev_warned else "warned"
+        elif band == "provisional" and pf >= _NEAR_MISS_PF:
+            # A thin sample a hair under 1.0 is noise, not decay (Breakdown Short was
+            # switched off at PF 0.996 on 37 trades while profitable in every year
+            # 2021-26 over the full history). Warn first; deactivate on a repeat.
             prev_warned = tdb.last_edge_action(setup) == "warned"
             action = "deactivated" if prev_warned else "warned"
         else:

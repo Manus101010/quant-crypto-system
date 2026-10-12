@@ -25,6 +25,25 @@ def _c():
     return _client
 
 
+_PAGE = 1000   # PostgREST returns at most max_rows (default 1000) per request
+
+
+def _paged(build, limit: int | None = None) -> list[dict]:
+    """All rows of a query, fetched page by page with .range() so nothing is cut
+    off at PostgREST's row cap. `build()` must return a fresh, ORDERED query
+    (a stable order keeps pages from overlapping or skipping rows)."""
+    out: list[dict] = []
+    start = 0
+    while limit is None or len(out) < limit:
+        size = _PAGE if limit is None else min(_PAGE, limit - len(out))
+        rows = build().range(start, start + size - 1).execute().data or []
+        out += rows
+        if len(rows) < size:
+            break
+        start += size
+    return out
+
+
 def init_db() -> None:
     """Tables are created once via the Supabase SQL editor; nothing to do here."""
     return None
@@ -49,11 +68,13 @@ def add_trigger(symbol, condition_type, condition_value, *, condition_json=None,
 
 
 def get_triggers(status="active", limit=500) -> list[dict]:
-    q = _c().table("triggers").select("*")
-    if status:
-        q = q.eq("status", status)
-    res = q.order("composite", desc=True).order("created_at", desc=True).limit(limit).execute()
-    return res.data or []
+    def build():
+        q = _c().table("triggers").select("*")
+        if status:
+            q = q.eq("status", status)
+        return (q.order("composite", desc=True).order("created_at", desc=True)
+                .order("id", desc=True))
+    return _paged(build, limit)
 
 
 def active_symbols() -> list[str]:
@@ -90,19 +111,21 @@ def delete_trigger(trigger_id) -> None:
 
 
 def get_triggers_since(iso_cutoff, statuses=("fired", "invalidated", "expired")) -> list[dict]:
-    res = (_c().table("triggers").select("*")
-           .in_("status", list(statuses)).execute())
-    rows = [r for r in (res.data or [])
+    data = _paged(lambda: _c().table("triggers").select("*")
+                  .in_("status", list(statuses)).order("id"))
+    rows = [r for r in data
             if (r.get("fired_at") or r.get("created_at") or "") >= iso_cutoff]
     rows.sort(key=lambda r: (r.get("fired_at") or r.get("created_at") or ""), reverse=True)
     return rows
 
 
 def get_fired_trades(open_only: bool = False) -> list[dict]:
-    q = _c().table("triggers").select("*").eq("status", "fired")
-    if open_only:
-        q = q.is_("outcome", "null")
-    return q.order("fired_at").execute().data or []
+    def build():
+        q = _c().table("triggers").select("*").eq("status", "fired")
+        if open_only:
+            q = q.is_("outcome", "null")
+        return q.order("fired_at").order("id")
+    return _paged(build)
 
 
 _OUTCOME_FIELDS = {"outcome", "exit_price", "exit_at", "r_multiple",
