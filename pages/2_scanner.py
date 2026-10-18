@@ -498,6 +498,35 @@ if res and res.get("candidates"):
             ))
         _grid(cards)
 
+# ── Other setup types spotted (not proven → no alerts) ───────────────────────
+if res and res.get("watch_only"):
+    import pandas as _pdw
+    _w = res["watch_only"]
+    _types = {}
+    for r in _w:
+        _types.setdefault(r["setup_label"], []).append(r)
+    with st.expander(f"👀 Other setup types spotted: {len(_w)} coins across {len(_types)} types "
+                     "(not proven, so no alerts)", expanded=False):
+        st.caption("The scanner looks for many kinds of trade: mean reversion, breakouts, "
+                   "squeezes, distribution, relative strength, shorts. Only setups that made "
+                   "money in testing send alerts. These didn't (or were switched off when they "
+                   "stopped working), so treat them as ideas to check on the chart, not trades.")
+        def _res_txt(pf, off, lab_=None):
+            if off:
+                return "switched off (stopped working)"
+            if lab_ == "Counter-Trend Bounce":
+                return "lost money in testing (Oct 2026)"
+            if pf is None:
+                return "not tested yet"
+            return f"${pf:.2f} won per $1 lost" + (" (lost money)" if pf < 1 else "")
+        st.dataframe(_pdw.DataFrame([{
+            "Setup type": lab, "Long/short": "Short" if rs[0]["direction"] == "short" else "Long",
+            "Coins now": len(rs),
+            "Examples": ", ".join(r["ticker"].replace("-USD", "") for r in rs[:6]),
+            "Past testing": _res_txt(rs[0]["bt_pf"], rs[0]["off"], lab),
+        } for lab, rs in sorted(_types.items(), key=lambda kv: -len(kv[1]))]),
+            hide_index=True, width="stretch")
+
 # ── Watching now (persisted — the hero section) ────────────────────────────────
 st.divider()
 active = tdb.get_triggers("active")

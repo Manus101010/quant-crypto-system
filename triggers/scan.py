@@ -270,7 +270,7 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     # is the institutional discipline: don't trade a setup with no proven edge.
     from backtesting.crypto_validation import validated_labels
     valid = validated_labels()
-    gated_out = []
+    gated_out, watch_only, deactivated = [], [], set()
     if valid is None:
         # Fail CLOSED: no validation file (e.g. a fresh cloud host) must never mean
         # "arm everything". Rank for display, arm nothing.
@@ -285,6 +285,7 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         deactivated = tdb.get_deactivated()
         valid = valid - deactivated
         kept = [r for r in rows if r.get("setup_label") in valid]
+        watch_only = [r for r in rows if r.get("setup_label") not in valid]
         gated_out = sorted({r.get("setup_label") for r in rows
                             if r.get("setup_label") not in valid})
         rows = kept
@@ -378,7 +379,19 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         else:
             held_status[sym] = {"verdict": "not_scanned", "setup": t.get("setup_label")}
 
-    common = {"candidates": candidates, "edge_gated": valid is not None,
+    try:
+        from backtesting.crypto_validation import load_validation
+        _bt = (load_validation() or {}).get("stats", {})
+    except Exception:                              # noqa: BLE001
+        _bt = {}
+    watch = [{"ticker": r["ticker"], "setup_label": r.get("setup_label"),
+              "direction": r.get("direction"), "price": r.get("price"),
+              "setup_desc": r.get("setup_desc"), "category": r.get("setup_category"),
+              "bt_pf": (_bt.get(r.get("setup_label")) or {}).get("profit_factor"),
+              "bt_n": (_bt.get(r.get("setup_label")) or {}).get("n"),
+              "off": r.get("setup_label") in deactivated}
+             for r in sorted(watch_only, key=lambda r: -(r.get("conviction") or 0))]
+    common = {"candidates": candidates, "edge_gated": valid is not None, "watch_only": watch,
               "gated_out_setups": gated_out, "actionable": len(rows),
               "wide_stop_excluded": wide_stop_excluded,
               "crowded_excluded": crowded_excluded, "held_excluded": held_excluded,
