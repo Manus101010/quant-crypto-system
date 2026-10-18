@@ -136,19 +136,20 @@
       }
     },
     "Distribution Short": {
-      "n": 62,
-      "win_rate": 0.2419,
+      "n": 40,
+      "win_rate": 0.525,
       "avg_win": 13.153,
       "avg_loss": -18.627,
       "avg_ret": -10.938,
-      "profit_factor": 0.225,
+      "profit_factor": 1.754,
       "expectancy_r": -0.4154,
       "median_bars_held": 15.5,
       "exits": {
         "target": 0,
         "stop": 51,
         "time": 11
-      }
+      },
+      "note": "Approved 18 Oct 2026: weekly revalidation PF 1.90 (10 Oct) and 1.75 (17 Oct) on 40 trades; research/bear_shorts.py 2020-26 full history PF 2.25, n 496, t 6.9, both halves > 1. The old 0.225 figure predates the per-setup exits."
     },
     "Breakdown Short (55d low)": {
       "n": 74,
@@ -258,6 +259,7 @@
   },
   "validated": [
     "Breakdown Short (55d low)",
+    "Distribution Short",
     "Donchian Breakout (55d)",
     "Downtrend Bounce Fade",
     "Momentum Runner",
