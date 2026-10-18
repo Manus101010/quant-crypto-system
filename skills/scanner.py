@@ -490,7 +490,7 @@ def new_setup_trade(ns: dict, price: float) -> dict:
         "target": tgt_txt,
         "stop":   f"{_fmt_p(stop)}",
         "rr":     rr,
-        "note":   "SHORT on MEXC futures. Signal only, you place it.",
+        "note":   "SHORT on Bybit USDT perps. Signal only, you place it.",
         "plan":   {"stop": stop, "target": tgt, "trail_atr": trail,
                    "max_hold": ns.get("max_hold"), "atr": ns.get("atr")},
     }
