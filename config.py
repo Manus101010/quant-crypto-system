@@ -130,6 +130,11 @@ CANDLE_VENUE = "bybit"
 MAX_OPEN_POSITIONS = 10
 AUTO_SCAN_PARAMS = {"source": "bybit_perps", "top_n": 5, "expiry_hours": 72,
                     "min_vol_usd_m": 0.5, "max_stop_pct": 25.0}
+# Per-setup override of max_stop_pct. research/dist_wide_stops.py (2020-26):
+# Distribution Short with a 25-50% stop did BETTER (PF 2.71, n 217) than with a
+# tight one, and the 25% cap dropped ~16 of 19 signals on Oct 11-24. A wide stop
+# just means a smaller position at 1x, so the loss stays at your max.
+MAX_STOP_PCT_BY_SETUP = {"Distribution Short": 50.0}
 
 # ── BTC regime veto hooks (v1 = WARNING only; both default off) ────────────────
 # When flipped True later, the monitor will refuse to FIRE the relevant direction

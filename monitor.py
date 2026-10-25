@@ -323,8 +323,18 @@ def _sizing_line(trg: dict, price: float) -> str:
         worst = frac + (ENTRY_MAX_SLIP_PCT + SIZING_FEE_PCT) / 100
         lev = int(min(MAX_LEVERAGE, (MAX_LOSS_PCT_OF_MARGIN / 100) / worst))
         if lev < 1:
-            return (f"💰 <b>Size:</b> skip. The stop is {frac * 100:.1f}% away (plus slip and fees), "
-                    f"more than your {MAX_LOSS_PCT_OF_MARGIN:.0f}% max loss even at 1x.\n{budget}")
+            # Wide stop: no leverage and a smaller position, so a stop-out still
+            # loses only your max (25% of the normal $50 margin = $12.50).
+            pos = POSITION_MARGIN_USD * (MAX_LOSS_PCT_OF_MARGIN / 100) / worst
+            loss = pos * worst
+            if loss > h["next_risk"] + 1e-9:
+                return (f"{budget}\n⚠️ <b>You're at your limit</b> — skip this one, or wait "
+                        f"until an open trade is closed or safe.")
+            return (f"💰 <b>Size:</b> <b>${pos:,.0f} margin at 1x</b> (isolated) = a ${pos:,.0f} "
+                    f"position in {coin}. Smaller than usual because the stop is wide "
+                    f"({frac * 100:.0f}% away).\n"
+                    f"    If the stop hits you lose ~${pos * frac:,.2f}, at most ~${loss:,.2f} "
+                    f"with a {ENTRY_MAX_SLIP_PCT:g}% worse entry and fees.\n{budget}")
         pos = POSITION_MARGIN_USD * lev
         loss = pos * worst
         if loss > h["next_risk"] + 1e-9:

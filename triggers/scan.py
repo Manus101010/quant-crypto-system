@@ -331,6 +331,7 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     except Exception as exc:                       # noqa: BLE001 — fail open, log
         log.warning("scan_and_arm: long gate unavailable — %s", exc)
 
+    from config import MAX_STOP_PCT_BY_SETUP
     wide_stop_excluded, crowded_excluded, eligible = [], [], []
     for r in rows:
         r["_plan"] = plan = _armed_plan(r)
@@ -345,7 +346,8 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         elif plan["stop"] is not None and plan["direction"] == "long" and plan["stop"] <= 0:
             r["_status"] = "wide_stop"
             wide_stop_excluded.append(f"{r['ticker']} (stop ≤ 0)")
-        elif max_stop_pct and plan["stop_pct"] and plan["stop_pct"] > max_stop_pct:
+        elif max_stop_pct and plan["stop_pct"] and plan["stop_pct"] > max(
+                max_stop_pct, MAX_STOP_PCT_BY_SETUP.get(r.get("setup_label"), 0)):
             r["_status"] = "wide_stop"
             wide_stop_excluded.append(f"{r['ticker']} (−{plan['stop_pct']:.0f}%)")
         elif fr is not None and _crowded(plan["direction"], fr):
