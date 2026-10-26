@@ -93,7 +93,44 @@ Known DEX limitation: `/latest/dex/search` returns at most 30 pairs ranked by DE
 
 ### 3.2 Historical backtest (OKX + MEXC history)
 
-BACKTEST_PLACEHOLDER
+Command: `python research/features_eval.py backtest --cache <dir>` (run tonight, 10 min, 271 coins = Bybit perps that also list on OKX).
+
+**How much history exists.** OKX rubik per-contract stats at daily (`1Dutc`) resolution page back to about **2024-03-25** (a request ending 2023-11 returns empty, tested on BTC, SOL, DOGE, ORDI; WIF from its 2024-04 listing). Hourly rubik data covers only the **last 100 hours** per call, so this test is daily only. OKX funding history keeps **~3 months** (oldest 2026-07-20), useless for history; **MEXC funding history reaches back to 2025-05-05** for every coin and was used instead. So: OI and L/S features cover 2024-04 to 2026-09 (93% of trades), funding covers 2025-05 onward (53% of trades).
+
+Setup: daily MEXC perp candles (2000 days), the exact live detector `skills/new_setups.detect`, exits from `research/bear_shorts.sim_short` (stop first, 0.36% round trip), one signal per coin per 5 days, signals from 2024-04-01. Features use only data up to the signal close (unit-tested for no lookahead). Survivor-only universe.
+
+**Base results in this window** (higher than the research report's full-history numbers because 2024-2026 alt bleed favoured shorts and the universe is survivors only; do not read these as the setups' true PF):
+
+| Setup | n | PF | exp R | win | per year exp R |
+|---|---|---|---|---|---|
+| Distribution Short | 367 | 3.87 | +0.633 | 64% | 2024 +0.32 (73), 2025 +0.91 (252), **2026 -0.47 (42)** |
+| Downtrend Bounce Fade | 191 | 2.44 | +0.220 | 80% | 2024 +0.75 (25), 2025 +0.22 (88), 2026 +0.08 (72) |
+
+Side finding worth flagging to the lead: Distribution Short is **negative in 2026 YTD** in this sample (n 42, -0.47R), and Bounce Fade's expectancy is shrinking year by year.
+
+**Filters** (keep-rules applied where the feature is known; "covered" compares against the base on the same trades; halves = PF in first/second half by date):
+
+| Setup | Filter | covered base n / PF / expR | kept n / PF / expR | dropped expR | halves (kept, all) | permutation p |
+|---|---|---|---|---|---|---|
+| DIST | need OI (coin) 3d change > 0 | 340 / 4.16 / +0.67 | 178 / **5.25** / **+0.79** | +0.54 | 3.72 / 5.29 | 0.053 |
+| DIST | only crowded longs (L/S p30 >= 80 and OI 7d > 0) | 338 / 4.13 / +0.67 | 67 / 5.15 / +0.79 | +0.64 | 3.10 / 4.85 | 0.33 |
+| DIST | skip OI 7d >= +10% | 340 / 4.16 | 279 / 4.13 | | | no lift |
+| DIST | funding filters (skip < 0, need > clamp, skip p30 <= 20) | 220 / 3.22 | 173 / 3.25, 16 / 2.91, 177 / 3.06 | | | no lift |
+| FADE | skip OI 7d >= +10% | 185 / 2.70 / +0.22 | 130 / **3.23** / **+0.29** | +0.11 | 3.29 / 2.17 | 0.074 |
+| FADE | skip L/S p30 <= 20 | 185 / 2.70 | 127 / 3.14 / +0.25 | +0.22 | 3.63 / 1.70 | 0.75 |
+| FADE | need OI 3d rising | 185 / 2.70 | 68 / 1.95 | | | hurts |
+| FADE | only crowded longs | 185 / 2.70 | 16 / 1.25 | | | hurts |
+| FADE | funding filters | 77 / 1.51 | 60 / 1.31, 68 / 1.47 | | | hurts |
+
+Bucket readings (terciles):
+
+* Distribution Short: rising OI in coin units before the signal is better (OI 7d top tercile +0.77R PF 5.5 vs bottom +0.52R PF 3.0). Interpretation: positions still being added while price goes quiet = more fuel for the breakdown. Funding in the lowest tercile (<= +0.004%/8h, shorts already paying) is weakest (+0.41R PF 2.5). L/S percentile shows nothing (+0.66 / +0.66 / +0.68).
+* Downtrend Bounce Fade: the opposite on OI. Bounces with a big OI build (7d > +8%) are the weakest (+0.12R PF 1.8): a bounce carried by new longs/shorts piling in keeps going, a bounce that is short covering (OI falling) fades. Rising L/S over 3 days is mildly better (+0.27R PF 3.9 top tercile).
+* Coins with no OKX history at the signal (newer listings) were the weakest for both setups (DIST +0.18R n 27, FADE -0.38R n 6), small n.
+
+**Verdict, honest:** the best two candidates are DIST "need OI 3d > 0" (+0.25R per trade vs dropped trades, p 0.053, but it halves the trade count) and FADE "skip OI 7d >= +10%" (+0.18R, p 0.074). Neither survives a multiple-testing correction (9 filters x 2 setups tested, so Bonferroni needs p < ~0.003), and both are on a survivor-only 2.5-year window. **No feature passes the edge gate as a filter tonight.** Recommendation: log everything (the patch below), and pre-register exactly these two rules to be confirmed on the forward ledger; leave all funding rules alone (no lift, and funding history is only 17 months).
+
+Raw output: the full log is reproducible with the command above; per-trade rows can be exported by calling `run_backtest()` and reading the frame passed to `analyse_backtest()`.
 
 ## 4. Integration patch (for the lead)
 
@@ -161,7 +198,7 @@ Add to `.github/workflows/monitor.yml` env (all optional): `COINALYZE_API_KEY`, 
 
 ## 5. Tests
 
-`python -m pytest tests/test_features.py -q` : TESTS_PLACEHOLDER. All HTTP is mocked through a fake session (no network). Covered: symbol/multiplier mapping, percentile, geo-block memory (Bybit 403 not retried), never-raise on connection errors, OKX full path, 4h funding normalisation, MEXC fallback, Bybit path, total outage, caching, Coinalyze market resolution + features in both funding unit conventions, CoinGlass with/without key (header and 4h interval asserted), DEX impostor filtering / hype / boost / liquidity floor / outage, Whale Alert disabled, alert and Enterprise schemas, Hyperliquid incl. kPEPE, flag rules incl. the clamp case, snapshot merge with Coinalyze primary, snapshot timeout and crash isolation, alert line, ledger join, no-lookahead in historical features, backtest filter maths.
+`python -m pytest tests/test_features.py -q` : **32 passed** in ~1 s. All HTTP is mocked through a fake session (no network). Covered: symbol/multiplier mapping, percentile, geo-block memory (Bybit 403 not retried), never-raise on connection errors, OKX full path, 4h funding normalisation, MEXC fallback, Bybit path, total outage, caching, Coinalyze market resolution + features in both funding unit conventions, CoinGlass with/without key (header and 4h interval asserted), DEX impostor filtering / hype / boost / liquidity floor / outage, Whale Alert disabled, alert and Enterprise schemas, Hyperliquid incl. kPEPE, flag rules incl. the clamp case, snapshot merge with Coinalyze primary, snapshot timeout and crash isolation, alert line, ledger join, no-lookahead in historical features, backtest filter maths.
 
 ## 6. Unfinished / caveats
 

@@ -106,10 +106,17 @@ def ledger_frame(trades: list[dict]) -> pd.DataFrame:
     """Closed fired trades with a stored snapshot -> one row per trade."""
     rows = []
     for t in trades:
-        if t.get("r_multiple") is None or not t.get("features_json"):
+        raw = t.get("features_json")
+        if raw is None and t.get("id") is not None:
+            try:                  # monitor.py stores snapshots in app_state
+                from triggers import db
+                raw = db.get_state(f"features:{t['id']}")
+            except Exception:     # noqa: BLE001
+                raw = None
+        if t.get("r_multiple") is None or not raw:
             continue
         try:
-            snap = json.loads(t["features_json"])
+            snap = json.loads(raw)
         except (TypeError, ValueError):
             continue
         rows.append({"id": t.get("id"), "setup": t.get("setup_label"),

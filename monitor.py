@@ -585,12 +585,27 @@ def poll_once() -> dict:
                 continue
         if verdict == "fire":
             text = _alert_text(t, ind["price"], reason)
+            snap = None
+            try:                           # positioning features: logged, never blocking
+                from features.snapshot import snapshot, alert_line
+                snap = snapshot(t["symbol"].replace("-USD", "USDT"), t.get("direction"))
+                line = alert_line(snap)
+                if line:
+                    text += f"\n📡 {line}"
+            except Exception as exc:                      # noqa: BLE001
+                log.debug("feature snapshot failed: %s", exc)
             delivered = telegram.send_message(text)
             # Mark fired if delivered (or Telegram is a no-op); leave active to
             # retry on a transient send failure so a real alert isn't lost.
             if delivered or not telegram.is_configured():
                 tdb.mark_fired(t["id"], ind["price"], note=reason)
                 fired += 1
+                if snap:
+                    try:                   # stored in app_state: no schema change needed
+                        from features.snapshot import to_json
+                        tdb.set_state(f"features:{t['id']}", to_json(snap))
+                    except Exception as exc:              # noqa: BLE001
+                        log.debug("feature store failed: %s", exc)
                 try:                       # guard: this alert is "issued", not revenge
                     from guard.ledger import Ledger
                     from config import POSITION_MARGIN_USD
