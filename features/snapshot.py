@@ -9,6 +9,12 @@ Features are LOGGED with each signal for later evaluation
 (research/features_eval.py). They are not trade calls and do not gate anything
 until the evaluation shows a measured lift.
 
+Source priority for the positioning fields (funding, OI change, L/S, taker):
+Coinalyze on the Bybit market when COINALYZE_API_KEY is set (primary), else
+OKX public -> MEXC -> Bybit public (features/derivs.py). Hyperliquid adds a
+cross-venue funding/OI read, DEX Screener the on-chain hype read, CoinGlass and
+Whale Alert only when their paid keys exist.
+
 Sources run in parallel threads with a time budget; whatever has not answered
 in time is None. Each source caches its own responses, so a second snapshot of
 the same coin within 5 minutes costs no HTTP calls.
@@ -115,8 +121,10 @@ def merge(parts: dict[str, dict]) -> dict[str, Any]:
     for k in CANONICAL:
         v = cz.get(k)
         out[k] = v if v is not None else dv.get(k)
-    if cz.get("funding_8h") is not None and dv.get("funding_interval_h"):
-        out["funding_interval_h"] = dv.get("funding_interval_h")
+    if cz.get("funding_8h") is not None:
+        # Coinalyze has no interval field; OKX's interval may differ from
+        # Bybit's, so do not borrow it. funding_8h assumes 8h in this case.
+        out["funding_interval_h"] = None
     out["pos_src"] = ("coinalyze" if cz.get("funding_8h") is not None
                       else dv.get("derivs_src"))
     if cz:
@@ -128,8 +136,9 @@ def merge(parts: dict[str, dict]) -> dict[str, Any]:
 def snapshot(symbol: str, direction: str | None = None, *, budget: float = DEFAULT_BUDGET,
              with_dex: bool = True, with_paid: bool = True) -> dict[str, Any]:
     """Flat numeric features for `symbol` at this moment. Never raises.
-    Keys: every derivs/dex/coinglass/whales field (None when missing), the
-    FLAGS, plus meta: symbol, direction, ts, ms, sources."""
+    Keys: every coinalyze/derivs/dex/hyperliquid field (None when missing),
+    coinglass/whales fields when their keys are set, the FLAGS, plus meta:
+    symbol, direction, ts, ms, sources, pos_src."""
     t0 = time.time()
     snap: dict[str, Any] = {"symbol": symbol, "direction": direction, "ts": int(t0)}
     for k in coinalyze.FIELDS + derivs.FIELDS + dex.FIELDS + hyperliquid.FIELDS:
@@ -200,6 +209,9 @@ def alert_line(snap: dict | None) -> str:
         parts.append(f"L/S {snap['ls_ratio']:.2f}" + (f" (p{p:.0f})" if p is not None else ""))
     if snap.get("taker_ratio_24h") is not None:
         parts.append(f"taker {snap['taker_ratio_24h']:.2f}")
+    lg, sh = snap.get("liq_long_24h"), snap.get("liq_short_24h")
+    if lg is not None and sh is not None and (lg + sh) >= 100_000:
+        parts.append(f"liq 24h L ${lg / 1e6:.1f}M / S ${sh / 1e6:.1f}M")
     if snap.get("dex_vol_exp_1h") is not None and (snap.get("dex_vol_h24") or 0) >= 100_000:
         parts.append(f"DEX vol {snap['dex_vol_exp_1h']:.1f}x")
     if snap.get("whale_netflow_usd"):
