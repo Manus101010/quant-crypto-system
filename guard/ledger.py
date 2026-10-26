@@ -101,8 +101,10 @@ class Ledger:
         cut = (now - timedelta(hours=ISSUED_TTL_H)).isoformat()
         return [r for r in rows if r.get("issued_at", "") >= cut or r.get("live")]
 
-    def issue(self, plan: dict, now: datetime | None = None) -> dict:
-        """Register a guard issued plan. Applies and consumes the 1R lock.
+    def issue(self, plan: dict, now: datetime | None = None, consume_lock: bool = True) -> dict:
+        """Register a guard issued plan. Applies the 1R lock and, when
+        `consume_lock`, uses it up. Pass consume_lock=False for alerts merely
+        sent (he may skip them); /took and /guard ... issue consume it.
         plan: {symbol, type: plain|grid, direction|mode, entry, stop, leverage,
                margin|investment, lo, hi, grids}."""
         now = now or datetime.now(timezone.utc)
@@ -111,7 +113,10 @@ class Ledger:
         rec.setdefault("id", uuid.uuid4().hex[:10])
         rec["issued_at"] = now.isoformat()
         lock = self.lock()
-        if lock:
+        if lock and not consume_lock:
+            rec["size_locked"] = True
+            rec["max_loss_usd"] = ONE_R
+        elif lock:
             rec["size_locked"] = True
             rec["max_loss_usd"] = ONE_R
             self._set("guard:lock_1r", "")

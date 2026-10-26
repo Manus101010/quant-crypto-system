@@ -132,7 +132,14 @@ Setup: range −20% / +25% around price, 200 grids, $50, held up to 7 days, one 
 
 - At 5x, a straight run through the stop costs $43.07 of the $50 margin. The 25% rule rejects **every** one of these setups. At 10x, the liquidation rule rejects all of them as well.
 - These bots win about 61% of the time with small gains, then lose most of the margin in roughly a third of runs. The "$100 to $2,000" track record fits that profile: a long run of wins that had not yet met its stop-outs.
-- **Live DOODUSDT bot** (short, 5x, 200 grids, 0.0016 to 0.0025, stop just above 0.0025):
+- **Reviewer re-checks (docs/night/review.md):**
+  - The kernel matches two independent re-implementations: a hand-coded order book on real DOOD bars, and a ∫pos·dx integral on a synthetic lattice. Both agree to 1e-12.
+  - Removing the stop does not rescue the style. Short, no filter, 5x/200g, 7d cap, no stop: PF 0.54, 14% of runs liquidated. With no stop and no time cap: PF 0.47, 40% liquidated.
+  - Removing the 7d cap alone gives PF 0.50.
+  - Measured on the same 8 coins, OKX 1m vs 5m at 200 grids adds about +0.01R per trade.
+  - Only the majors (BTC, ETH, SOL and the like, n 674) break even: PF 1.05.
+- The figures below assume **$50 invested**. The live bot holds $263.86, which scales the loss about 5.3x. See the reconciliation in review.md: at the app's 75% deploy ratio, a stop at 0.0025125 from entry 0.002096 costs about $148, and from mark 0.00202 about $168 to $223.
+- **Live DOODUSDT bot** (short, 5x, 200 grids, 0.0016 to 0.0025, stop just above 0.0025, **$50 investment**):
 
 | opened at | stop-out loss | liquidation | meets 2× liquidation rule? |
 |---|---|---|---|

@@ -88,7 +88,19 @@ def _took(arg: str, taken: bool) -> str:
         return f"No open {sym} trade to mark."
     t = sorted(op, key=lambda t: t.get("fired_at") or "")[-1]
     db.set_outcome(t["id"], {"taken": taken})
-    return (f"✅ Marked {sym} as taken — it now counts toward your risk cap." if taken
+    lock_note = ""
+    if taken:
+        try:                     # taking a trade uses up the 1R lock after a stop out
+            from guard.ledger import Ledger
+            led = Ledger()
+            if led.lock():
+                led.issue({"symbol": t["symbol"], "type": "plain",
+                           "direction": t.get("direction") or "long",
+                           "stop": t.get("stop"), "trigger_id": t["id"]})
+                lock_note = "\n🔒 This one is your 1R trade after the stop out: max loss $12.50."
+        except Exception as exc:                         # noqa: BLE001
+            log.debug("guard lock on /took failed: %s", exc)
+    return (f"✅ Marked {sym} as taken — it now counts toward your risk cap.{lock_note}" if taken
             else f"↩️ {sym} unmarked.")
 
 

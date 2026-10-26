@@ -609,10 +609,13 @@ def poll_once() -> dict:
                 try:                       # guard: this alert is "issued", not revenge
                     from guard.ledger import Ledger
                     from config import POSITION_MARGIN_USD
-                    Ledger().issue({"symbol": t["symbol"], "type": "plain",
-                                    "direction": t.get("direction") or "long",
-                                    "entry": ind["price"], "stop": t.get("stop"),
-                                    "margin": POSITION_MARGIN_USD, "trigger_id": t["id"]})
+                    if t.get("direction") in ("long", "short"):
+                        # alert sent ≠ trade taken: the 1R lock is only used up on /took
+                        Ledger().issue({"symbol": t["symbol"], "type": "plain",
+                                        "direction": t["direction"],
+                                        "entry": ind["price"], "stop": t.get("stop"),
+                                        "margin": POSITION_MARGIN_USD, "trigger_id": t["id"]},
+                                       consume_lock=False)
                 except Exception as exc:                  # noqa: BLE001
                     log.debug("guard issue failed: %s", exc)
                 log.info("FIRED #%d %s — %s", t["id"], t["symbol"], reason)

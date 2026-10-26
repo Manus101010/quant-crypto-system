@@ -204,3 +204,17 @@ def test_unissued_pnl_split_and_cap_once():
     assert day["realised_unissued"] == -130 and day["realised_issued"] == 0
     assert L.mark_cap_hit(now) is True and L.mark_cap_hit(now) is False
     assert json.loads(m.d["guard:day:2026-10-27"])["cap_hit"] is True
+
+
+def test_alert_sent_does_not_consume_1r_lock():
+    """Review fix: a fired alert he skips must not use up the lock; /took does."""
+    L, _ = _ledger()
+    now = datetime(2026, 10, 27, 1, tzinfo=timezone.utc)
+    start_ms = int(datetime(2026, 10, 26, 14, tzinfo=timezone.utc).timestamp() * 1000)
+    L.apply_closed([{"symbol": "HYPEUSDT", "closedPnl": "-12.5", "orderId": "o9",
+                     "updatedTime": str(start_ms + 1000)}], now)
+    rec = L.issue({"symbol": "SOLUSDT", "type": "plain", "direction": "long"}, now,
+                  consume_lock=False)
+    assert rec["size_locked"] and L.lock() is not None
+    L.issue({"symbol": "ETHUSDT", "type": "plain", "direction": "short"}, now)
+    assert L.lock() is None
