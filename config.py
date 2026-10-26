@@ -88,6 +88,7 @@ MAX_PORTFOLIO_RISK_USD: float = float(_secret("MAX_PORTFOLIO_RISK_USD")
 GRID_MAX_LEVERAGE = 5        # hard cap, even when the math allows more
 GRID_LIQ_BUFFER = 0.03       # liquidation must sit ≥3% beyond the stop-loss
 GRID_MMR = 0.005             # maintenance margin rate used in the liq estimate
+GUARD_SMALLCAP_MMR = 0.05    # guard's MMR for /guard checks: DOOD's live liq implied 5.74%
 GRID_FEE_PCT = 0.02          # per-side fee % assumed per grid fill (limit orders)
 
 # ── Automatic scans (run by the cloud monitor at these local times) ──────────

@@ -23,7 +23,11 @@ log = get_logger(__name__)
 _API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 _HELP = ("🤖 <b>Commands</b>\n/status — market gate, BTC, armed setups, risk\n"
          "/open — your open trades with live R\n/took HYPE — mark a trade as taken\n"
-         "/untook HYPE — undo\n/longs off | on — switch long alerts off/on\n/scan — run a scan now\n<i>Signal only — the bot never trades.</i>")
+         "/untook HYPE — undo\n/longs off | on — switch long alerts off/on\n/scan — run a scan now\n"
+         "/guard short DOODUSDT grid 0.0016 0.0025 200 5x 263.86 [sl X] [@entry] — check a grid\n"
+         "/guard long BTCUSDT 65000 63000 10x 50 — check a plain trade (entry stop lev margin)\n"
+         "/addbot BOTID SYMBOL — watch a Bybit grid bot · /rmbot BOTID · /bots\n"
+         "<i>Signal only — the bot never trades.</i>")
 
 
 def _send(text: str) -> None:
@@ -129,7 +133,70 @@ def handle(text: str) -> str:
                 + " Use /longs off or /longs on.")
     if cmd == "/scan":
         return _scan()
+    if cmd == "/guard":
+        return _guard(arg)
+    if cmd in ("/addbot", "/rmbot", "/bots"):
+        from guard.ledger import Ledger
+        led = Ledger()
+        if cmd == "/bots":
+            b = led.grid_bots()
+            return "\n".join(f"• {k} {v.get('symbol') or ''}" for k, v in b.items()) or "No grid bots registered."
+        parts = arg.split()
+        if not parts:
+            return f"Usage: {cmd} BOTID" + (" SYMBOL (Bot ID is on the bot details page)" if cmd == "/addbot" else "")
+        if cmd == "/addbot":
+            led.add_grid_bot(parts[0], parts[1].upper() if len(parts) > 1 else None)
+            return f"🤖 Watching grid bot {parts[0]}."
+        return "Removed." if led.remove_grid_bot(parts[0]) else "Not registered."
     return "Unknown command. " + _HELP
+
+
+def _guard(arg: str) -> str:
+    """Pre flight check of a setup against the trader's rules. Append 'issue' to
+    register an accepted plan so the watcher does not tag it as unissued."""
+    from guard import preflight as pf
+    from guard.ledger import Ledger
+    from utils import exchange
+    issue = arg.strip().lower().endswith(" issue")
+    if issue:
+        arg = arg.strip()[:-len(" issue")]
+    try:
+        g = pf.parse_guard_command(arg)
+    except (ValueError, IndexError) as exc:
+        return f"Usage: /guard short DOODUSDT grid LO HI GRIDS 5x INVEST [sl X] [@ENTRY] [issue]\n({exc})"
+    led = Ledger()
+    day = led.day()
+    ctx = dict(daily_realised_pnl=day["realised"], max_loss_usd=led.max_loss_for_next())
+    try:
+        from triggers.outcomes import portfolio_heat
+        ctx["open_risk_usd"] = portfolio_heat()["open_risk"]
+    except Exception:                                   # noqa: BLE001
+        pass
+    if g["type"] == "grid":
+        entry = g["entry"]
+        if entry is None:
+            sym = g["symbol"].replace("USDT", "") + "-USD"
+            try:
+                entry = exchange.get_last_prices([sym]).get(sym)
+            except Exception:                           # noqa: BLE001
+                entry = None
+        if not entry:
+            return "No live price; add @ENTRY, e.g. @0.0021"
+        from config import GUARD_SMALLCAP_MMR
+        v = pf.check_grid(g["direction"], g["lo"], g["hi"], g["grids"], g["leverage"],
+                          g["investment"], g["stop"], entry, mmr=GUARD_SMALLCAP_MMR, **ctx)
+    else:
+        v = pf.check_plain(g["direction"], g["entry"], g["stop"], g["leverage"], g["margin"], **ctx)
+    txt = pf.format_verdict(v, g["symbol"])
+    if ctx.get("max_loss_usd"):
+        txt += f"\n🔒 1R lock active (after a stop out): this setup may lose at most ${ctx['max_loss_usd']:.2f}."
+    if issue:
+        if v.ok:
+            led.issue(g | {"mode": g["direction"]})
+            txt += "\n✅ Registered as issued: the watcher won't tag it."
+        else:
+            txt += "\n⛔ Not registered: fix the failed rules first."
+    return txt
 
 
 def listen(seconds: float) -> None:

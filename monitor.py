@@ -312,6 +312,16 @@ def _sizing_line(trg: dict, price: float) -> str:
             return ""
         budget = (f"🔥 Money at risk in trades you've taken: ${h['open_risk']:.0f} "
                   f"of your ${h['cap']:.0f} limit")
+        try:                                      # guard: daily cap and 1R lock
+            from guard.ledger import Ledger
+            led = Ledger()
+            if led.day().get("cap_hit"):
+                return "🛑 <b>Daily loss cap hit.</b> Guard shut until midnight Sydney. Skip this one."
+            lock = led.max_loss_for_next()
+            if lock:
+                budget += f"\n🔒 1R lock after a stop out: this trade risks at most ${lock:.2f}, never more."
+        except Exception as exc:                  # noqa: BLE001
+            log.debug("guard sizing check failed: %s", exc)
         if h["next_risk"] <= 0:
             return (f"{budget}\n⚠️ <b>You're at your limit</b> — skip this one, or wait "
                     f"until an open trade is closed or safe.")
@@ -581,6 +591,15 @@ def poll_once() -> dict:
             if delivered or not telegram.is_configured():
                 tdb.mark_fired(t["id"], ind["price"], note=reason)
                 fired += 1
+                try:                       # guard: this alert is "issued", not revenge
+                    from guard.ledger import Ledger
+                    from config import POSITION_MARGIN_USD
+                    Ledger().issue({"symbol": t["symbol"], "type": "plain",
+                                    "direction": t.get("direction") or "long",
+                                    "entry": ind["price"], "stop": t.get("stop"),
+                                    "margin": POSITION_MARGIN_USD, "trigger_id": t["id"]})
+                except Exception as exc:                  # noqa: BLE001
+                    log.debug("guard issue failed: %s", exc)
                 log.info("FIRED #%d %s — %s", t["id"], t["symbol"], reason)
             else:
                 log.warning("trigger #%d met but Telegram send failed; will retry", t["id"])
