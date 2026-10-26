@@ -1,0 +1,18 @@
+{
+ "period": [
+  "2025-11-11 00:00:00",
+  "2026-10-26 17:05:00"
+ ],
+ "split": "2026-05-04 20:32:30",
+ "configs": 1440,
+ "signals": 167284336,
+ "taken": 11861212,
+ "rej_step": 29772581,
+ "rej_loss": 125650543,
+ "rej_liq": 0,
+ "configs_all_rejected": 111,
+ "configs_pf_gt1": 10,
+ "configs_gate": 0,
+ "configs_robust": 0,
+ "runtime_s": 2025
+}

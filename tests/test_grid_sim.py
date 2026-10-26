@@ -166,3 +166,53 @@ def test_batch_no_overlap_skips_while_bot_running():
                     20, 0, False, 50.0, 3.0, 0.002, False, 100, 1e9, 0.0, MMR,
                     MAKER_FEE, TAKER_FEE, SLIPPAGE, True)
     assert list(out[:, 0]) == [OK, SKIP, OK, SKIP]
+
+
+def _brute_grid(path, lv, k0, q, stype):
+    """Independent order-book model: resting orders per line, re-armed on fill."""
+    n = len(lv) - 1
+    cash = pos = 0.0
+    orders = {}
+    for i in range(n):
+        if stype[i] == 1 and i < k0:
+            orders[i] = ("buy", i)
+        elif stype[i] == -1 and i >= k0:
+            orders[i + 1] = ("sell", i)
+        elif stype[i] == 1:                       # long slot opened at start
+            orders[i + 1] = ("sell", i)
+        else:                                     # short slot opened at start
+            orders[i] = ("buy", i)
+    for i in range(n):                            # initial market position
+        if stype[i] == 1 and i >= k0:
+            pos += q; cash -= q * path[0]
+        elif stype[i] == -1 and i < k0:
+            pos -= q; cash += q * path[0]
+    prev = path[0]
+    for x in path[1:]:
+        if x > prev:
+            lines = [j for j in range(n + 1) if prev < lv[j] <= x]
+        else:
+            lines = [j for j in range(n + 1) if x <= lv[j] < prev][::-1]
+        for j in lines:
+            if j in orders:
+                side, slot = orders.pop(j)
+                if side == "buy":
+                    pos += q; cash -= q * lv[j]; orders[slot + 1] = ("sell", slot)
+                else:
+                    pos -= q; cash += q * lv[j]; orders[slot] = ("buy", slot)
+        prev = x
+    return cash + pos * path[-1]
+
+
+@pytest.mark.parametrize("mode", ["neutral", "long", "short"])
+def test_kernel_matches_bruteforce_orderbook(mode):
+    rng = np.random.default_rng(5)
+    for _ in range(20):
+        path = 100 * np.exp(np.cumsum(np.r_[0, rng.normal(0, 0.003, 400)]))
+        cfg = GridConfig(mode, 85, 118, 40, 3.0, maker=0, taker=0, slippage=0)
+        o, c = path[:-1], path[1:]
+        if not (85 < o.min() and o.max() < 118 and c.min() > 85 and c.max() < 118):
+            continue
+        r = simulate(o, np.maximum(o, c), np.minimum(o, c), c, cfg)
+        s = build(cfg, o[0])
+        assert r.pnl == pytest.approx(_brute_grid(path, s.levels, s.k0, s.q, s.stype), abs=1e-9)

@@ -139,6 +139,8 @@ def load() -> tuple[dict, dict]:
     uni = {x["base"]: x for x in json.loads((CACHE / "universe.json").read_text())}
     coins = {}
     for p in sorted(CACHE.glob("*.parquet")):
+        if p.stem.startswith(("okx1m_", "trades")):
+            continue
         df = pd.read_parquet(p)
         if len(df) >= 20_000:
             coins[p.stem] = df
