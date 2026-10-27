@@ -282,6 +282,8 @@ def _grid_block(trg: dict, price: float, m: dict) -> str:
               "• Take-profit price: leave empty (trailing trade — I'll tell you when to stop it)")
         return "\n".join([
             "🤖 <b>Or run it as a Bybit futures grid bot</b> (profits from the swings):",
+            "⚠️ <i>Not edge tested: grids failed the backtest (0 of 1,440 configs passed). "
+            "Optional, your call, never bigger than the plain trade.</i>",
             f"• Mode: <b>{g['mode']}</b> · Leverage: <b>{g['leverage']}×</b> (isolated)",
             f"• Price range: {f(g['lower'])} – {f(g['upper'])} · <b>{g['grids']} grids</b> "
             f"(~{g['step_pct']:.1f}% apart, ~{g['net_per_grid_pct']:.1f}% ≈ "
@@ -600,6 +602,11 @@ def poll_once() -> dict:
             if delivered or not telegram.is_configured():
                 tdb.mark_fired(t["id"], ind["price"], note=reason)
                 fired += 1
+                try:                       # desk: background review, replies in ~1 to 2 min
+                    from desk.agents.service import review_trigger_async
+                    review_trigger_async(t, ind["price"])
+                except Exception as exc:                  # noqa: BLE001
+                    log.debug("desk queue failed: %s", exc)
                 if snap:
                     try:                   # stored in app_state: no schema change needed
                         from features.snapshot import to_json

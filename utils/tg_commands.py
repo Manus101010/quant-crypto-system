@@ -27,6 +27,7 @@ _HELP = ("🤖 <b>Commands</b>\n/status — market gate, BTC, armed setups, risk
          "/guard short DOODUSDT grid 0.0016 0.0025 200 5x 263.86 [sl X] [@entry] — check a grid\n"
          "/guard long BTCUSDT 65000 63000 10x 50 — check a plain trade (entry stop lev margin)\n"
          "/addbot BOTID SYMBOL — watch a Bybit grid bot · /rmbot BOTID · /bots\n"
+         "/desk SOL long [entry stop] — AI desk review (veto only) · /deskstats — is the desk helping?\n"
          "<i>Signal only — the bot never trades.</i>")
 
 
@@ -147,6 +148,11 @@ def handle(text: str) -> str:
         return _scan()
     if cmd == "/guard":
         return _guard(arg)
+    if cmd == "/desk":
+        return _desk(arg)
+    if cmd == "/deskstats":
+        from desk.agents.store import scorecard_text
+        return scorecard_text()
     if cmd in ("/addbot", "/rmbot", "/bots"):
         from guard.ledger import Ledger
         led = Ledger()
@@ -161,6 +167,25 @@ def handle(text: str) -> str:
             return f"🤖 Watching grid bot {parts[0]}."
         return "Removed." if led.remove_grid_bot(parts[0]) else "Not registered."
     return "Unknown command. " + _HELP
+
+
+def _desk(arg: str) -> str:
+    """On demand desk review: /desk SOL long [entry stop]. Costs API tokens."""
+    from config import ANTHROPIC_API_KEY
+    parts = arg.split()
+    if len(parts) < 2 or parts[1].lower() not in ("long", "short"):
+        return "Usage: /desk SOL long [entry stop]  (stop needed for the guard check)"
+    if not ANTHROPIC_API_KEY:
+        return "Desk needs an ANTHROPIC_API_KEY (Claude API credits, separate from Claude Pro)."
+    try:
+        entry = float(parts[2]) if len(parts) > 2 else None
+        stop = float(parts[3]) if len(parts) > 3 else None
+    except ValueError:
+        return "Entry and stop must be numbers, e.g. /desk SOL long 182.4 176.9"
+    from desk.agents.service import review
+    from desk.agents.report import telegram_text
+    res = review(parts[0], parts[1].lower(), entry=entry, stop=stop, send=False)
+    return telegram_text(res)
 
 
 def _guard(arg: str) -> str:
