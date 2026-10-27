@@ -88,6 +88,17 @@ MAX_PORTFOLIO_RISK_USD: float = float(_secret("MAX_PORTFOLIO_RISK_USD")
 GRID_MAX_LEVERAGE = 5        # hard cap, even when the math allows more
 GRID_LIQ_BUFFER = 0.03       # liquidation must sit ≥3% beyond the stop-loss
 GRID_MMR = 0.005             # maintenance margin rate used in the liq estimate
+GUARD_SMALLCAP_MMR = 0.05    # guard's MMR for /guard checks: DOOD's live liq implied 5.74%
+
+# ── Desk (multi agent review layer, desk/agents) ─────────────────────────────
+# Veto only: reviews a signal AFTER scanner + guard, can shrink or skip, never add.
+# Uses the Claude API (pay per token, separate from the Claude Pro plan).
+# Off until Phase 0 is done: set the DESK_ENABLED secret to 1 to start shadow mode.
+DESK_ENABLED: bool = str(_secret("DESK_ENABLED") or "0") in ("1", "true", "yes")
+DESK_MODEL_FAST = "claude-haiku-5-5"   # analysts
+DESK_MODEL_DEEP = "claude-haiku-5-5"   # bull, bear, trader, risk, PM (try Sonnet only if debates read shallow)
+DESK_DEBATE_ROUNDS = 2
+DESK_PROMPT_VERSION = "v1"             # bump when a prompt changes: resets that comparison
 GRID_FEE_PCT = 0.02          # per-side fee % assumed per grid fill (limit orders)
 
 # ── Automatic scans (run by the cloud monitor at these local times) ──────────

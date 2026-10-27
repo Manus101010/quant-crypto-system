@@ -215,8 +215,24 @@ def build_brief() -> str:
     decay = _decay()
     if decay:
         parts.append(decay)
+    parts.append(COMMANDS_CHEATSHEET)
     parts.append("<i>Signal only — a read, not a trade. You execute manually.</i>")
     return "\n\n".join(parts)
+
+
+# Daily reminder of the Telegram commands (he won't remember them otherwise).
+COMMANDS_CHEATSHEET = (
+    "📋 <b>Commands</b>\n"
+    "<code>/status</code> market, BTC, armed setups, risk\n"
+    "<code>/open</code> your open trades with live R\n"
+    "<code>/took SOL</code> mark a trade taken (<code>/untook SOL</code> undo)\n"
+    "<code>/scan</code> run a scan now · <code>/longs off</code> or <code>on</code>\n"
+    "<code>/guard long SOL 182.4 176.9 7x 50</code> check a plain trade (entry stop lev margin)\n"
+    "<code>/guard short DOODUSDT grid 0.0016 0.00221 200 3x 263.86 sl 0.002221</code> check a grid\n"
+    "<code>/addbot BOTID DOOD</code> watch a grid bot · <code>/bots</code> list\n"
+    "<code>/desk SOL long 182.4 176.9</code> AI desk review · <code>/deskstats</code> is it helping\n"
+    "<code>/help</code> full list"
+)
 
 
 def main() -> None:

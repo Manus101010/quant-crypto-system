@@ -1,0 +1,65 @@
+name: Watcher (Bybit read only account guard)
+
+# NOT scheduled on purpose. GitHub hosted runners are in the US and Bybit answers
+# HTTP 403 to US IP addresses, so `runs-on: ubuntu-latest` cannot reach the private
+# API. Run this either:
+#   * on a self hosted runner on your Mac (set RUNNER below to "self-hosted"), or
+#   * outside GitHub on any free non US host (see docs/night/guard_watcher.md).
+# Manual start only. To schedule it on a self hosted runner, add a `schedule:` block.
+# Signal only: the key must be a Bybit READ ONLY API key. No order code exists.
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "runs-on label: self-hosted (Mac) or ubuntu-latest (dry run only, US => 403)"
+        required: false
+        default: "self-hosted"
+      minutes:
+        description: "How long to poll before exiting"
+        required: false
+        default: "340"
+      dry_run:
+        description: "true = fixture only, no keys, no Telegram"
+        required: false
+        default: "false"
+
+concurrency:
+  group: watcher
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ${{ github.event.inputs.runner || 'self-hosted' }}
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        if: ${{ github.event.inputs.runner == 'ubuntu-latest' }}
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: python3 -m pip install -r requirements.txt
+
+      - name: Dry run (fixture)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: python3 watcher.py --once --dry-run --summary
+
+      - name: Watch (live, read only)
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          BYBIT_API_KEY:      ${{ secrets.BYBIT_API_KEY }}
+          BYBIT_API_SECRET:   ${{ secrets.BYBIT_API_SECRET }}
+          BYBIT_BASE_URL:     ${{ secrets.BYBIT_BASE_URL }}
+          BYBIT_GRID_BOT_IDS: ${{ secrets.BYBIT_GRID_BOT_IDS }}
+          SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python3 watcher.py --loop --interval 60 --max-minutes ${{ github.event.inputs.minutes || '340' }}

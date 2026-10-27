@@ -282,6 +282,8 @@ def _grid_block(trg: dict, price: float, m: dict) -> str:
               "• Take-profit price: leave empty (trailing trade — I'll tell you when to stop it)")
         return "\n".join([
             "🤖 <b>Or run it as a Bybit futures grid bot</b> (profits from the swings):",
+            "⚠️ <i>Not edge tested: grids failed the backtest (0 of 1,440 configs passed). "
+            "Optional, your call, never bigger than the plain trade.</i>",
             f"• Mode: <b>{g['mode']}</b> · Leverage: <b>{g['leverage']}×</b> (isolated)",
             f"• Price range: {f(g['lower'])} – {f(g['upper'])} · <b>{g['grids']} grids</b> "
             f"(~{g['step_pct']:.1f}% apart, ~{g['net_per_grid_pct']:.1f}% ≈ "
@@ -312,6 +314,16 @@ def _sizing_line(trg: dict, price: float) -> str:
             return ""
         budget = (f"🔥 Money at risk in trades you've taken: ${h['open_risk']:.0f} "
                   f"of your ${h['cap']:.0f} limit")
+        try:                                      # guard: daily cap and 1R lock
+            from guard.ledger import Ledger
+            led = Ledger()
+            if led.day().get("cap_hit"):
+                return "🛑 <b>Daily loss cap hit.</b> Guard shut until midnight Sydney. Skip this one."
+            lock = led.max_loss_for_next()
+            if lock:
+                budget += f"\n🔒 1R lock after a stop out: this trade risks at most ${lock:.2f}, never more."
+        except Exception as exc:                  # noqa: BLE001
+            log.debug("guard sizing check failed: %s", exc)
         if h["next_risk"] <= 0:
             return (f"{budget}\n⚠️ <b>You're at your limit</b> — skip this one, or wait "
                     f"until an open trade is closed or safe.")
@@ -575,12 +587,44 @@ def poll_once() -> dict:
                 continue
         if verdict == "fire":
             text = _alert_text(t, ind["price"], reason)
+            snap = None
+            try:                           # positioning features: logged, never blocking
+                from features.snapshot import snapshot, alert_line
+                snap = snapshot(t["symbol"].replace("-USD", "USDT"), t.get("direction"))
+                line = alert_line(snap)
+                if line:
+                    text += f"\n📡 {line}"
+            except Exception as exc:                      # noqa: BLE001
+                log.debug("feature snapshot failed: %s", exc)
             delivered = telegram.send_message(text)
             # Mark fired if delivered (or Telegram is a no-op); leave active to
             # retry on a transient send failure so a real alert isn't lost.
             if delivered or not telegram.is_configured():
                 tdb.mark_fired(t["id"], ind["price"], note=reason)
                 fired += 1
+                try:                       # desk: background review, replies in ~1 to 2 min
+                    from desk.agents.service import review_trigger_async
+                    review_trigger_async(t, ind["price"])
+                except Exception as exc:                  # noqa: BLE001
+                    log.debug("desk queue failed: %s", exc)
+                if snap:
+                    try:                   # stored in app_state: no schema change needed
+                        from features.snapshot import to_json
+                        tdb.set_state(f"features:{t['id']}", to_json(snap))
+                    except Exception as exc:              # noqa: BLE001
+                        log.debug("feature store failed: %s", exc)
+                try:                       # guard: this alert is "issued", not revenge
+                    from guard.ledger import Ledger
+                    from config import POSITION_MARGIN_USD
+                    if t.get("direction") in ("long", "short"):
+                        # alert sent ≠ trade taken: the 1R lock is only used up on /took
+                        Ledger().issue({"symbol": t["symbol"], "type": "plain",
+                                        "direction": t["direction"],
+                                        "entry": ind["price"], "stop": t.get("stop"),
+                                        "margin": POSITION_MARGIN_USD, "trigger_id": t["id"]},
+                                       consume_lock=False)
+                except Exception as exc:                  # noqa: BLE001
+                    log.debug("guard issue failed: %s", exc)
                 log.info("FIRED #%d %s — %s", t["id"], t["symbol"], reason)
             else:
                 log.warning("trigger #%d met but Telegram send failed; will retry", t["id"])

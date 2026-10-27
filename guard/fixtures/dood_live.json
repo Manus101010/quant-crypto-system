@@ -1,0 +1,20 @@
+{
+  "_comment": "Dry run fixture: Manus's live DOOD short grid (27 Oct 2026, from the Bybit app) plus one plain position. Field names follow Bybit V5.",
+  "wallet": {"accountType": "UNIFIED", "totalEquity": "512.40", "totalWalletBalance": "500.00",
+             "totalAvailableBalance": "180.10", "totalPerpUPL": "12.40"},
+  "positions": [
+    {"symbol": "HYPEUSDT", "side": "Sell", "size": "4.2", "avgPrice": "38.10", "markPrice": "37.60",
+     "liqPrice": "45.90", "stopLoss": "", "takeProfit": "", "unrealisedPnl": "2.10",
+     "positionIM": "53.34", "leverage": "3", "tradeMode": 0}
+  ],
+  "grids": [
+    {"bot_id": "fixture-dood", "symbol": "DOODUSDT", "status": "RUNNING", "grid_mode": "FUTURES_GRID_MODE_SHORT",
+     "grid_type": "ARITHMETIC", "min_price": "0.0016", "max_price": "0.0025", "cell_number": 200,
+     "leverage": "5", "total_investment": "263.8642", "current_position": "-210560",
+     "entry_price": "0.002096", "mark_price": "0.0020221", "last_price": "0.0020225",
+     "liquidation_price": "0.0031673", "stop_loss_price": "", "take_profit_price": "",
+     "unrealised_pnl": "15.56", "realised_pnl": "4.21", "tick_size": "0.0000001", "m_m_rate": ""}
+  ],
+  "closed_pnl": [],
+  "btc_regime": {"label": "NEUTRAL", "detail": "fixture"}
+}
