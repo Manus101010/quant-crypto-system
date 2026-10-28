@@ -76,7 +76,7 @@ def load(sym: str) -> pd.DataFrame | None:
         return None
     df = pd.read_parquet(p).astype(float)
     df = df[~df.index.duplicated()].sort_index()
-    if len(df) < 24 * 45:
+    if len(df) < 24 * 5:      # short lived (dead) listings are kept
         return None
     # regularise to a continuous hourly grid (gaps stay NaN and block trades)
     full = pd.date_range(df.index[0], df.index[-1], freq="1h")

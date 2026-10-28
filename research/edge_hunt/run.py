@@ -70,13 +70,11 @@ def main(max_coins: int | None = None):
         if df is None:
             continue
         df = df[df.index >= H.START - pd.Timedelta(days=60)]
-        if len(df) < 24 * 45:
+        if len(df) < 24 * 5:
             continue
         oi = H.load_oi(sym, df.index)
         f = features(df, oi)
         uni = H.universe_ok(f) & (f.index >= H.START)
-        if not uni.any():
-            continue
         A = H.arrays(f)
         cache = {}
         for name, (cand, fn, need_oi, ex) in V.items():
@@ -92,6 +90,9 @@ def main(max_coins: int | None = None):
             idx, side, stop = cache[key]
             if len(idx) == 0:
                 continue
+            # new listings have 30 to 50% structural stops; allow up to 50% (sized below 1x),
+            # the same rule live Distribution Short uses since commit 57f1676
+            H.MAX_STOP = 0.50 if cand == "C7" else 0.25
             for t in H.run_signals(A, idx, side, stop, H.EXITS[ex], sym):
                 t["variant"] = name
                 t["cand"] = cand

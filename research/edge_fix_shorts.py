@@ -112,7 +112,30 @@ def variants(setup: str) -> dict:
     v["V8 skip FOMC/CPI in next 48h"] = ("filter", lambda x: ~x.macro_next2.astype(bool))
     if setup == DS:
         v["V9 stop cap 25% (undo 25 Oct rule)"] = ("filter", lambda x: x.stop_pct <= 25)
+    # Added AFTER the first full run showed the Jul..Sep 2026 losses came in a broad
+    # alt rally. Selected on IS like the rest, but their OOS is not clean: read as
+    # hypotheses for the forward ledger, not as validated.
+    v["V10 (post hoc) setup decay gate: last 20 closed trades mean R > 0"] = ("filter", lambda x: x.decay_ok.astype(bool))
+    v["V11 (post hoc) breadth not rising: breadth50 <= its value 20d ago"] = ("filter", lambda x: (x.breadth_chg20 <= 0).fillna(False))
     return v
+
+
+def add_gates(x: pd.DataFrame, ctx: pd.DataFrame, k: int = 20) -> pd.DataFrame:
+    """decay_ok: mean R of the last k trades of this setup that had CLOSED before
+    the signal close is > 0 (True while fewer than k have closed). Uses only
+    information available at the signal. breadth_chg20: breadth50 change over 20d."""
+    x = x.sort_values("date").copy()
+    exit_t = x.date + pd.Timedelta(days=1) + pd.to_timedelta(x.bars_h, unit="h")
+    order = np.argsort(exit_t.values)
+    et, rr = exit_t.values[order], x.r.values[order]
+    ok = []
+    for d in (x.date + pd.Timedelta(days=1)).values:
+        m = np.searchsorted(et, d, side="right")
+        ok.append(True if m < k else rr[m - k:m].mean() > 0)
+    x["decay_ok"] = ok
+    b = ctx["breadth50"]
+    x["breadth_chg20"] = (b - b.shift(20)).reindex(x.date).values
+    return x
 
 
 def apply(x: pd.DataFrame, kind, spec) -> pd.Series:
@@ -168,7 +191,8 @@ def main(out: Path):
       f"{int(meta.dead.sum())} of them delisted before 20 Oct 2026. Signals 2022-01-01..2026-10-26: "
       f"{len(T)} raw (all filters off), {n_open} still open at data end on live coins (excluded).\n")
 
-    lives = {DS: live(T, DS), DBF: live(T, DBF), BDS: live(T, BDS)}
+    ctx = pd.read_parquet(out / "short_ctx.parquet")
+    lives = {k_: add_gates(live(T, k_), ctx) for k_ in (DS, DBF, BDS)}
     lives_alt = {"DS old cap 25%": live(T, DS, 25.0),
                  "BDS incl. oversold": T[(T.setup == BDS) & veto(T) & (T.stop_pct <= 25) & np.isfinite(T.r)]}
 
