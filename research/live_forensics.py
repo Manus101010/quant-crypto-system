@@ -27,21 +27,23 @@ Replay rules (as live, per scan slot 19:50 / 00:05 / 04:00 UTC):
 
 Usage:
   python research/live_forensics.py fetch                 # candles -> cache
-  python research/live_forensics.py replay --ledger track_export.json
+  python research/live_forensics.py funding               # OKX funding history
+  python research/live_forensics.py replay --ledger track_export.json [--era current]
   python research/live_forensics.py diagnose --ledger track_export.json
+Unknowns (not reconstructable): the macro deployment score (regime_score=None,
+so no regime gate and no conviction scaling), decay deactivation dates (none
+modelled; longs were blocked by the long gate from 13 Oct anyway), the config
+before 25 Oct (inferred, see Replay.era_params) and the over_cap clean up.
 Cache: $FORENSICS_CACHE (default /tmp/live_forensics_cache).
 """
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
-import math
 import os
 import pickle
 import sys
 import types
-from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -116,7 +118,7 @@ def load_cache() -> tuple[dict, dict]:
 
 
 def slots(start: pd.Timestamp = START, end: pd.Timestamp | None = None) -> list[pd.Timestamp]:
-    end = end or pd.Timestamp.utcnow().tz_localize(None)
+    end = end or pd.Timestamp.now("UTC").tz_localize(None)
     out = []
     day = start.normalize()
     while day <= end:
@@ -328,7 +330,7 @@ class Replay:
         sl = slots(end=end)
         swapped = False
         for i, t in enumerate(sl):
-            nxt = sl[i + 1] if i + 1 < len(sl) else (end or pd.Timestamp.utcnow().tz_localize(None))
+            nxt = sl[i + 1] if i + 1 < len(sl) else (end or pd.Timestamp.now("UTC").tz_localize(None))
             p = self.era_params(t)
             if self.era == "ledger" and not swapped and p["cap"]:
                 swapped = True
@@ -688,6 +690,89 @@ def backtest_exit_r(t: dict, d1: pd.DataFrame, atr: float) -> dict:
             "bt_trail": stop}
 
 
+def okx_oi(symbols: list[str]) -> dict:
+    """Daily open interest in coin units from OKX (the only free OI history the
+    sandbox reaches). Missing coins are skipped."""
+    import ccxt
+    ok = ccxt.okx({"enableRateLimit": True, "httpsProxy": os.environ.get("HTTPS_PROXY"),
+                   "options": {"defaultType": "swap"}})
+    ok.load_markets()
+    out = {}
+    for s_ in symbols:
+        m = s_[:-4] + "/USDT:USDT"
+        if m not in ok.markets:
+            continue
+        try:
+            r = ok.fetch_open_interest_history(m, "1d", limit=40)
+        except Exception:                                   # noqa: BLE001
+            continue
+        out[s_] = pd.Series({pd.Timestamp(x["timestamp"], unit="ms"): x.get("openInterestAmount")
+                             for x in r}).sort_index()
+    return out
+
+
+def diagnose_extra(led: pd.DataFrame, d: dict, h: dict) -> dict:
+    """Signals the ledger set aside as over_cap, DS signal anatomy, OI filter,
+    and how correlated the open book was."""
+    from skills import new_setups
+    from triggers import outcomes
+    res: dict = {}
+    oc = []
+    for _, t in led[led["status"] == "over_cap"].iterrows():
+        t = t.to_dict()
+        t["target"] = None if pd.isna(t["target"]) else t["target"]
+        h1 = h[t["symbol"]]
+        p = outcomes._simulate(t, d[t["symbol"]], h1[h1.index >= pd.Timestamp(t["fired_at"]).normalize()])
+        oc.append({"symbol": t["symbol"], "setup": t["setup_label"], "fired": t["fired_at"][:16],
+                   "outcome": (p or {}).get("outcome"), "r": (p or {}).get("r_multiple")})
+    rs = [x["r"] for x in oc if x["r"] is not None]
+    res["over_cap"] = {"n": len(oc), "closed": _stats(rs), "rows": oc}
+    ds = led[(led["status"] == "fired") & (led["setup_label"] == "Distribution Short")]
+    oi = okx_oi(list(ds["symbol"]))
+    anat = []
+    for _, t in ds.iterrows():
+        cl = d[t["symbol"]][d[t["symbol"]].index < pd.Timestamp(t["fired_at"]).normalize()]
+        x = new_setups._ind(cl).iloc[-1]
+        sig = cl.index[-1]
+        o = oi.get(t["symbol"])
+        oi3 = None
+        if o is not None:
+            w = o[o.index <= sig + pd.Timedelta(days=1)]     # OKX snapshots at 16:00 UTC
+            if len(w) >= 4:
+                oi3 = float(w.iloc[-1] / w.iloc[-4] - 1)
+        anat.append({"symbol": t["symbol"], "signal_bar": str(sig.date()),
+                     "ret120": float(x["ret120"]), "sma50_gt_200": bool(x["sma50"] > x["sma200"]),
+                     "close_vs_sma200": float(x["c"] / x["sma200"] - 1),
+                     "dd_from_120d_high": float(x["c"] / cl["high"].iloc[-120:].max() - 1),
+                     "ret30": float(x["c"] / cl["close"].iloc[-31] - 1),
+                     "bbw_pct": float(x["bbw_pct"]), "qvol20_musd": float(x["qvol20"] / 1e6),
+                     "oi_coin_3d": oi3,
+                     "oi_filter": None if oi3 is None else ("take" if oi3 > 0 else "skip")})
+    res["ds_anatomy"] = anat
+    longs = sorted(set(led[led["fired_at"].notna() & (led["direction"] == "long")]["symbol"]))
+    longs = [s_ for s_ in longs if s_ in h]
+
+    def pair_corr(syms, a, b):
+        r = pd.DataFrame({s_: h[s_]["close"] for s_ in syms}).loc[a:b].pct_change(fill_method=None)
+        c = r.corr().values
+        return float(np.nanmean(c[np.triu_indices(len(syms), 1)]))
+    cl = pd.DataFrame({s_: d[s_]["close"] for s_ in longs})
+    basket = cl.loc["2026-10-26"] / cl.loc["2026-10-10"] - 1
+    res["long_burst"] = {"n_coins": len(longs),
+                         "corr_1h_during_hold": pair_corr(longs, "2026-10-11", "2026-10-25"),
+                         "basket_ret_10_to_26_oct_mean": float(basket.mean()),
+                         "basket_down": int((basket < 0).sum()),
+                         "btc_ret_10_to_26_oct": float(d["BTC-USD"]["close"].loc["2026-10-26"]
+                                                       / d["BTC-USD"]["close"].loc["2026-10-10"] - 1)}
+    dsy = list(ds["symbol"])
+    r = pd.DataFrame({s_: h[s_]["close"] for s_ in dsy}).loc["2026-09-26":"2026-10-26"].pct_change(
+        fill_method=None)
+    res["ds_book"] = {"corr_1h_30d": pair_corr(dsy, "2026-09-26", "2026-10-26"),
+                      "beta_to_btc": {s_: float(r[s_].cov(r["BTC-USD"]) / r["BTC-USD"].var())
+                                      for s_ in dsy}}
+    return res
+
+
 def diagnose(led, d, h, funding):
     from skills import new_setups
     from triggers import outcomes
@@ -730,6 +815,10 @@ def diagnose(led, d, h, funding):
             r.update(backtest_exit_r(t, d1, atr))
         rows.append(r)
     df = pd.DataFrame(rows)
+    extra = diagnose_extra(led, d, h)
+    out = CACHE / "diagnose_extra.json"
+    out.write_text(json.dumps(extra, indent=1, default=str))
+    print(json.dumps(extra, indent=1, default=str))
     out = CACHE / "diagnose.pkl"
     out.write_bytes(pickle.dumps(df))
     pd.set_option("display.width", 250)
