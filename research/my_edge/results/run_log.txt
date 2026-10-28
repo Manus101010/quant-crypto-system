@@ -1,0 +1,35 @@
+496 symbols 80 entries 17 exits
+/home/claude/quant-crypto-system/research/my_edge/setups.py:82: RuntimeWarning: divide by zero encountered in divide
+  ext_up = pd.Series((h - e50_4_1) / a4_1).rolling(P, min_periods=1).max().to_numpy()
+/home/claude/quant-crypto-system/research/my_edge/setups.py:83: RuntimeWarning: divide by zero encountered in divide
+  ext_dn = pd.Series((e50_4_1 - l) / a4_1).rolling(P, min_periods=1).max().to_numpy()
+50 10s 2205233
+100 16s 3966753
+/home/claude/quant-crypto-system/research/my_edge/setups.py:82: RuntimeWarning: divide by zero encountered in divide
+  ext_up = pd.Series((h - e50_4_1) / a4_1).rolling(P, min_periods=1).max().to_numpy()
+/home/claude/quant-crypto-system/research/my_edge/setups.py:82: RuntimeWarning: invalid value encountered in divide
+  ext_up = pd.Series((h - e50_4_1) / a4_1).rolling(P, min_periods=1).max().to_numpy()
+/home/claude/quant-crypto-system/research/my_edge/setups.py:83: RuntimeWarning: divide by zero encountered in divide
+  ext_dn = pd.Series((e50_4_1 - l) / a4_1).rolling(P, min_periods=1).max().to_numpy()
+/home/claude/quant-crypto-system/research/my_edge/setups.py:83: RuntimeWarning: invalid value encountered in divide
+  ext_dn = pd.Series((e50_4_1 - l) / a4_1).rolling(P, min_periods=1).max().to_numpy()
+/home/claude/quant-crypto-system/research/my_edge/setups.py:82: RuntimeWarning: divide by zero encountered in divide
+  ext_up = pd.Series((h - e50_4_1) / a4_1).rolling(P, min_periods=1).max().to_numpy()
+/home/claude/quant-crypto-system/research/my_edge/setups.py:83: RuntimeWarning: divide by zero encountered in divide
+  ext_dn = pd.Series((e50_4_1 - l) / a4_1).rolling(P, min_periods=1).max().to_numpy()
+150 24s 5632424
+200 32s 7537508
+/home/claude/quant-crypto-system/research/my_edge/setups.py:82: RuntimeWarning: divide by zero encountered in divide
+  ext_up = pd.Series((h - e50_4_1) / a4_1).rolling(P, min_periods=1).max().to_numpy()
+/home/claude/quant-crypto-system/research/my_edge/setups.py:83: RuntimeWarning: divide by zero encountered in divide
+  ext_dn = pd.Series((e50_4_1 - l) / a4_1).rolling(P, min_periods=1).max().to_numpy()
+250 39s 9283293
+/home/claude/quant-crypto-system/research/my_edge/setups.py:82: RuntimeWarning: divide by zero encountered in divide
+  ext_up = pd.Series((h - e50_4_1) / a4_1).rolling(P, min_periods=1).max().to_numpy()
+/home/claude/quant-crypto-system/research/my_edge/setups.py:83: RuntimeWarning: divide by zero encountered in divide
+  ext_dn = pd.Series((e50_4_1 - l) / a4_1).rolling(P, min_periods=1).max().to_numpy()
+/home/claude/quant-crypto-system/research/my_edge/setups.py:82: RuntimeWarning: divide by zero encountered in divide
+  ext_up = pd.Series((h - e50_4_1) / a4_1).rolling(P, min_periods=1).max().to_numpy()
+/home/claude/quant-crypto-system/research/my_edge/setups.py:83: RuntimeWarning: divide by zero encountered in divide
+  ext_dn = pd.Series((e50_4_1 - l) / a4_1).rolling(P, min_periods=1).max().to_numpy()
+300 48s 11351241
