@@ -389,7 +389,10 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     # Concurrent cap: open trades (paper or taken, this tracking period: the same
     # set that blocks coins above) + new arms may not exceed MAX_OPEN_POSITIONS.
     from config import MAX_OPEN_POSITIONS
-    n_open = len(open_all)
+    # Paper rows over the per-day basket cap were never tradeable alerts: they
+    # still block their coin (held, above) but do not use a concurrent slot.
+    from triggers.outcomes import is_basket_capped
+    n_open = sum(1 for t in open_all if not is_basket_capped(t))
     slots = max(0, MAX_OPEN_POSITIONS - n_open)
     n_arm = min(top_n, slots)
     # Diversify: cap any single setup so the armed set is a spread across types.

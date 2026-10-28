@@ -1102,7 +1102,7 @@ def _drop_forming(df, now: pd.Timestamp | None = None):
     skills.new_setups.latest(): every backtest classifies on CLOSED bars only."""
     if df is None or len(df) == 0:
         return df
-    now = pd.Timestamp(now) if now is not None else pd.Timestamp.utcnow()
+    now = pd.Timestamp(now) if now is not None else pd.Timestamp.now("UTC")
     if now.tzinfo is not None:
         now = now.tz_convert("UTC").tz_localize(None)
     today = now.normalize()

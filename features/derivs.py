@@ -104,6 +104,25 @@ def _funding_feats(cur: float | None, interval_h: float | None,
     return out
 
 
+def oi_change_okx(symbol: str, hours: int = 72) -> float | None:
+    """% change of OKX open interest in COIN units over the last `hours` (1h rows,
+    at most 99). Logged on fired signals as the "OI 3d rising" forward-test flag
+    (docs/edge_fix/shorts.md: pre-registered DS filter, logged not gated). Never raises."""
+    try:
+        _, core = split_symbol(symbol)
+        inst = f"{core}-USDT-SWAP"
+        insts = okx_instruments()
+        if insts and inst not in insts:
+            return None
+        oi = _okx("/api/v5/rubik/stat/contracts/open-interest-history",
+                  {"instId": inst, "period": "1H", "limit": 100})
+        rows = [(int(r[0]), fnum(r[2])) for r in oi if len(r) >= 4 and fnum(r[2])]
+        return _chg(rows, hours)
+    except Exception as exc:                        # noqa: BLE001
+        log.debug("oi_change_okx %s failed: %s", symbol, exc)
+        return None
+
+
 def from_okx(core: str) -> dict:
     inst = f"{core}-USDT-SWAP"
     insts = okx_instruments()
