@@ -120,12 +120,12 @@ def run_symbol(root: Path, sym: str, d: pd.DataFrame, meta: dict, ctx: pd.DataFr
             continue
         dead = meta["dead"]
 
-        def run(s0, e0, hold_days, tgt0=tgt, trail0=trail, be=np.nan):
-            j, px, code = C.sim_short_1h(o, h, l, c, cumf, s0, e0, stop, tgt0, trail0, be,
-                                         hold_days * 24, dead)
+        def run(s0, e0, hold_days, tgt0=tgt, trail0=trail, be=np.nan, stop0=stop, ct=False):
+            j, px, code = C.sim_short_1h(o, h, l, c, cumf, s0, e0, stop0, tgt0, trail0, be,
+                                         hold_days * 24, dead, hours, ct)
             if code == 5:
                 return np.nan, j, code
-            return C.r_of(e0, stop, px, cumf, s0 - 1, j), j, code
+            return C.r_of(e0, stop0, px, cumf, s0 - 1, j), j, code
 
         r0, j0, code0 = run(s, entry, HOLD[lab])
         busy[lab] = idx[j0]
@@ -136,6 +136,32 @@ def run_symbol(root: Path, sym: str, d: pd.DataFrame, meta: dict, ctx: pd.DataFr
             r_exit, _, _ = run(s, entry, HOLD[lab], tgt0=entry - 2 * (stop - entry))
         lowD = float(d["low"].iat[i])
         out = {}
+        # research exit model (daily close + 3.5 ATR trail) for the trailing setups
+        out["r_closetrail"] = run(s, entry, HOLD[lab], ct=True)[0] if not np.isnan(trail) else r0
+        # live arming: the scan runs `dly` hours after the daily close and the
+        # monitor fires on the first poll at the then price (monitor.py
+        # enter_now_short: invalid if price >= stop, <= target, or > 3% below entry).
+        atr_i = float(det["atr"].iat[i]) if lab != C.BDS else float(bd["atr"].iat[i])
+        for dly in (6, 12, 20):
+            sd = s + dly
+            key = f"live{dly}"
+            if sd >= len(c) or (h[s:sd] >= stop).any():
+                out[key] = out[key + "_restop"] = np.nan
+                continue
+            e1 = float(o[sd])
+            if e1 >= stop or e1 < entry * 0.97 or (not np.isnan(tgt) and e1 <= tgt):
+                out[key] = out[key + "_restop"] = np.nan
+                continue
+            # (a) live today: stop fixed from the signal close; paper trail at the
+            #     full live stop distance (outcomes.py trail_dist = risk)
+            tr_live = (stop - e1) if not np.isnan(trail) else np.nan
+            out[key] = run(sd, e1, HOLD[lab], trail0=tr_live)[0]
+            # (b) fix: recompute the stop at arm time from the live price
+            if lab == C.DBF:
+                out[key + "_restop"] = out[key]          # DBF stop is a level (7d high), unchanged
+            else:
+                st2 = e1 + 3.5 * atr_i
+                out[key + "_restop"] = run(sd, e1, HOLD[lab], trail0=3.5 * atr_i, stop0=st2)[0]
         for name, win, ev4 in (("conf4h", 48, True), ("conf1h", 24, False)):
             jj, ce = _confirm(o, h, l, c, hours, s, stop, lowD, tgt, win, ev4)
             if jj < 0:
@@ -159,6 +185,8 @@ def run_symbol(root: Path, sym: str, d: pd.DataFrame, meta: dict, ctx: pd.DataFr
             "macro_next2": bool(((C.MACRO >= t_entry) & (C.MACRO <= t_entry + pd.Timedelta(days=1))).any()),
             "r": r0, "exit_code": int(code0), "bars_h": int(j0 - s + 1),
             "r_time": r_time, "r_exit": r_exit, **out,
+            "ret120": float(x["ret120"].iat[i]), "above200": bool(x["c"].iat[i] > x["sma200"].iat[i]),
+            "dist_hi120": float(x["c"].iat[i] / d["high"].iloc[max(0, i - 119):i + 1].max() - 1),
             **({} if cx is None else {kk: cx[kk] for kk in
                 ("btc_above50", "btc_above200", "btc_trend", "btc_4h_below_ema50", "breadth50",
                  "btc_r7")}),

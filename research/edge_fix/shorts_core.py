@@ -107,9 +107,14 @@ def daily_from_1h(k: pd.DataFrame) -> pd.DataFrame:
 
 
 @numba.njit(cache=True)
-def sim_short_1h(o, h, l, c, cumf, s, entry, stop, target, trail, be_r, max_bars, dead):
+def sim_short_1h(o, h, l, c, cumf, s, entry, stop, target, trail, be_r, max_bars, dead,
+                 hours, close_trail=False):
     """Short entered at `entry` before bar s. Returns (exit_idx, exit_px, code).
-    code 0 stop, 1 trail, 2 target, 3 time, 4 delisted at data end, 5 open (exclude)."""
+    code 0 stop, 1 trail, 2 target, 3 time, 4 delisted at data end, 5 open (exclude).
+    close_trail False: trail off the best low every hour (Bybit native, what
+    triggers/outcomes.py paper tracking does). True: the research model of
+    backtesting/crypto_optimize._simulate, stop = min(stop, daily close + trail),
+    updated once per day at the UTC close."""
     n = len(c)
     risk = stop - entry
     st = stop
@@ -124,7 +129,13 @@ def sim_short_1h(o, h, l, c, cumf, s, entry, stop, target, trail, be_r, max_bars
             return j, target, 2
         if l[j] < best:
             best = l[j]
-        if not np.isnan(trail):
+        if not np.isnan(trail) and close_trail:
+            if hours[j] == 23:
+                ns = c[j] + trail
+                if ns < st:
+                    st = ns
+                    moved = True
+        elif not np.isnan(trail):
             ns = best + trail
             if ns < st:
                 st = ns

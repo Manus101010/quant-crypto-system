@@ -112,6 +112,14 @@ def variants(setup: str) -> dict:
     v["V8 skip FOMC/CPI in next 48h"] = ("filter", lambda x: ~x.macro_next2.astype(bool))
     if setup == DS:
         v["V9 stop cap 25% (undo 25 Oct rule)"] = ("filter", lambda x: x.stop_pct <= 25)
+    # Added after the forensics note (lead, 28 Oct): exit model, arming time, the
+    # sma50 > sma200 branch. Also selected on IS only.
+    if setup in (DS, BDS):
+        v["V12 exit: research close trail (close + 3.5 ATR, daily)"] = ("swap", "r_closetrail")
+    v["V13 arm 12h after close at live price, stop recomputed"] = ("swap", "live12_restop")
+    if setup == DS:
+        v["V14 drop the sma50 > sma200 branch (need +50% in 120d)"] = ("filter", lambda x: x.ret120 >= 0.5)
+        v["V15 sma50 > sma200 branch only above the 200d"] = ("filter", lambda x: (x.ret120 >= 0.5) | x.above200.astype(bool))
     # Added AFTER the first full run showed the Jul..Sep 2026 losses came in a broad
     # alt rally. Selected on IS like the rest, but their OOS is not clean: read as
     # hypotheses for the forward ledger, not as validated.
@@ -188,7 +196,7 @@ def main(out: Path):
     w = L.append
     n_open = int(T.r.isna().sum())
     w(f"Universe: {len(meta)} Binance USDT-M perps with >= 60 days of data, "
-      f"{int(meta.dead.sum())} of them delisted before 20 Oct 2026. Signals 2022-01-01..2026-10-26: "
+      f"{int(meta.dead.sum())} of them delisted before 20 Oct 2026. Signals 2022-01-01 to 2026-10-26: "
       f"{len(T)} raw (all filters off), {n_open} still open at data end on live coins (excluded).\n")
 
     ctx = pd.read_parquet(out / "short_ctx.parquet")
@@ -197,7 +205,7 @@ def main(out: Path):
                  "BDS incl. oversold": T[(T.setup == BDS) & veto(T) & (T.stop_pct <= 25) & np.isfinite(T.r)]}
 
     # 1. headline + survivors
-    w("## T1 Headline, live versions, full period 2022-01..2026-10\n")
+    w("## T1 Headline, live versions, full period 2022-01 to 2026-10\n")
     w("| Setup | n | PF | exp R | win | 95% CI exp R (week bootstrap) | survivors only: n / PF / exp R | delisted coins only: n / exp R |")
     w("|---|---|---|---|---|---|---|---|")
     for name, x in list(lives.items()) + list(lives_alt.items()):
@@ -236,7 +244,7 @@ def main(out: Path):
     w("")
 
     # 2026 significance
-    w("## T4 Is 2026 different from 2022..2025? (difference in exp R, week-block bootstrap)\n")
+    w("## T4 Is 2026 different from 2022 to 2025? (difference in exp R, week-block bootstrap)\n")
     w("| Setup | pre-2026 n / exp R | 2026 n / exp R | diff | 95% CI of diff | p(2026 not worse) |")
     w("|---|---|---|---|---|---|")
     for s, x in lives.items():
@@ -251,8 +259,8 @@ def main(out: Path):
     w("")
 
     # regimes
-    w("## T5 Regime splits (live versions). Cells: n / PF / exp R. Full = 2022-01..2026-10, OOS = 2025-07..2026-10\n")
-    T_br = pd.cut(T.breadth50, [-0.01, 0.3, 0.6, 1.01], labels=["breadth <30%", "breadth 30-60%", "breadth >60%"])
+    w("## T5 Regime splits (live versions). Cells: n / PF / exp R. Full = 2022-01 to 2026-10, OOS = 2025-07 to 2026-10\n")
+    T_br = pd.cut(T.breadth50, [-0.01, 0.3, 0.6, 1.01], labels=["breadth <30%", "breadth 30 to 60%", "breadth >60%"])
     T_fd = pd.cut(T.fund3, [-1, -1e-9, 0.9999e-4, 1], labels=["funding < 0", "funding 0..0.01%", "funding >= 0.01%"])
     T_oi = pd.cut(T.oi_chg3d if "oi_chg3d" in T else pd.Series(np.nan, index=T.index),
                   [-10, 0, 0.10, 100], labels=["OI 3d <= 0", "OI 3d 0..+10%", "OI 3d > +10%"])
@@ -281,22 +289,22 @@ def main(out: Path):
     # 3. wide stops
     w("## T6 Distribution Short by stop distance (funding veto on, no stop cap)\n")
     D = T[(T.setup == DS) & veto(T) & np.isfinite(T.r)]
-    w("| Stop % | all 2022..2026: n / PF / exp R | survivors only: n / PF / exp R | IS 2022..2025-06 | OOS 2025-07..2026-10 | 2026 only |")
+    w("| Stop % | all 2022 to 2026: n / PF / exp R | survivors only: n / PF / exp R | IS 2022 to 2025-06 | OOS 2025-07 to 2026-10 | 2026 only |")
     w("|---|---|---|---|---|---|")
     for lo, hi in [(0, 15), (15, 25), (25, 35), (35, 50), (50, 999), (0, 25), (25, 50), (0, 50)]:
         y = D[(D.stop_pct > lo) & (D.stop_pct <= hi)]
         c = lambda z: (lambda st: f"{st['n']} / {st['pf']:.2f} / {st['exp']:+.3f}" if st['n'] else "0")(summ(z))
-        w(f"| {lo}-{hi if hi < 999 else 'max'} | {c(y)} | {c(y[~y.dead])} | {c(y[y.period=='IS'])} | "
+        w(f"| {lo} to {hi if hi < 999 else 'max'} | {c(y)} | {c(y[~y.dead])} | {c(y[y.period=='IS'])} | "
           f"{c(y[y.period=='OOS'])} | {c(y[y.date.dt.year==2026])} |")
     y = D[(D.stop_pct > 25) & (D.stop_pct <= 50)]
     if len(y) >= 8:
         b = week_boot(y, lambda z: z.r.mean())
-        w(f"\n25-50% bucket exp R 95% CI (week bootstrap): {np.percentile(b,2.5):+.3f} to {np.percentile(b,97.5):+.3f}; "
+        w(f"\n25 to 50% bucket exp R 95% CI (week bootstrap): {np.percentile(b,2.5):+.3f} to {np.percentile(b,97.5):+.3f}; "
           f"PF {pf(y.r):.2f}, n {len(y)}.")
     w("")
 
     # 4. variants
-    w("## T7 Candidate fixes: chosen on IS (2022-01..2025-06), tested untouched on OOS (2025-07..2026-10)\n")
+    w("## T7 Candidate fixes: chosen on IS (2022-01 to 2025-06), tested untouched on OOS (2025-07 to 2026-10)\n")
     w("Cells: n / PF / exp R. delta = variant exp R minus live base exp R on the same period; p one sided week-block bootstrap. "
       "Holm p corrects over every variant tried (all setups).\n")
     rows, oos_ps = [], []
@@ -332,15 +340,31 @@ def main(out: Path):
           f"{do:+.3f} ({po:.2f}, {hp:.2f}) | {h1:+.1f} / {h2:+.1f} | {s26['n']} / {s26['exp']:+.3f} | {'PASS' if gate else 'fail'} |")
     w(f"\nVariants tried: {len(oos_ps)} (plus the base per setup). No other variants were run.\n")
 
+    # live arming model
+    w("## T9 Entry timing: research (enter at the daily close) vs how live arms (scan h hours later, fire at the then price)\n")
+    w("Live as is: stop fixed from the signal close, paper trail at the live stop distance, rejected if price is > 3% below the signal close or at the stop. "
+      "Restop: same entry, stop recomputed as live price + 3.5 ATR (DS, BDS; DBF keeps its 7d-high stop). Cells n / PF / exp R.\n")
+    w("| Setup | Model | IS | OOS | 2026 |")
+    w("|---|---|---|---|---|")
+    for s_, x in lives.items():
+        for col, nm in [("r", "research: enter at daily close"), ("r_closetrail", "research exits (close trail)")] + \
+                [(f"live{d}", f"live as is, scan +{d}h") for d in (6, 12, 20)] + \
+                [(f"live{d}_restop", f"restop at arm, scan +{d}h") for d in (6, 12, 20)]:
+            if s_ == DBF and (col == "r_closetrail" or col.endswith("restop")):
+                continue
+            w(f"| {SHORT[s_]} | {nm} | {cf(summ(x[x.period=='IS'], col))} | {cf(summ(x[x.period=='OOS'], col))} | "
+              f"{cf(summ(x[x.date.dt.year==2026], col))} |")
+    w("")
+
     # combos
-    w("## T8 Selected combination per setup (IS-selected rules AND-ed), OOS result\n")
+    w("## T8 Selected combination per setup (IS-selected rules AND-ed, post hoc V10/V11 left out), OOS result\n")
     w("| Setup | Rules | IS n/PF/expR | OOS n/PF/expR | OOS halves R | 2026 n/expR | OOS edge gate |")
     w("|---|---|---|---|---|---|---|")
     for s, x in lives.items():
         if not sel[s]:
             w(f"| {SHORT[s]} | none selected on IS | | | | | |")
             continue
-        filt = [v for v in sel[s] if v[1] == "filter"]
+        filt = [v for v in sel[s] if v[1] == "filter" and "post hoc" not in v[0]]
         swaps = sorted([v for v in sel[s] if v[1] == "swap"], key=lambda v: -v[3])[:1]
         col = swaps[0][2] if swaps else "r"
 
