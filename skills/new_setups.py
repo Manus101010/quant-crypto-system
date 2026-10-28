@@ -149,7 +149,14 @@ def restop(entry: float, atr: float | None, trail_atr: float | None,
     multiple (stop = entry + trail_atr x ATR for a short) instead of the level
     fixed from the signal close. Returns (stop, tp); (None, None) when the plan
     has no ATR multiple (e.g. Downtrend Bounce Fade, whose stop is a price level)."""
-    if not entry or not atr or not trail_atr or atr <= 0:
+    import math
+    try:
+        entry, atr, trail_atr = float(entry), float(atr), float(trail_atr)
+    except (TypeError, ValueError):
+        return None, None
+    # NaN/inf must never reach a stop (Supabase rejects NaN JSON after the alert
+    # was sent, so the trigger would re-fire every poll).
+    if not all(math.isfinite(v) and v > 0 for v in (entry, atr, trail_atr)):
         return None, None
     sg = 1 if short else -1
     stop = entry + sg * trail_atr * atr

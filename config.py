@@ -137,6 +137,12 @@ BYBIT_TRAIL = {
 # produced 10 live-rule trades in 58 months (untestable) and the full rule has no
 # edge (n 920, PF 1.04, +0.014R).
 RETIRED_SETUPS = {"Breakdown Short (55d low)"}
+# Setups validated by a separate research harness (docs/edge_fix/shorts.md: 1h
+# Bybit style trail, 2R take profit, 50% stop cap, funding, survivor free). The
+# weekly decay watch (revalidate.py) re-tests with the old daily per-bar harness,
+# which models none of that, so for these a failing run is REPORTED on Telegram
+# but never auto-deactivates; switch them off by hand (Validation page).
+DECAY_WATCH_MANUAL_ONLY = {"Distribution Short"}
 # Entry drift bounds for the "enter now" research shorts (skills/new_setups.py),
 # measured from the SIGNAL close: no entry after price fell more than DOWN % (the
 # move already happened) or bounced more than UP % (docs/edge_fix/CHANGES.md).

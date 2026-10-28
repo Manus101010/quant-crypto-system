@@ -127,7 +127,22 @@ def validated_setups(stats: dict[str, dict],
 
 
 def save_validation(res: dict) -> None:
+    """Save a validation run. Stats entries marked "locked" in the current file
+    (hand audited from survivor free research, e.g. Distribution Short) are kept,
+    so a "Run Validation" on the old per bar harness can't overwrite them."""
     try:
+        old = load_validation() or {}
+        locked = {k: v for k, v in (old.get("stats") or {}).items()
+                  if isinstance(v, dict) and v.get("locked")}
+        if locked:
+            res = dict(res)
+            res["stats"] = {**(res.get("stats") or {}), **locked}
+            val = list(res.get("validated") or [])
+            for k in locked:
+                if k in (old.get("validated") or []) and k not in val:
+                    val.append(k)
+            if "validated" in res or val:
+                res["validated"] = val
         _SAVE_PATH.write_text(json.dumps(res, indent=2, default=str))
     except Exception as exc:                 # noqa: BLE001
         log.warning("crypto_validation: save failed — %s", exc)

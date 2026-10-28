@@ -2,6 +2,20 @@
 
 Newest first. Each line says what was decided, why, and what would change it.
 
+## 29 Oct 2026
+
+| Area | Decision | Why | Revisit when |
+| --- | --- | --- | --- |
+| Live losses | The minus 4.06R since 8 Oct was a basket of Momentum Runner longs (10 to 12 Oct), not the shorts | Forensics replayed the live ledger (38 of 40 fires reproduced) | n/a |
+| Distribution Short | KEEP with a 2R take profit, 3.5 ATR trail from the signal ATR, stop recomputed at fire, no entry after a bounce above 3% | Survivor free study: n 778, PF 2.01; 2R TP out of sample PF 2.36, +0.427R, both halves positive. 2026 loss was one Jul to Sep alt rally episode | Weekly decay warning arrives (manual decision only, never auto deactivated) |
+| Downtrend Bounce Fade | KEEP as is | Out of sample PF 1.32, both halves positive; thin | Out of sample PF falls below 1 |
+| Breakdown Short (55d low) | RETIRE (`RETIRED_SETUPS`) | 10 live eligible trades in 58 months; full rule PF 1.04 | n/a |
+| Basket cap | At most 3 new fired signals per direction per Sydney day; extras are paper only | 35 correlated longs in 48h caused the loss | n/a |
+| Validation record | Distribution Short entry recomputed and `locked`, so Run Validation can't overwrite it | Old entry was hand edited and inconsistent | New survivor free study |
+| New intraday edges | None adopted | 7 families tested on 486 perps, all failed out of sample; costs eat 0.07 to 0.12R per intraday trade | n/a |
+| Watch only | New listing ORB72 short, liquidity filter, BTC below 50d gate, OI 3d rising: logged, not gated | Not significant after correction | Enough forward data |
+| Desk sizing | Desk fact pack sizes exactly like the alert (wide stops sized down at 1x count as within rules) | Desk was rejecting trades the alert allowed | n/a |
+
 ## 28 Oct 2026
 
 | Area | Decision | Why | Revisit when |

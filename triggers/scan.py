@@ -136,7 +136,9 @@ def _armed_plan(r: dict) -> dict:
         if drift is not None:
             if sg * drift > ENTRY_DRIFT_DOWN_MAX_PCT:
                 blocked = "moved"
-            elif -sg * drift > ENTRY_DRIFT_UP_MAX_PCT:
+            elif rs is not None and -sg * drift > ENTRY_DRIFT_UP_MAX_PCT:
+                # upper bound only for re-stopped (ATR multiple) plans, i.e.
+                # Distribution Short; DBF keeps its researched level stop and no bound
                 blocked = "bounced"
         return {"direction": direction, "entry": entry, "stop": stop, "target": target,
                 "trailing": trailing, "stop_pct": stop_pct, "rr": rr, "tp": tp,
@@ -468,7 +470,9 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
             ctype, cval = "enter_now_short", entry
             cond = {"kind": "enter_now_short", "entry": entry, "stop": stop,
                     "target": target, "max_drift": ENTRY_DRIFT_DOWN_MAX_PCT / 100,
-                    "max_drift_up": ENTRY_DRIFT_UP_MAX_PCT / 100,
+                    # upper bound only where the stop is re-anchored (DS), see _armed_plan
+                    "max_drift_up": (ENTRY_DRIFT_UP_MAX_PCT / 100
+                                     if plan.get("atr") and plan.get("trail_atr") else None),
                     "signal_close": plan.get("signal_close"),
                     # restop at fire: stop = fire price + trail_atr x atr, TP at tp_r
                     "atr": plan.get("atr"), "trail_atr": plan.get("trail_atr"),

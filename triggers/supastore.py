@@ -95,7 +95,8 @@ def _update_tolerant(trigger_id, patch: dict) -> None:
         _c().table("triggers").update(patch).eq("id", trigger_id).execute()
     except Exception as exc:                         # noqa: BLE001
         # PostgREST: "Could not find the 'tp' column of 'triggers' in the schema cache"
-        opt = [k for k in patch if k in _OPTIONAL_COLS and f"'{k}'" in str(exc)]
+        msg = f"{exc} {getattr(exc, 'message', '') or ''}"
+        opt = [k for k in patch if k in _OPTIONAL_COLS and f"'{k}'" in msg]
         if not opt:
             raise
         log.warning("supabase: column(s) %s missing (run docs/edge_fix/SUPABASE_MIGRATION.sql)"

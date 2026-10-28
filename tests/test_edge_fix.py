@@ -165,12 +165,36 @@ def test_evaluate_enter_now_short_drift_and_stop_cap():
     assert v == "invalidate" and "re-anchored" in why
 
 
-def test_evaluate_old_trigger_without_signal_close_gets_upper_bound():
-    cond = {"kind": "enter_now_short", "entry": 100.0, "stop": 130.0, "target": None,
-            "max_drift": 0.03}
-    trg = {"condition_json": json.dumps(cond)}
+def test_evaluate_upper_bound_only_for_restopped_plans():
+    """Review fix: the 3% upper drift bound applies only where the scan stored it
+    (re-stopped Distribution Short plans). Old triggers and DBF (level stop, no
+    upper bound in its research) keep the pre-change behaviour."""
     ind = {"price": 103.5, "prev": 103.5, "rsi2_now": 50, "rsi2_prev": 50, "rsi14_now": 50}
-    assert monitor._evaluate(trg, ind)[0] == "invalidate"
+    old = {"kind": "enter_now_short", "entry": 100.0, "stop": 130.0, "target": None,
+           "max_drift": 0.03}
+    assert monitor._evaluate({"condition_json": json.dumps(old)}, ind)[0] == "fire"
+    dbf = {**old, "signal_close": 100.0, "atr": 2.0, "trail_atr": None, "max_drift_up": None}
+    assert monitor._evaluate({"condition_json": json.dumps(dbf)}, ind)[0] == "fire"
+    ds = {**old, "signal_close": 100.0, "atr": 2.0, "trail_atr": 3.5, "max_drift_up": 0.03,
+          "max_stop_pct": 50.0}
+    assert monitor._evaluate({"condition_json": json.dumps(ds)}, ind)[0] == "invalidate"
+
+
+def test_restop_rejects_non_finite():
+    from skills.new_setups import restop
+    assert restop(100.0, float("nan"), 3.5, 2.0) == (None, None)
+    assert restop(100.0, 2.0, float("inf"), 2.0) == (None, None)
+    assert restop(None, 2.0, 3.5, 2.0) == (None, None)
+
+
+def test_fired_today_counts_parses_trimmed_microseconds(monkeypatch):
+    import datetime as dt
+    rows = [{"fired_at": "2026-10-28T01:02:03.12345+00:00", "direction": "short",
+             "condition_json": "{}"},
+            {"fired_at": "2026-10-28T01:02:03", "direction": "short", "condition_json": "{}"}]
+    monkeypatch.setattr(monitor.tdb, "get_fired_trades", lambda open_only=False: rows)
+    now = dt.datetime(2026, 10, 28, 2, 0, tzinfo=dt.timezone.utc)
+    assert monitor._fired_today_counts(now)["short"] == 2
 
 
 def test_fire_plan_reanchors_stop_and_tp():
@@ -471,3 +495,50 @@ def test_validation_file_distribution_short_recomputed():
     assert s["oos_tp2r"]["n"] == 292 and s["oos_tp2r"]["profit_factor"] == 2.36
     assert "shorts.md" in s["note"]
     assert BDS not in v["validated"] and DS in v["validated"]
+
+
+def test_revalidate_never_auto_deactivates_research_setup(monkeypatch):
+    """Review fix: the old per-bar harness must not switch off Distribution Short
+    (validated on the shorts study harness); it is reported instead."""
+    import revalidate as rv
+    stats = {"Distribution Short": {"n": 40, "profit_factor": 0.6, "win_rate": 0.4},
+             "Squeeze Breakout": {"n": 30, "profit_factor": 0.6, "win_rate": 0.3}}
+    monkeypatch.setattr(rv, "validate_per_setup", lambda **k: {"stats": stats})
+    monkeypatch.setattr(rv, "validated_labels",
+                        lambda: {"Distribution Short", "Squeeze Breakout"})
+    monkeypatch.setattr(rv.tdb, "init_db", lambda: None)
+    monkeypatch.setattr(rv.tdb, "get_deactivated", lambda: set())
+    monkeypatch.setattr(rv.tdb, "last_edge_action", lambda s: None)
+    off = []
+    monkeypatch.setattr(rv.tdb, "deactivate_setup", lambda s, *a, **k: off.append(s))
+    monkeypatch.setattr(rv.tdb, "add_edge_history", lambda rows: None)
+    sent = []
+    monkeypatch.setattr(rv.telegram, "is_configured", lambda: True)
+    monkeypatch.setattr(rv.telegram, "send_message", lambda m: sent.append(m))
+    out = rv.run_revalidation()
+    assert off == ["Squeeze Breakout"]
+    assert [d["setup"] for d in out["manual_review"]] == ["Distribution Short"]
+    assert any("research-validated" in m and "Distribution Short" in m for m in sent)
+
+
+def test_save_validation_keeps_locked_entries(tmp_path, monkeypatch):
+    import json as _json
+    from backtesting import crypto_validation as cv
+    p = tmp_path / "v.json"
+    p.write_text(_json.dumps({"stats": {"Distribution Short": {"n": 778, "locked": True}},
+                              "validated": ["Distribution Short"]}))
+    monkeypatch.setattr(cv, "_SAVE_PATH", p)
+    cv.save_validation({"stats": {"Distribution Short": {"n": 40}, "X": {"n": 1}}, "validated": ["X"]})
+    out = _json.loads(p.read_text())
+    assert out["stats"]["Distribution Short"]["n"] == 778 and out["stats"]["X"]["n"] == 1
+    assert "Distribution Short" in out["validated"]
+
+
+def test_desk_guard_accepts_wide_stop_sized_down(monkeypatch):
+    from desk.agents import factpack
+    from utils import exchange
+    monkeypatch.setattr(exchange, "get_ohlcv", lambda *a, **k: None)
+    pack = factpack.build("SOL-USD", "short", entry=100.0, stop=140.0)   # 40% stop
+    assert pack["guard"]["verdict"] == "ACCEPT"
+    assert pack["guard_options"]["plain"]["leverage"] == 1
+    assert pack["guard_options"]["plain"]["risk_usd"] <= 12.5

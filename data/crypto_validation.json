@@ -176,7 +176,8 @@
         "expectancy_r": -0.376,
         "tp2r_expectancy_r": -0.369
       },
-      "note": "Recomputed 28 Oct 2026 (replaces the hand edited 18 Oct entry, which was internally inconsistent: n 40 vs 62 exits, PF 1.754 with expectancy -0.415R). Source: docs/edge_fix/shorts.md T1/T6/T7, survivor-free Binance USDT-M perps incl. 157 delisted, 2022-01 to 2026-10, live rules (50% stop cap, funding veto), 1h Bybit-style trail at 3.5 ATR, 0.36% round trip plus funding. Headline n/PF/expectancy/win are the base exit (no take profit). avg_win/avg_loss are in R under the live exit (2R take profit, full period). oos_tp2r is the out of sample result of the 2R take profit now used live. 2026 alone is negative (one Jul to Sep alt rally episode, see shorts.md)."
+      "note": "Recomputed 28 Oct 2026 (replaces the hand edited 18 Oct entry, which was internally inconsistent: n 40 vs 62 exits, PF 1.754 with expectancy -0.415R). Source: docs/edge_fix/shorts.md T1/T6/T7, survivor-free Binance USDT-M perps incl. 157 delisted, 2022-01 to 2026-10, live rules (50% stop cap, funding veto), 1h Bybit-style trail at 3.5 ATR, 0.36% round trip plus funding. Headline n/PF/expectancy/win are the base exit (no take profit). avg_win/avg_loss are in R under the live exit (2R take profit, full period). oos_tp2r is the out of sample result of the 2R take profit now used live. 2026 alone is negative (one Jul to Sep alt rally episode, see shorts.md).",
+      "locked": true
     },
     "Breakdown Short (55d low)": {
       "n": 74,

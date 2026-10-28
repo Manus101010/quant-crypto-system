@@ -72,7 +72,8 @@ def run_revalidation(dry_run: bool = False) -> dict:
     already_off = tdb.get_deactivated()
     armable = baseline - already_off             # what currently arms
 
-    history_rows, deactivated, review = [], [], []
+    from config import DECAY_WATCH_MANUAL_ONLY
+    history_rows, deactivated, review, manual = [], [], [], []
 
     # ── Armable setups: check for decay ───────────────────────────────────────
     for setup in sorted(armable):
@@ -84,6 +85,11 @@ def run_revalidation(dry_run: bool = False) -> dict:
 
         if not failing:
             action = "kept"
+        elif setup in DECAY_WATCH_MANUAL_ONLY:
+            # Validated on a different harness: never auto-deactivate on this
+            # one; flag it loudly instead (docs/edge_fix/review.md).
+            action = "warned"          # known action value (no new enum)
+            manual.append({"setup": setup, "pf": pf, "n": n})
         elif band == "established":
             # Two consecutive failing runs before killing a proven setup.
             prev_warned = tdb.last_edge_action(setup) == "warned"
@@ -124,17 +130,25 @@ def run_revalidation(dry_run: bool = False) -> dict:
 
     if not dry_run:
         tdb.add_edge_history(history_rows)
-        _notify(deactivated, review)
+        _notify(deactivated, review, manual)
 
     log.info("revalidation: %d armable checked, %d deactivated, %d newly-passing (review)%s",
              len(armable), len(deactivated), len(review), " [dry-run]" if dry_run else "")
     return {"run_at": run_at, "checked": sorted(armable),
-            "deactivated": deactivated, "review": review, "history": history_rows}
+            "deactivated": deactivated, "review": review, "manual_review": manual,
+            "history": history_rows}
 
 
-def _notify(deactivated: list[dict], review: list[dict]) -> None:
+def _notify(deactivated: list[dict], review: list[dict], manual: list[dict] | None = None) -> None:
     if not telegram.is_configured():
         return
+    if manual:
+        lines = ["⚠️ <b>Decay watch failed a research-validated setup</b>",
+                 "Still arming (this harness does not model its live exits). "
+                 "Review it and switch it off on the Validation page if you agree:"]
+        for d in manual:
+            lines.append(f"• <b>{d['setup']}</b> — PF {d['pf']:.2f}, n {d['n']}")
+        telegram.send_message("\n".join(lines))
     if deactivated:
         lines = ["⛔ <b>Setup(s) auto-deactivated — edge decayed</b>",
                  "These stop arming NEW triggers (existing ones untouched):"]

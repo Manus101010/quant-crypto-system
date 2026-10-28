@@ -499,10 +499,11 @@ def _evaluate(trg: dict, ind: dict) -> tuple[str, str]:
             return ("invalidate", f"already at the target {_fmt_price(tgt)}")
         # Drift is measured from the SIGNAL close (the research entry); triggers
         # armed before 28 Oct 2026 have no signal_close and use the arm price.
-        from config import ENTRY_DRIFT_UP_MAX_PCT
+        # Upper bound only when the scan stored one (re-stopped DS plans); triggers
+        # armed before it and DBF keep the old behaviour (no upper bound).
         ref = cond.get("signal_close") or entry
         dn = cond.get("max_drift", 0.03)
-        up = cond.get("max_drift_up", ENTRY_DRIFT_UP_MAX_PCT / 100)
+        up = cond.get("max_drift_up")
         if ref and price < ref * (1 - dn):
             return ("invalidate", f"moved more than {dn * 100:.0f}% "
                                   f"below the signal price before you could enter")
@@ -604,9 +605,9 @@ def _fired_today_counts(now: datetime.datetime | None = None) -> dict:
         fa = t.get("fired_at")
         if not fa or is_basket_capped(t):
             continue
-        try:
-            ts = datetime.datetime.fromisoformat(str(fa)[:26].replace("Z", ""))
-        except ValueError:
+        try:     # any ISO form (Postgres trims microsecond zeros: .12345+00:00)
+            ts = pd.Timestamp(str(fa)).to_pydatetime()
+        except (ValueError, TypeError):
             continue
         if sydney_day(ts) != today:
             continue
