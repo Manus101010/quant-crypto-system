@@ -292,15 +292,47 @@ class FlowReplay(lf.Replay):
                 r["_unfired_window_end"] = nxt.isoformat()
 
 
-def run_replay(days: int = 30, extra_hours: list[int] | None = None, tag: str = "flow"):
+BUM_1H = Path(os.environ.get(
+    "BUM_1H", "/tmp/claude-0/-home-claude/f9afb357-b96a-5c99-93e3-0ac2bb39e920/scratchpad/bum/k1h"))
+
+
+def volume_ratios(d: dict, end: str = "2026-10-27") -> pd.Series:
+    """Per coin: Binance USDT-M quote volume / MEXC perp quote volume over the 20
+    days to `end`. The research (shorts study) measured liquidity on Binance; the
+    live US hosted scan measures it on the MEXC fallback candles."""
+    out = {}
+    for s, x in d.items():
+        x = x[x.index < end]
+        mq = float((x["close"] * x["volume"]).iloc[-20:].mean())
+        f = BUM_1H / f"{s[:-4]}USDT.parquet"
+        if not f.exists() or mq <= 0:
+            continue
+        k = pd.read_parquet(f)
+        k = k[(k.index >= pd.Timestamp(end) - pd.Timedelta(days=20)) & (k.index < end)]
+        if len(k) > 400:
+            out[s] = float(k["quote_volume"].sum() / 20) / mq
+    return pd.Series(out)
+
+
+def run_replay(days: int = 30, extra_hours: list[int] | None = None, tag: str = "flow",
+               vol_scale: str | None = None):
     import logging
     logging.disable(logging.INFO)
     d, h = lf.load_cache()
+    if vol_scale == "binance":
+        # option: measure liquidity like the research did (Binance volume)
+        ratio = volume_ratios(d)
+        print(f"volume scaled for {len(ratio)} coins, median x{ratio.median():.1f}")
+        for s, k in ratio.items():
+            d[s] = d[s].assign(volume=d[s]["volume"] * k)
+            if s in h:
+                h[s] = h[s].assign(volume=h[s]["volume"] * k)
     funding = pickle.loads((CACHE / "funding.pkl").read_bytes())
     end = min(pd.Timestamp(h["BTC-USD"].index[-1]) + pd.Timedelta(hours=1),
               pd.Timestamp.now("UTC").tz_localize(None))
     start = end - pd.Timedelta(days=days)
-    sl = scan_slots(start, end, extra_hours)
+    # 5 day warm up so the book (held coins, open cap) is realistic at the window start
+    sl = scan_slots(start - pd.Timedelta(days=5), end, extra_hours)
     print(f"replay {tag}: {len(sl)} scans {sl[0][0]} .. {sl[-1][0]} (data end {end})", flush=True)
     rp = FlowReplay(d, h, funding)
     rp.run_slots(sl, end)
@@ -548,7 +580,8 @@ def report():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["refresh", "funding", "replay", "replay_hourly", "report"])
+    ap.add_argument("cmd", choices=["refresh", "funding", "replay", "replay_hourly",
+                                    "replay_binvol", "report"])
     ap.add_argument("--days", type=int, default=30)
     a = ap.parse_args()
     if a.cmd == "refresh":
@@ -558,9 +591,10 @@ def main():
     if a.cmd == "replay":
         return run_replay(a.days)
     if a.cmd == "replay_hourly":
-        # option (b): a scan every hour at hh:05 UTC on top of the schedule
-        return run_replay(a.days, extra_hours=[hh for hh in range(24) if hh not in (0, 4, 19, 20, 5)],
-                          tag="flow_hourly")
+        # option (b): four more scans a day (02, 08, 12, 16 UTC) on top of the schedule
+        return run_replay(a.days, extra_hours=[2, 8, 12, 16], tag="flow_hourly")
+    if a.cmd == "replay_binvol":
+        return run_replay(a.days, tag="flow_binvol", vol_scale="binance")
     if a.cmd == "report":
         return report()
 
