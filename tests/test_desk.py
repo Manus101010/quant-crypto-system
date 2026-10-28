@@ -141,3 +141,32 @@ def test_scorecard_and_memory(monkeypatch):
     monkeypatch.setattr(db, "get_fired_trades", lambda open_only=False: trades)
     mem = store.memory_for("S")
     assert len(mem) == 5 and all(m["desk_was_right"] for m in mem)
+
+
+def test_claude_call_only_uses_supported_sdk_args(monkeypatch):
+    """Regression: SDK 2.x dropped `temperature`; every kwarg we send must exist."""
+    import inspect
+    import anthropic
+    from desk.agents import llm
+    allowed = set(inspect.signature(anthropic.Anthropic(api_key="x").messages.create).parameters)
+    sent = {}
+
+    class Block:
+        type = "tool_use"
+        input = {"ok": True}
+
+    class Resp:
+        content = [Block()]
+        usage = None
+
+    class Msgs:
+        def create(self, **kw):
+            sent.update(kw)
+            return Resp()
+
+    class Client:
+        messages = Msgs()
+
+    monkeypatch.setattr(llm, "_client", Client())
+    assert llm.claude_call("s", "u", "x", {"type": "object"}, "claude-haiku-5-5", 0.4) == {"ok": True}
+    assert set(sent) <= allowed, set(sent) - allowed
