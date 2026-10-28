@@ -54,6 +54,58 @@ def _mgmt(label: str | None) -> dict:
     return {"trailing": False, "max_hold": 15, "target_r": 3.0}
 
 
+def _cond(t: dict) -> dict:
+    """The trigger's condition JSON (plan extras: atr, trail_atr, tp, basket_cap...)."""
+    try:
+        import json
+        c = t.get("condition_json")
+        return json.loads(c) if isinstance(c, str) and c else (c if isinstance(c, dict) else {})
+    except Exception:                               # noqa: BLE001
+        return {}
+
+
+def is_basket_capped(t: dict) -> bool:
+    """Fired over the per-day basket cap: paper only, never alerted as tradeable."""
+    return bool(_cond(t).get("basket_cap"))
+
+
+def trade_tp(t: dict) -> float | None:
+    """Take profit while trailing: the tp column, else the copy in condition_json
+    (Supabase before docs/edge_fix/SUPABASE_MIGRATION.sql has no tp column)."""
+    v = t.get("tp")
+    if v is None:
+        v = _cond(t).get("tp")
+    try:
+        return float(v) if v is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def planned_position(entry: float | None, stop: float | None) -> dict | None:
+    """The position the alert sized for this entry/stop (monitor._sizing_line):
+    fixed margin, leverage FLOORED to an integer so the worst case (slip cap +
+    fees) loses at most MAX_LOSS_PCT of it; a stop too wide for 1x gets a smaller
+    position at 1x. risk_usd = what a stop-out actually loses at the stop price,
+    which is usually LESS than RISK_PER_TRADE_USD because of the integer floor
+    (forensics B8: BTC DS, 9% stop, 2x, risked $9.45 = 0.76R)."""
+    from config import (POSITION_MARGIN_USD, MAX_LOSS_PCT_OF_MARGIN, MAX_LEVERAGE,
+                        ENTRY_MAX_SLIP_PCT, SIZING_FEE_PCT)
+    if not entry or stop is None:
+        return None
+    frac = abs(entry - stop) / entry
+    if frac <= 0:
+        return None
+    worst = frac + (ENTRY_MAX_SLIP_PCT + SIZING_FEE_PCT) / 100
+    lev = int(min(MAX_LEVERAGE, (MAX_LOSS_PCT_OF_MARGIN / 100) / worst))
+    if lev < 1:
+        notional = POSITION_MARGIN_USD * (MAX_LOSS_PCT_OF_MARGIN / 100) / worst
+        lev, margin = 1, notional
+    else:
+        notional, margin = POSITION_MARGIN_USD * lev, POSITION_MARGIN_USD
+    return {"leverage": lev, "margin": margin, "notional": notional, "frac": frac,
+            "risk_usd": notional * frac, "worst_loss": notional * worst}
+
+
 def _fire_day_bar(t: dict, h1: pd.DataFrame | None) -> tuple | None:
     """Synthetic first bar: the 1h candles that open at/after fired_at, up to the
     end of that UTC day. Only price action AFTER the fire is used; None when the
@@ -96,7 +148,14 @@ def _simulate(t: dict, df: pd.DataFrame, h1: pd.DataFrame | None = None) -> dict
     p_frac, p_r, p_be = part.get("frac", 0.0), part.get("at_r"), part.get("breakeven")
     from config import BYBIT_TRAIL
     tcfg = BYBIT_TRAIL.get(t.get("setup_label") or "", BYBIT_TRAIL["default"])
-    atr_e = risk / float(m.get("stop_mult") or 1.0)
+    cond = _cond(t)
+    try:     # the SIGNAL ATR stored on the plan (research: trail 3.5 x signal ATR)
+        atr_e = float(cond["atr"]) if cond.get("atr") else None
+    except (TypeError, ValueError):
+        atr_e = None
+    if not atr_e or atr_e <= 0:
+        atr_e = risk / float(m.get("stop_mult") or 1.0)
+    tp = trade_tp(t)          # take profit while trailing (Distribution Short 2R)
     trail_dist = (tcfg["k_atr"] * atr_e) if tcfg.get("k_atr") else risk
     act_r = float(tcfg.get("activate_r") or 0.0)
     active = act_r == 0
@@ -122,9 +181,12 @@ def _simulate(t: dict, df: pd.DataFrame, h1: pd.DataFrame | None = None) -> dict
             took, booked = p_frac, p_frac * p_r * risk
             if p_be:
                 trail = max(trail, entry) if not short else min(trail, entry)
-        # 3) fixed target
+        # 3) fixed target, or the take profit that runs alongside a trail
         if target and ((not short and h >= target) or (short and l <= target)):
             return _closed(t, "target", target, ts, entry, risk, short, peak, trail,
+                           held + 1, took, booked)
+        if tp and ((not short and h >= tp) or (short and l <= tp)):
+            return _closed(t, "target", tp, ts, entry, risk, short, peak, trail,
                            held + 1, took, booked)
         held += 1
         peak = max(peak, h) if not short else min(peak, l)
@@ -218,8 +280,14 @@ def _close_text(t: dict, p: dict) -> str:
     r = p["r_multiple"]
     icon = "✅" if r > 0 else "❌"
     coin = t["symbol"].replace("-USD", "")
-    usd = r * RISK_PER_TRADE_USD
+    # $ from the position the alert actually sized (integer leverage floor), not
+    # R x $12.50: a 2x BTC short with a 9% stop risks $9.45, not $12.50.
+    pos = planned_position(t.get("fired_price"), t.get("stop"))
+    risk_usd = pos["risk_usd"] if pos else RISK_PER_TRADE_USD
+    usd = r * risk_usd
     kind = "your trade" if t.get("taken") else "paper trade"
+    if is_basket_capped(t):
+        kind = "paper trade (basket cap, was not a tradeable alert)"
     urgent = ""
     if t.get("taken") and p["outcome"] in ("stop", "trail", "time"):
         urgent = (f"🚨 <b>{coin} hit its exit — check Bybit closed it.</b>\n"
@@ -227,7 +295,9 @@ def _close_text(t: dict, p: dict) -> str:
                   f"stop on the order, Bybit has already closed it; if not, close it now.\n\n")
     return urgent + (f"{icon} <b>{coin} {kind} closed</b> — {_EXIT_PLAIN.get(p['outcome'], p['outcome'])}\n"
             f"Result: <b>{r:+.2f}R</b> — {'made' if r > 0 else 'lost'} {abs(r):.2f}× the amount risked "
-            f"(≈ {'+' if usd >= 0 else '−'}${abs(usd):.0f} on a ${RISK_PER_TRADE_USD:.0f} risk) "
+            f"(≈ {'+' if usd >= 0 else '−'}${abs(usd):,.2f} on the ${risk_usd:,.2f} the sized "
+            f"position risked"
+            + (f" at {pos['leverage']}x" if pos else "") + ") "
             f"after {p['bars_held']} day(s).\n<i>{t.get('setup_label','')}</i>")
 
 
@@ -308,12 +378,19 @@ def live_stats(taken_only: bool = False) -> dict:
                      "win_rate": sum(r > 0 for r in rs) / len(rs),
                      "avg_r": sum(rs) / len(rs), "total_r": sum(rs),
                      "pf": pf, "bt_pf": bt_pf, "verdict": verdict})
+    def _tot(rs):
+        return {"n": len(rs),
+                "win_rate": (sum(r > 0 for r in rs) / len(rs)) if rs else None,
+                "total_r": sum(rs), "pf": _pf(rs) if rs else None}
     all_r = [t["r_multiple"] for t in closed]
-    total = {"n": len(all_r),
-             "win_rate": (sum(r > 0 for r in all_r) / len(all_r)) if all_r else None,
-             "total_r": sum(all_r), "pf": _pf(all_r) if all_r else None}
+    total = _tot(all_r)
+    # Every fired signal stays in the record (forensics B1: never re-status fired
+    # rows). Signals over the per-day basket cap are ALSO reported on their own.
+    capped = [t["r_multiple"] for t in closed if is_basket_capped(t)]
+    alerted = [t["r_multiple"] for t in closed if not is_basket_capped(t)]
     open_ = [t for t in trades if not t.get("outcome")]
-    return {"by_setup": rows, "total": total, "open": open_, "since": start}
+    return {"by_setup": rows, "total": total, "open": open_, "since": start,
+            "tradeable": _tot(alerted), "basket_cap": _tot(capped)}
 
 
 # ── Portfolio heat: total $ still at risk across open trades ──────────────────

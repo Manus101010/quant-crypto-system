@@ -127,7 +127,26 @@ BYBIT_TRAIL = {
     "Donchian Breakout (55d)":   {"k_atr": 4.5,  "activate_r": 1.0},
     "Squeeze Breakout":          {"k_atr": 4.5,  "activate_r": 0.0},
     "Volume Breakout":           {"k_atr": 6.0,  "activate_r": 0.0},
+    # docs/edge_fix/shorts.md: Bybit style intrabar trail at 3.5 x the SIGNAL ATR
+    # (the stored plan ATR), immediate. Before this entry paper tracking trailed
+    # at the live stop distance, which equals 3.5 ATR only when entry = signal close.
+    "Distribution Short":        {"k_atr": 3.5,  "activate_r": 0.0},
 }
+# Setups retired by research: never armed, never in the validated set, still shown
+# by the scanner for display. docs/edge_fix/shorts.md: Breakdown Short (55d low)
+# produced 10 live-rule trades in 58 months (untestable) and the full rule has no
+# edge (n 920, PF 1.04, +0.014R).
+RETIRED_SETUPS = {"Breakdown Short (55d low)"}
+# Entry drift bounds for the "enter now" research shorts (skills/new_setups.py),
+# measured from the SIGNAL close: no entry after price fell more than DOWN % (the
+# move already happened) or bounced more than UP % (docs/edge_fix/CHANGES.md).
+ENTRY_DRIFT_DOWN_MAX_PCT = 3.0
+ENTRY_DRIFT_UP_MAX_PCT = 3.0
+# Basket risk guard (a risk rule, not an edge): at most this many NEW signals per
+# Sydney day per direction are alerted as tradeable, counting all setups. Extra
+# fires are still tracked as paper, labelled "basket cap" (forensics.md: 35 longs
+# fired in 48 hours and moved as one bet; four DS fired on one night).
+FIRE_CAP_PER_DIR_PER_DAY = 3
 ENTRY_MAX_SLIP_PCT = 0.3       # don't chase more than this past the signal price
 # Round-trip fees (entry + stop, taker) as % of the position, added to the stop
 # distance with ENTRY_MAX_SLIP_PCT when choosing leverage, so the WORST allowed

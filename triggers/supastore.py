@@ -82,12 +82,40 @@ def active_symbols() -> list[str]:
     return sorted({r["symbol"] for r in (res.data or [])})
 
 
-def mark_fired(trigger_id, fired_price, note=None) -> None:
+# Columns added after the table was created (docs/edge_fix/SUPABASE_MIGRATION.sql).
+# Until the migration runs, writes drop them and retry, so the live monitor never
+# crashes; the same values also live in condition_json.
+_OPTIONAL_COLS = {"tp"}
+_missing_cols: set = set()
+
+
+def _update_tolerant(trigger_id, patch: dict) -> None:
+    patch = {k: v for k, v in patch.items() if k not in _missing_cols}
+    try:
+        _c().table("triggers").update(patch).eq("id", trigger_id).execute()
+    except Exception as exc:                         # noqa: BLE001
+        # PostgREST: "Could not find the 'tp' column of 'triggers' in the schema cache"
+        opt = [k for k in patch if k in _OPTIONAL_COLS and f"'{k}'" in str(exc)]
+        if not opt:
+            raise
+        log.warning("supabase: column(s) %s missing (run docs/edge_fix/SUPABASE_MIGRATION.sql)"
+                    " — writing without them: %s", opt, exc)
+        _missing_cols.update(opt)
+        rest = {k: v for k, v in patch.items() if k not in _missing_cols}
+        if rest:
+            _c().table("triggers").update(rest).eq("id", trigger_id).execute()
+
+
+_FIRE_EXTRA = ("stop", "tp", "condition_json")
+
+
+def mark_fired(trigger_id, fired_price, note=None, extra=None) -> None:
     patch = {"status": "fired", "fired_at": datetime.utcnow().isoformat(),
              "fired_price": fired_price}
     if note is not None:
         patch["note"] = note
-    _c().table("triggers").update(patch).eq("id", trigger_id).execute()
+    patch.update({k: v for k, v in (extra or {}).items() if k in _FIRE_EXTRA})
+    _update_tolerant(trigger_id, patch)
 
 
 def set_status(trigger_id, status) -> None:
@@ -129,13 +157,13 @@ def get_fired_trades(open_only: bool = False) -> list[dict]:
 
 
 _OUTCOME_FIELDS = {"outcome", "exit_price", "exit_at", "r_multiple",
-                   "peak_price", "trail_stop", "bars_held", "taken"}
+                   "peak_price", "trail_stop", "bars_held", "taken", "tp"}
 
 
 def set_outcome(trigger_id, patch: dict) -> None:
     patch = {k: v for k, v in patch.items() if k in _OUTCOME_FIELDS}
     if patch:
-        _c().table("triggers").update(patch).eq("id", trigger_id).execute()
+        _update_tolerant(trigger_id, patch)
 
 
 def get_state(key):

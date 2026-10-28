@@ -111,9 +111,13 @@ def run_crypto_validation(universe_size: int = 40, days: int = 600,
 # ── Edge gate: which setups are actually tradeable ────────────────────────────
 def validated_setups(stats: dict[str, dict],
                       min_pf: float = _MIN_EDGE_PF, min_n: int = _MIN_EDGE_N) -> set[str]:
-    """Setups with a measured positive edge (PF>min_pf, net of cost) and enough trades."""
+    """Setups with a measured positive edge (PF>min_pf, net of cost) and enough trades.
+    Setups in config.RETIRED_SETUPS are never validated, whatever their stats."""
+    from config import RETIRED_SETUPS
     out = set()
     for label, s in stats.items():
+        if label in RETIRED_SETUPS:
+            continue
         pf = s.get("profit_factor")
         if pf is None:                       # inf PF (no losers) → treat as strong
             pf = 99.0
@@ -143,4 +147,5 @@ def validated_labels() -> set[str] | None:
     v = load_validation()
     if not v:
         return None
-    return set(v.get("validated", []))
+    from config import RETIRED_SETUPS
+    return set(v.get("validated", [])) - set(RETIRED_SETUPS)

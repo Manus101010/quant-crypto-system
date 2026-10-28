@@ -5,7 +5,8 @@ Two SHORT setups that passed the Oct 2026 research (research/families/REPORT*.md
                          200 SMA) goes quiet (Bollinger width in the bottom 10% of
                          180 days) and slips into the lower half of its 20-day range.
                          Short the FIRST quiet day. Not when BTC is trending down.
-                         Stop 3.5 ATR above, trail 3.5 ATR, up to 60 days.
+                         Stop 3.5 ATR above, trail 3.5 ATR, take profit at
+                         2R (docs/edge_fix/shorts.md V5), up to 60 days.
                          Full MEXC perp universe: n 669, PF 2.24, +0.366R.
 
   Downtrend Bounce Fade  A coin BELOW its 200 SMA bounces sharply (5-day return
@@ -38,6 +39,9 @@ DESCRIPTIONS = {
 }
 
 DIST_MIN_QV = 0.5e6
+# docs/edge_fix/shorts.md V5: take profit at 2R while trailing. Selected in sample
+# (+0.047R, p 0.04), out of sample n 292, PF 2.36, +0.427R, both halves positive.
+DIST_TP_R = 2.0
 FADE_MIN_QV = 2e6
 
 
@@ -80,7 +84,8 @@ def detect(df: pd.DataFrame, btc_close: pd.Series | None) -> pd.DataFrame:
     trail_atr, max_hold, atr."""
     x = _ind(df)
     out = pd.DataFrame(index=df.index, data={"label": None, "stop": np.nan, "target": np.nan,
-                                              "trail_atr": np.nan, "max_hold": np.nan})
+                                              "trail_atr": np.nan, "max_hold": np.nan,
+                                              "tp_r": np.nan})
     out["atr"] = x["atr"]
     if btc_close is None or len(x) < 205:
         return out
@@ -109,6 +114,7 @@ def detect(df: pd.DataFrame, btc_close: pd.Series | None) -> pd.DataFrame:
     out.loc[d, "stop"] = (x["c"] + 3.5 * x["atr"])[d]
     out.loc[d, "trail_atr"] = 3.5
     out.loc[d, "max_hold"] = 60
+    out.loc[d, "tp_r"] = DIST_TP_R
     ff = f & ~d                                       # one label per bar
     out.loc[ff, "label"] = FADE
     out.loc[ff, "stop"] = (hi7 + 0.25 * x["atr"])[ff]
@@ -132,4 +138,20 @@ def latest(df: pd.DataFrame, btc_close: pd.Series | None) -> dict | None:
     return {"label": row["label"], "stop": float(row["stop"]),
             "target": None if pd.isna(row["target"]) else float(row["target"]),
             "trail_atr": None if pd.isna(row["trail_atr"]) else float(row["trail_atr"]),
-            "max_hold": int(row["max_hold"]), "atr": float(row["atr"])}
+            "max_hold": int(row["max_hold"]), "atr": float(row["atr"]),
+            "tp_r": None if pd.isna(row["tp_r"]) else float(row["tp_r"]),
+            "close": float(df["close"].iloc[-1])}
+
+
+def restop(entry: float, atr: float | None, trail_atr: float | None,
+           tp_r: float | None = None, short: bool = True) -> tuple[float | None, float | None]:
+    """Stop and take profit for an entry at `entry`, keeping the research's ATR
+    multiple (stop = entry + trail_atr x ATR for a short) instead of the level
+    fixed from the signal close. Returns (stop, tp); (None, None) when the plan
+    has no ATR multiple (e.g. Downtrend Bounce Fade, whose stop is a price level)."""
+    if not entry or not atr or not trail_atr or atr <= 0:
+        return None, None
+    sg = 1 if short else -1
+    stop = entry + sg * trail_atr * atr
+    tp = entry - sg * tp_r * abs(stop - entry) if tp_r else None
+    return stop, tp

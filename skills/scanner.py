@@ -167,7 +167,12 @@ def _momentum_12_1(s: pd.Series) -> float | None:
 # ── Trade suggestion generator ────────────────────────────────────────────────
 
 def _fmt_p(p: float) -> str:
-    """Format a price cleanly regardless of magnitude."""
+    """Format a price cleanly regardless of magnitude. Sub-cent prices keep at
+    least 4 significant digits ($0.00001234, not $0.000012), so text that is
+    parsed back (triggers/scan._num) stays within 0.05% of the real price."""
+    if 0 < p < 0.01:
+        dec = max(6, 3 - int(np.floor(np.log10(p))))
+        return f"${p:.{dec}f}"
     if p < 0.01:   return f"${p:.6f}"
     if p < 1:      return f"${p:.4f}"
     if p < 100:    return f"${p:.2f}"
@@ -475,15 +480,26 @@ def breakout_signals(close, high, volume, low=None) -> dict:
 def new_setup_trade(ns: dict, price: float) -> dict:
     """Trade card for a skills/new_setups.py signal. Numbers are exact (the
     research plan), carried in "plan" so the armed trigger uses them unchanged."""
-    stop, tgt, trail = ns["stop"], ns.get("target"), ns.get("trail_atr")
+    from skills.new_setups import restop
+    stop0, tgt, trail = ns["stop"], ns.get("target"), ns.get("trail_atr")
+    atr, tp_r = ns.get("atr"), ns.get("tp_r")
+    # Setups whose stop is an ATR multiple (Distribution Short) are re-stopped from
+    # the live price, so the risk is the researched 3.5 ATR wherever we enter.
+    stop, tp = restop(price, atr, trail, tp_r, short=True)
+    if stop is None:
+        stop = stop0
     if tgt is not None and tgt < price:
         tgt_txt = f"{_fmt_p(tgt)} (the 20 EMA)"
         risk = abs(stop - price)
         rr = f"{abs(price - tgt) / risk:.1f}:1" if risk > 0 else None
     else:
         tgt = None
-        tgt_txt = f"no fixed target: trail a {trail or 3.5:g}x ATR stop and let it run"
-        rr = None
+        tgt_txt = f"trail a {trail or 3.5:g}x ATR stop"
+        if tp is not None:
+            tgt_txt = f"take profit {_fmt_p(tp)} ({tp_r:g}R) while you " + tgt_txt
+        else:
+            tgt_txt = "no fixed target: " + tgt_txt + " and let it run"
+        rr = f"{tp_r:.1f}:1" if tp is not None else None
     return {
         "action": "SELL",
         "entry":  f"Short near {_fmt_p(price)}",
@@ -491,8 +507,11 @@ def new_setup_trade(ns: dict, price: float) -> dict:
         "stop":   f"{_fmt_p(stop)}",
         "rr":     rr,
         "note":   "SHORT on Bybit USDT perps. Signal only, you place it.",
-        "plan":   {"stop": stop, "target": tgt, "trail_atr": trail,
-                   "max_hold": ns.get("max_hold"), "atr": ns.get("atr")},
+        # Numbers travel as numbers (never parsed back from the text above).
+        "plan":   {"entry": float(price), "signal_close": ns.get("close"),
+                   "stop": stop, "signal_stop": stop0, "target": tgt,
+                   "trail_atr": trail, "tp_r": tp_r, "tp": tp,
+                   "max_hold": ns.get("max_hold"), "atr": atr},
     }
 
 
@@ -763,6 +782,13 @@ _SETUP_BASE: dict[str, float] = {
     "MR Short (overbought in downtrend)": 66,
     "Williams %R Overbought Short":      66,
     "Relative Weakness Short":           66,
+    # Oct 2026 research shorts (skills/new_setups.py). Before, they had no base and
+    # scored 25: below every long and outside the 60 row candidate list.
+    # Distribution Short: survivor-free 2022-26 n 778, PF 2.01, +0.312R (2R TP OOS
+    # PF 2.36) -> just above the trend longs. Downtrend Bounce Fade: thin but
+    # positive OOS (n 261, PF 1.32, +0.077R) -> level with the provisional shorts.
+    "Distribution Short":                74,
+    "Downtrend Bounce Fade":             66,
     "Donchian Breakout (55d)":     72,   # Turtle 55d breakout — trend-following, provisional until crypto-validated
     "Volume Breakout":             70,   # 20d high + 2x volume — provisional until crypto-validated
     "Squeeze Breakout":            70,   # volatility contraction → expansion — provisional until crypto-validated
@@ -1071,6 +1097,40 @@ def _run(tickers: list[str], criteria: ScanCriteria,
     )
 
 
+def _drop_forming(df, now: pd.Timestamp | None = None):
+    """Drop today's still-forming daily candle (UTC), exactly like
+    skills.new_setups.latest(): every backtest classifies on CLOSED bars only."""
+    if df is None or len(df) == 0:
+        return df
+    now = pd.Timestamp(now) if now is not None else pd.Timestamp.utcnow()
+    if now.tzinfo is not None:
+        now = now.tz_convert("UTC").tz_localize(None)
+    today = now.normalize()
+    last = pd.Timestamp(df.index[-1])
+    if last.tzinfo is not None:
+        last = last.tz_convert("UTC").tz_localize(None)
+    if last.normalize() >= today:
+        return df.iloc[:-1]
+    return df
+
+
+# Post hoc forward-test flags logged on every fired signal (docs/edge_fix/shorts.md
+# section 4: logged, never gating). Liquidity = shorts.md V7.
+FWD_MIN_TURNOVER_USD = 5e6
+FWD_MIN_LISTED_DAYS = 180
+
+
+def fwd_flags(dfc: pd.DataFrame, v_usd: pd.Series, btc_below_50d: bool | None) -> dict:
+    """Forward-test flags from CLOSED daily bars. listed_days is a lower bound:
+    the scan fetches 400 daily bars, so a coin with fewer was listed that recently."""
+    q20 = float(v_usd.iloc[-20:].mean()) if len(v_usd) >= 20 else None
+    listed = int(len(dfc))
+    liquid = (q20 is not None and q20 >= FWD_MIN_TURNOVER_USD
+              and listed >= FWD_MIN_LISTED_DAYS)
+    return {"turnover20_usd": q20, "listed_days_min": listed,
+            "liquid_5m_180d": bool(liquid), "btc_below_50d": btc_below_50d}
+
+
 def _run_from_bybit(bybit_data: dict, tickers: list[str], criteria: ScanCriteria,
                     regime_score: float | None = None) -> pd.DataFrame:
     """Scanner core that consumes pre-fetched Bybit DataFrames instead of yfinance."""
@@ -1082,13 +1142,28 @@ def _run_from_bybit(bybit_data: dict, tickers: list[str], criteria: ScanCriteria
         btc_close = btc_daily_close()
     except Exception:                              # noqa: BLE001
         btc_ret_30, btc_close = None, None
+    btc_below_50d = None
+    try:
+        if btc_close is not None:
+            bc = _drop_forming(btc_close.to_frame("close"))["close"].dropna()
+            if len(bc) >= 50:
+                btc_below_50d = bool(bc.iloc[-1] < bc.iloc[-50:].mean())
+    except Exception:                              # noqa: BLE001
+        btc_below_50d = None
     from skills import new_setups
     results = []
     for ticker in tickers:
         if ticker not in bybit_data:
             continue
         try:
-            df = bybit_data[ticker]
+            df_live = bybit_data[ticker]
+            live_s = df_live["close"].dropna()
+            if live_s.empty:
+                continue
+            live_price = float(live_s.iloc[-1])    # what an entry fills at now
+            # Generic setups are classified on the last CLOSED daily candle (the
+            # forming bar's price/SMA/RSI/volume made labels flip intraday).
+            df = _drop_forming(df_live)
             s  = df["close"].dropna()
             h  = df["high"].dropna() if "high" in df.columns else pd.Series()
             lo = df["low"].dropna()  if "low"  in df.columns else pd.Series()
@@ -1160,29 +1235,28 @@ def _run_from_bybit(bybit_data: dict, tickers: list[str], criteria: ScanCriteria
                 setup_desc = new_setups.DESCRIPTIONS[setup_label]
                 setup_cat = "mean_reversion" if setup_label == new_setups.FADE else "momentum"
 
-            if price < 0.01:
-                price_fmt = f"{price:.6f}"
-            elif price < 1:
-                price_fmt = f"{price:.4f}"
-            elif price < 100:
-                price_fmt = f"{price:.2f}"
-            else:
-                price_fmt = f"{price:,.2f}"
+            price_fmt = _fmt_p(live_price)[1:]
 
             conv  = conviction_score(
                 setup_label, rsi, mom3m, bb_pct, zsc, wil_r, vol_usd_m, setup_cat,
                 rsi2=rsi_2, regime_score=regime_score,
             )
+            # Labels come from closed bars; the trade plan is priced off the LIVE
+            # price because that is where an entry fills.
             if ns:
-                trade = new_setup_trade(ns, price)
+                trade = new_setup_trade(ns, live_price)
             else:
                 trade = trade_suggestion(
-                    setup_label, price, sma50, sma200, bb_upper, bb_mid, bb_lower, rsi, mom3m, atr,
+                    setup_label, live_price, sma50, sma200, bb_upper, bb_mid, bb_lower, rsi,
+                    mom3m, atr,
                 )
             results.append({
                 "ticker":           ticker,
-                "price":            round(price, 6 if price < 0.01 else (4 if price < 1 else 2)),
+                # Unrounded: rounding to 6 dp turned $0.000012345 into $0.000012.
+                "price":            live_price,
+                "close_price":      price,             # last CLOSED daily close
                 "price_fmt":        price_fmt,
+                "fwd_flags":        fwd_flags(df, v_usd, btc_below_50d),
                 "sma50":            round(sma50, 2),
                 "sma200":           round(sma200, 2),
                 "above_sma50":      bool(price > sma50),
