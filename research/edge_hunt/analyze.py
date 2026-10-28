@@ -69,6 +69,33 @@ def random_baseline(trades: pd.DataFrame, variant: str, draws: int = 3) -> pd.Da
     return pd.DataFrame(rows)
 
 
+def btc4h_trend() -> pd.Series:
+    """+1 when BTC's last CLOSED 4h bar closed above its 4h EMA20, else -1; indexed by the
+    time it becomes known (4h bar close)."""
+    b = H.load("BTCUSDT")
+    h4 = H.resample(b, "4h")
+    up = np.where(h4["close"] > H.ema(h4["close"], 20), 1, -1)
+    return pd.Series(up, index=h4.index + pd.Timedelta(hours=4))
+
+
+def cluster_view(g: pd.DataFrame, trend: pd.Series, cap: int = 3) -> dict:
+    """Correlation handling (lead request): same day clustering, a per day cap of `cap`
+    trades per direction (earliest first), and BTC 4h trend alignment."""
+    if len(g) == 0:
+        return {}
+    day = g["entry_t"].dt.floor("D")
+    per = g.groupby([day, g["side"]]).size()
+    on_busy = g.groupby([day, g["side"]])["r"].transform("size") > cap
+    capped = g.sort_values("entry_t").groupby([day, g["side"]], group_keys=False).head(cap)
+    pos = trend.index.searchsorted(g["entry_t"].to_numpy(), side="right") - 1
+    tv = np.where(pos >= 0, trend.to_numpy()[np.clip(pos, 0, None)], 0)
+    aligned = g[tv == g["side"].to_numpy()]
+    both = capped[capped.index.isin(aligned.index)]
+    return {"days": int(per.size), "per_day_med": float(per.median()), "per_day_p90": float(per.quantile(0.9)),
+            "per_day_max": int(per.max()), "share_on_busy_days": float(on_busy.mean()),
+            "cap": H.stats(capped), "aligned": H.stats(aligned), "cap_aligned": H.stats(both)}
+
+
 def cost_adj(g: pd.DataFrame, new_cost: float) -> pd.DataFrame:
     g = g.copy()
     g["r"] = g["r"] + (H.COST - new_cost) / g["stop_pct"]
@@ -114,9 +141,27 @@ def main():
         print(f"{cand} [{'IS ok' if ok else 'IS FAIL'}] {v}")
         print("   IS :", H.fmt(H.stats(IS[IS['variant'] == v])))
         print("   OOS:", H.fmt(s), "| gate", line["oos_gate"], "| bonf", line["oos_bonf"])
+        if len(g):
+            print(f"   OOS gross {g['r_gross'].mean():+.3f}R, cost {(H.COST / g['stop_pct']).mean():.3f}R, funding {g['fund_r'].mean():+.3f}R per trade; median stop {g['stop_pct'].median():.1%}")
         print(f"   OOS PF at 0.20% cost {line['oos_pf_cost020']:.2f} | BTC bear PF {line['oos_pf_bear']} (n {line['oos_n_bear']}) "
               f"| Bybit listed PF {line['oos_pf_bybit']:.2f} | 2026 PF {line['oos_pf_2026']} (n {line['oos_n_2026']})")
     pd.DataFrame(res).to_csv(OUT / "oos.csv", index=False)
+    # correlation handling for the selected variants (plus the best OOS looking C7 variant,
+    # flagged as post hoc)
+    print("\n== clustering, per day cap 3 per direction, BTC 4h trend alignment (OOS) ==")
+    trend = btc4h_trend()
+    extra = {"C7 post hoc": ("C7 newlist orb72 | T2R_14d", False)}
+    for cand, (v, ok) in sorted(pick.items()) + list(extra.items()):
+        for lab, part in (("IS", IS), ("OOS", OOS)):
+            g = part[part["variant"] == v]
+            cv = cluster_view(g, trend)
+            if not cv:
+                continue
+            print(f"{cand} {lab} {v}: days {cv['days']} per day med {cv['per_day_med']:.0f} p90 {cv['per_day_p90']:.0f} "
+                  f"max {cv['per_day_max']} | {cv['share_on_busy_days']:.0%} of trades on days with > 3")
+            print("   cap3        :", H.fmt(cv["cap"]))
+            print("   BTC aligned :", H.fmt(cv["aligned"]))
+            print("   cap3+aligned:", H.fmt(cv["cap_aligned"]), "| gate", H.gate(cv["cap_aligned"]))
     # baselines for selected variants
     print("\n== random entry baseline (same coins, side, stop %, exit; OOS window) ==")
     for cand, (v, ok) in sorted(pick.items()):
