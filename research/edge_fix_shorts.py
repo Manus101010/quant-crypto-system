@@ -125,6 +125,8 @@ def variants(setup: str) -> dict:
     # hypotheses for the forward ledger, not as validated.
     v["V10 (post hoc) setup decay gate: last 20 closed trades mean R > 0"] = ("filter", lambda x: x.decay_ok.astype(bool))
     v["V11 (post hoc) breadth not rising: breadth50 <= its value 20d ago"] = ("filter", lambda x: (x.breadth_chg20 <= 0).fillna(False))
+    if setup == DS:
+        v["V16 (post hoc) only when BTC below its 50d SMA"] = ("filter", lambda x: ~x.btc_above50.fillna(True).astype(bool))
     return v
 
 
