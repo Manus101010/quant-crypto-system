@@ -542,3 +542,16 @@ def test_desk_guard_accepts_wide_stop_sized_down(monkeypatch):
     assert pack["guard"]["verdict"] == "ACCEPT"
     assert pack["guard_options"]["plain"]["leverage"] == 1
     assert pack["guard_options"]["plain"]["risk_usd"] <= 12.5
+
+
+def test_live_volume_factor_scales_setup_floors():
+    from skills import new_setups as ns
+    import config
+    assert config.LIVE_VOLUME_FACTOR == 13.4
+    assert abs(config.AUTO_SCAN_PARAMS["min_vol_usd_m"] - 0.5 / 13.4) < 1e-9
+    old = ns.QV_SOURCE_FACTOR
+    try:
+        ns.QV_SOURCE_FACTOR = 13.4
+        assert ns.DIST_MIN_QV / ns.QV_SOURCE_FACTOR < 40_000
+    finally:
+        ns.QV_SOURCE_FACTOR = old

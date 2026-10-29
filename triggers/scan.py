@@ -244,6 +244,14 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     `max_per_setup`: cap how many of any one setup can be armed, so the armed set
     is diverse (None/0 = no cap).
     """
+    # Live volume scaling: candles (and so volume) come from MEXC on the US host,
+    # which reads a median 13.4x below the Binance volume the floors were set on.
+    try:
+        from skills import new_setups as _ns
+        from config import LIVE_VOLUME_FACTOR
+        _ns.QV_SOURCE_FACTOR = float(LIVE_VOLUME_FACTOR) if source in ("bybit_perps", "mexc_perps", "mexc") else 1.0
+    except Exception:                                  # noqa: BLE001
+        pass
     if source == "bybit_perps":
         # Every Bybit crypto USDT perpetual — the trading venue (perp candles).
         from utils.exchange import list_perp_symbols
@@ -394,7 +402,9 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     # Paper rows over the per-day basket cap were never tradeable alerts: they
     # still block their coin (held, above) but do not use a concurrent slot.
     from triggers.outcomes import is_basket_capped
-    n_open = sum(1 for t in open_all if not is_basket_capped(t))
+    # Only trades you actually took use a slot: skipped paper signals (DS can be
+    # held 60 days) were filling the book and silencing new shorts (trade_flow.md (f)).
+    n_open = sum(1 for t in open_all if t.get("taken") and not is_basket_capped(t))
     slots = max(0, MAX_OPEN_POSITIONS - n_open)
     n_arm = min(top_n, slots)
     # Diversify: cap any single setup so the armed set is a spread across types.

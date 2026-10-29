@@ -43,6 +43,10 @@ DIST_MIN_QV = 0.5e6
 # (+0.047R, p 0.04), out of sample n 292, PF 2.36, +0.427R, both halves positive.
 DIST_TP_R = 2.0
 FADE_MIN_QV = 2e6
+# Live candles come from MEXC, whose volume runs a median 13.4x below the Binance
+# volume these floors were researched on. triggers/scan sets this from config so
+# the live universe matches the research (docs/edge_fix/trade_flow.md (e)).
+QV_SOURCE_FACTOR = 1.0
 
 
 def btc_trend(btc_close: pd.Series) -> pd.Series:
@@ -97,7 +101,7 @@ def detect(df: pd.DataFrame, btc_close: pd.Series | None) -> pd.DataFrame:
     coiled = (x["bbw_pct"] <= 0.10) & post_up
     first = coiled & ~coiled.shift(fill_value=False)
     lower_half = x["c"] < (x["hh20p"] + x["ll20p"]) / 2
-    dist = first & lower_half & (btc != "DOWN") & (btc != "NA") & (x["qvol20"] >= DIST_MIN_QV)
+    dist = first & lower_half & (btc != "DOWN") & (btc != "NA") & (x["qvol20"] >= DIST_MIN_QV / QV_SOURCE_FACTOR)
 
     # ── Downtrend Bounce Fade ──
     rip = x["z5"].rolling(7).max() >= 2.0
@@ -105,7 +109,7 @@ def detect(df: pd.DataFrame, btc_close: pd.Series | None) -> pd.DataFrame:
     calm = x["tr3"] <= x["atr"]
     room = (x["c"] - x["ema20"]) >= 0.25 * x["atr"]
     fade = (rip & peak & calm & room & (x["c"] < x["sma200"]) & (btc == "MIXED")
-            & (x["qvol20"] >= FADE_MIN_QV))
+            & (x["qvol20"] >= FADE_MIN_QV / QV_SOURCE_FACTOR))
 
     hi7 = x["h"].rolling(7).max()
     d = dist.fillna(False).values
