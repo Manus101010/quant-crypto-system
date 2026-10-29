@@ -47,7 +47,8 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 BUM = Path("/tmp/claude-0/-home-claude/f9afb357-b96a-5c99-93e3-0ac2bb39e920/scratchpad/bum")
-MIN_DVOL = 10e6
+import os
+MIN_DVOL = float(os.environ.get("MY_EDGE_MIN_DVOL", 10e6))   # Binance 30d avg daily quote volume
 MIN_STOP, MAX_STOP = 0.010, 0.08
 COSTS = {"taker": 0.0036, "maker": 0.0011}
 PRE_START = pd.Timestamp("2021-08-01")
@@ -189,17 +190,20 @@ def lower_high_break(h, l, c, P, side):
                     break
         if piv < 0:
             continue
-        sw = l[k] if side == -1 else h[k]
-        for j in range(k, piv + 1):
+        # swing extreme strictly AFTER the peak bar (a pump's peak bar often has a huge
+        # range; its own low is not the swing low of the roll over)
+        sw = l[k + 1] if side == -1 else h[k + 1]
+        for j in range(k + 1, piv + 1):
             if side == -1:
                 sw = min(sw, l[j])
             else:
                 sw = max(sw, h[j])
+        fresh = piv == i - 2          # the pivot was confirmed on this bar
         if side == -1:
-            if c[i] < sw and c[i - 1] >= sw:
+            if c[i] < sw and (c[i - 1] >= sw or fresh):
                 out[i] = True
         else:
-            if c[i] > sw and c[i - 1] <= sw:
+            if c[i] > sw and (c[i - 1] <= sw or fresh):
                 out[i] = True
     return out
 

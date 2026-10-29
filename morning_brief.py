@@ -230,6 +230,7 @@ COMMANDS_CHEATSHEET = (
     "<code>/guard long SOL 182.4 176.9 7x 50</code> check a plain trade (entry stop lev margin)\n"
     "<code>/guard short DOODUSDT grid 0.0016 0.00221 200 3x 263.86 sl 0.002221</code> check a grid\n"
     "<code>/addbot BOTID DOOD</code> watch a grid bot · <code>/bots</code> list\n"
+    "<code>/bot SOL 50</code> grid bot plan for any coin: mode, range, leverage, stop\n"
     "<code>/desk SOL long 182.4 176.9</code> AI desk review · <code>/deskstats</code> is it helping\n"
     "<code>/help</code> full list"
 )

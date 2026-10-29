@@ -112,6 +112,9 @@ class FlowReplay(lf.Replay):
     def __init__(self, d, h, funding, deactivated=DEACTIVATED_NOW):
         super().__init__(d, h, funding=funding, era="current")
         self.db.deactivated = set(deactivated)
+        # tracking period covers the warm up, so every replayed fire blocks its coin
+        # and counts toward the open cap (live resets track_from; not modelled here)
+        self.db.state["track_from"] = "2026-09-01T00:00:00"
         self.flow: list[dict] = []          # one row per (scan, coin, setup)
         self.scan_meta: list[dict] = []
         self.fires: list[dict] = []
@@ -417,6 +420,19 @@ def funnel(out: dict, since: pd.Timestamp) -> dict:
     res["tradeable"] = res["fired"] - res["fired_capped"]
     res["tradeable_per_week"] = round(res["tradeable"] / weeks, 2) if weeks else None
     res["fired_by_setup"] = Counter((f["setup"], "capped" if f["capped"] else "tradeable") for f in fires)
+    res["tradeable_unique_coin_day"] = len({(f["symbol"], f["syd_day"]) for f in fires if not f["capped"]})
+    # watch tier candidates (unique signals, best status across the day's scans)
+    soft_short = {"top_n", "open_cap", "drifted", "wide_stop", "crowded"}
+    wa = {k for k, v in uniq.items() if "armed" not in v and not any(
+        g in ("not_validated", "retired", "held") for g in v) and k[1] in (
+        "Distribution Short", "Downtrend Bounce Fade") and set(v) & soft_short}
+    wb = {k for k, v in uniq.items() if "armed" not in v and not any(
+        g in ("not_validated", "retired") for g in v) and k[1] not in (
+        "Distribution Short", "Downtrend Bounce Fade")}
+    res["watch_shorts_soft_gate_unique"] = len(wa)
+    res["watch_shorts_plus_basket_capped"] = len(wa) + res["fired_capped"]
+    res["watch_validated_longs_blocked_unique"] = len(wb)
+    res["watch_validated_longs_by_setup"] = Counter(k[1] for k in wb)
     res["fires_list"] = [(str(f["t"])[:16], f["symbol"], f["setup"], f["capped"]) for f in fires]
     res["armed_list"] = [(str(r["created_at"])[:16], r["symbol"], r["setup_label"], r["status"],
                           r.get("_why", "")[:60]) for r in rows]
@@ -434,59 +450,51 @@ def ledger_funnel(path: Path, since: pd.Timestamp) -> dict:
 
 
 def base_rates(panel: Path = SHORTS_PANEL) -> dict:
-    """DS / DBF signals per week on the survivor free Binance UM universe (827 coins),
-    with the live filters (stop cap DS 50% / DBF 25%, funding veto), by regime."""
+    """DS / DBF signals per week on the survivor free Binance UM universe (827 coins,
+    docs/edge_fix/shorts.md), with the live filters (stop cap DS 50% / DBF 25%,
+    funding veto, one DBF per coin per 10 days), by BTC regime (short_ctx.parquet)."""
     t = pd.read_parquet(panel)
     t = t[t["setup"].isin(["Distribution Short", "Downtrend Bounce Fade"])].copy()
     t["date"] = pd.to_datetime(t["date"])
-    t = t[t["date"] >= "2022-01-01"]
+    t = t[t["date"] >= "2022-01-01"].sort_values("date")
     cap = np.where(t["setup"] == "Distribution Short", 50.0, 25.0)
     live = t[(t["stop_pct"] <= cap) & ~(t["fund_last"] <= -0.0005)]
-    weeks = (t["date"].max() - pd.Timestamp("2022-01-01")).days / 7
-    out = {"weeks": round(weeks, 1), "raw_n": len(t), "live_n": len(live)}
-    # days per regime (BTC daily) to turn counts into per week rates
-    btc = _btc_daily_panel()
-    reg = pd.DataFrame({"above50": btc > btc.rolling(50).mean(), "trend": _btc_trend(btc)})
-    reg = reg.loc["2022-01-01":str(t["date"].max().date())]
-    for name, mask_days, mask_sig in (
-            ("all", reg.index == reg.index, np.ones(len(live), bool)),
-            ("BTC below 50d", ~reg["above50"], ~live["btc_above50"].astype(bool)),
-            ("BTC below 50d and MIXED", (~reg["above50"]) & (reg["trend"] == "MIXED"),
-             (~live["btc_above50"].astype(bool)) & (live["btc_trend"] == "MIXED")),
-            ("BTC DOWN", reg["trend"] == "DOWN", live["btc_trend"] == "DOWN")):
-        w = mask_days.sum() / 7
-        sub = live[np.asarray(mask_sig)]
-        per_setup = {s: round(len(g) / w, 2) if w else None for s, g in sub.groupby("setup")}
-        days = sub.groupby(sub["date"].dt.normalize()).size()
-        # basket cap 3 per direction per day (all shorts)
-        capped = int(np.minimum(days, 3).sum())
-        out[name] = {"weeks": round(w, 1), "signals": len(sub), "per_week": round(len(sub) / w, 2) if w else None,
-                     "per_setup_per_week": per_setup,
-                     "after_basket_cap_per_week": round(capped / w, 2) if w else None,
-                     "weeks_with_zero_signals_share": None if not w else round(
-                         1 - sub["date"].dt.to_period("W").nunique() / max(w, 1), 2)}
+    keep, last = [], {}
+    for i, r in zip(live.index, live.itertuples()):
+        k = (r.sym, r.setup)
+        if r.setup == "Downtrend Bounce Fade" and k in last and (r.date - last[k]).days < 10:
+            continue
+        last[k] = r.date
+        keep.append(i)
+    live = live.loc[keep]
+    ctx = pd.read_parquet(Path(panel).parent / "short_ctx.parquet")
+    ctx = ctx.loc["2022-01-01":str(t["date"].max().date())]
+    out = {"raw_n": len(t), "live_n": len(live)}
+    above = ctx["btc_above50"].astype(bool)
+    regs = {"all days": pd.Series(True, index=ctx.index),
+            "BTC below 50d": ~above,
+            "BTC below 50d, trend MIXED": (~above) & (ctx["btc_trend"] == "MIXED"),
+            "BTC below 50d, MIXED, breadth < 30%": (~above) & (ctx["btc_trend"] == "MIXED")
+            & (ctx["breadth50"] < 0.30),
+            "BTC trend DOWN": ctx["btc_trend"] == "DOWN"}
+    for name, m in regs.items():
+        days = ctx.index[m.values]
+        w = len(days) / 7
+        sub = live[live["date"].isin(days)]
+        per_day = sub.groupby("date").size()
+        wk = pd.Series(0.0, index=pd.Index(days.to_period("W").unique()))
+        wk = wk.add(sub.groupby(sub["date"].dt.to_period("W")).size(), fill_value=0)
+        out[name] = {"days": len(days), "signals": len(sub),
+                     "per_week": round(len(sub) / w, 2) if w else None,
+                     "DS_per_week": round(float((sub["setup"] == "Distribution Short").sum()) / w, 2) if w else None,
+                     "DBF_per_week": round(float((sub["setup"] == "Downtrend Bounce Fade").sum()) / w, 2) if w else None,
+                     "after_basket_cap_per_week": round(float(np.minimum(per_day, 3).sum()) / w, 2) if w else None,
+                     "share_of_weeks_with_zero": round(float((wk == 0).mean()), 2) if len(wk) else None,
+                     "median_per_week": float(wk.median()) if len(wk) else None}
     return out
 
 
-def _btc_daily_panel() -> pd.Series:
-    p = Path(SHORTS_PANEL).parent / "short_ctx.parquet"
-    d, _ = lf.load_cache()
-    # the forensics cache has 500 days; for 2022+ use the shorts study context if it carries BTC
-    try:
-        ctx = pd.read_parquet(p)
-        if "btc_close" in ctx:
-            return ctx["btc_close"]
-    except Exception:                                   # noqa: BLE001
-        pass
-    return d["BTC-USD"]["close"]
-
-
-def _btc_trend(c: pd.Series) -> pd.Series:
-    from skills.new_setups import btc_trend
-    return btc_trend(c)
-
-
-def your_setup_frequency(days: int = 30) -> dict:
+def your_setup_frequency(days: int = 30, min_qv: float = 2e6) -> dict:
     """How often the trader's discretionary pattern shows up on the scanned universe:
     a coin that ran up hard (24h gain >= 20% or 7d gain >= 40% at the peak), is
     stretched (peak >= 3 ATR above BOTH the 1h and the 4h EMA20, utils.overext) and is
@@ -529,7 +537,7 @@ def your_setup_frequency(days: int = 30) -> dict:
         for ts in idx:
             day = ts.normalize()
             q = qv.reindex([day], method="ffill").iloc[0] if len(qv) else np.nan
-            if not (q >= 2e6):
+            if not (q >= min_qv):
                 continue
             if last is not None and ts - last < pd.Timedelta(hours=48):
                 continue
@@ -538,7 +546,7 @@ def your_setup_frequency(days: int = 30) -> dict:
                          "pct_above_4h_ema": float(c[ts] / e4h[ts] - 1)})
     hits = pd.DataFrame(hits)
     weeks = days / 7
-    out = {"days": days, "hits": len(hits), "per_week": round(len(hits) / weeks, 1) if len(hits) else 0}
+    out = {"days": days, "min_qv_musd": min_qv / 1e6, "hits": len(hits), "per_week": round(len(hits) / weeks, 1) if len(hits) else 0}
     if len(hits):
         per_day = hits.groupby(hits["t"].dt.tz_localize("UTC").dt.tz_convert(SYD).dt.date).size()
         out["per_week_capped_3_per_day"] = round(np.minimum(per_day, 3).sum() / weeks, 1)
@@ -554,11 +562,12 @@ def report():
     rep = {"window": [str(out["start"]), str(end)]}
     for name, days in (("30d", 30), ("7d", 7)):
         rep[name] = funnel(out, end - pd.Timedelta(days=days))
-    x = CACHE / "flow_hourly.pkl"
-    if x.exists():
-        oh = pickle.loads(x.read_bytes())
-        for name, days in (("30d_hourly", 30), ("7d_hourly", 7)):
-            rep[name] = funnel(oh, oh["end"] - pd.Timedelta(days=days))
+    for tag in ("hourly", "binvol"):
+        x = CACHE / f"flow_{tag}.pkl"
+        if x.exists():
+            oh = pickle.loads(x.read_bytes())
+            for name, days in ((f"30d_{tag}", 30), (f"7d_{tag}", 7)):
+                rep[name] = funnel(oh, oh["end"] - pd.Timedelta(days=days))
     lp = CACHE / "track_export.json"
     if lp.exists():
         rep["ledger"] = ledger_funnel(lp, pd.Timestamp("2026-10-08"))
@@ -569,11 +578,20 @@ def report():
         rep["base_rates"] = {"error": str(exc)}
     rep["your_setup"] = your_setup_frequency(30)
     rep["your_setup_7d"] = your_setup_frequency(7)
+    rep["your_setup_0p5m"] = your_setup_frequency(30, 0.5e6)
     rep["universe_note"] = {"bybit_perps_json": json.loads((ROOT / "data" / "bybit_perps.json").read_text())["updated"],
                             "symbols": len(lf.universe()),
                             "with_candles": len(lf.load_cache()[0])}
-    txt = json.dumps(rep, indent=1, default=lambda o: {str(k): v for k, v in o.items()}
-                     if isinstance(o, dict) else str(o))
+    def _clean(o):
+        if isinstance(o, dict):
+            return {(" | ".join(map(str, k)) if isinstance(k, tuple) else str(k)): _clean(v)
+                    for k, v in o.items()}
+        if isinstance(o, (list, tuple)):
+            return [_clean(v) for v in o]
+        if isinstance(o, (np.integer, np.floating)):
+            return o.item()
+        return o
+    txt = json.dumps(_clean(rep), indent=1, default=str)
     (CACHE / "report.json").write_text(txt)
     print(txt)
 

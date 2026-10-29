@@ -16,7 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import core as C          # noqa: E402
 import setups as S        # noqa: E402
 
-OUT = Path(__file__).resolve().parent / "results"
+import os
+OUT = Path(__file__).resolve().parent / os.environ.get("MY_EDGE_OUT", "results")
 NAN = float("nan")
 EXITS = {}
 for a in (0.0, 0.01, 0.02, 0.03, 0.04):

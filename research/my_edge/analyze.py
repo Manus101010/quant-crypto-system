@@ -22,7 +22,8 @@ from scipy.stats import norm
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import core as C          # noqa: E402
 
-RES = Path(__file__).resolve().parent / "results"
+import os
+RES = Path(__file__).resolve().parent / os.environ.get("MY_EDGE_OUT", "results")
 WIN = {"pre": (C.PRE_START, C.IS_START), "is": (C.IS_START, C.IS_END), "oos": (C.IS_END, C.DATA_END)}
 DEFAULT_X = "act3_tr5"
 

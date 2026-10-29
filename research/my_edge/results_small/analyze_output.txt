@@ -1,0 +1,93 @@
+trades 23814755  variants 1360  Bonferroni IS t bar 3.96
+
+== landscape (taker): share of variants with PF > 1, his trail exits only ==
+A        is   variants  540 PF>1 11% median PF 0.82 best PF 1.31 median wk 38.9
+A        oos  variants  540 PF>1 0% median PF 0.78 best PF 1.09 median wk 73.8
+B        is   variants  540 PF>1 0% median PF 0.61 best PF 0.93 median wk 22.1
+B        oos  variants  540 PF>1 7% median PF 0.77 best PF 1.14 median wk 49.0
+C-long   is   variants   60 PF>1 0% median PF 0.73 best PF 0.80 median wk 71.3
+C-long   oos  variants   60 PF>1 0% median PF 0.75 best PF 0.85 median wk 108.2
+C-short  is   variants   60 PF>1 27% median PF 0.93 best PF 1.10 median wk 72.6
+C-short  oos  variants   60 PF>1 30% median PF 0.88 best PF 1.42 median wk 135.3
+
+== picks ==
+A       A|atr8|LH|4h           act3_tr5 pre  taker n    30 win 33% PF 0.49 exp -0.234R (-1.11%) tot -7R t -1.54 halves -3/-4 wk 0.4 stop 6.0% | cap3 PF 0.49 n 30 
+A       A|atr8|LH|4h           act3_tr5 is   taker n   142 win 44% PF 1.16 exp +0.064R (+0.53%) tot +9R t +0.53 halves +1/+8 wk 1.1 stop 5.3% | cap3 PF 1.05 n 135 
+A       A|atr8|LH|4h           act3_tr5 oos  taker n   236 win 38% PF 0.66 exp -0.158R (-0.67%) tot -37R t -2.17 halves -19/-18 wk 3.4 stop 5.3% | cap3 PF 0.66 n 220 
+A       A|atr8|LH|4h           act3_tr5 oos  maker n   236 win 40% PF 0.76 exp -0.103R (-0.42%) tot -24R t -1.43 halves -13/-12 wk 3.4 stop 5.3% | cap3 PF 0.75 n 220 
+A       A|atr8|LH|4h           act4_tr5 pre  taker n    30 win 40% PF 0.53 exp -0.253R (-1.30%) tot -8R t -1.49 halves -5/-3 wk 0.4 stop 6.0% | cap3 PF 0.53 n 30 
+A       A|atr8|LH|4h           act4_tr5 is   taker n   140 win 49% PF 1.31 exp +0.132R (+0.88%) tot +19R t +1.04 halves +5/+13 wk 1.1 stop 5.3% | cap3 PF 1.22 n 133 
+A       A|atr8|LH|4h           act4_tr5 oos  taker n   234 win 41% PF 0.63 exp -0.198R (-0.83%) tot -46R t -2.53 halves -24/-22 wk 3.4 stop 5.4% | cap3 PF 0.62 n 218 
+A       A|atr8|LH|4h           act4_tr5 oos  maker n   234 win 43% PF 0.71 exp -0.144R (-0.58%) tot -34R t -1.85 halves -18/-16 wk 3.4 stop 5.4% | cap3 PF 0.70 n 218 
+A       A|atr8|LH|4h           T2R_48h  pre  taker n    29 win 38% PF 0.85 exp -0.093R (-0.45%) tot -3R t -0.37 halves -2/-1 wk 0.4 stop 6.0% | cap3 PF 0.85 n 29 
+A       A|atr8|LH|4h           T2R_48h  is   taker n   138 win 51% PF 1.18 exp +0.080R (+0.57%) tot +11R t +0.68 halves +0/+11 wk 1.1 stop 5.3% | cap3 PF 1.11 n 131 
+A       A|atr8|LH|4h           T2R_48h  oos  taker n   231 win 44% PF 0.81 exp -0.098R (-0.34%) tot -23R t -1.17 halves -3/-19 wk 3.3 stop 5.4% | cap3 PF 0.80 n 215 
+A       A|atr8|LH|4h           T2R_48h  oos  maker n   231 win 45% PF 0.91 exp -0.044R (-0.09%) tot -10R t -0.53 halves +3/-13 wk 3.3 stop 5.4% | cap3 PF 0.89 n 215 
+A       A|atr8|LH|4h           T1R_24h  pre  taker n    30 win 53% PF 0.79 exp -0.089R (-0.32%) tot -3R t -0.54 halves -1/-2 wk 0.4 stop 6.0% | cap3 PF 0.79 n 30 
+A       A|atr8|LH|4h           T1R_24h  is   taker n   147 win 51% PF 0.84 exp -0.056R (-0.21%) tot -8R t -0.78 halves -6/-3 wk 1.1 stop 5.3% | cap3 PF 0.83 n 138 
+A       A|atr8|LH|4h           T1R_24h  oos  taker n   246 win 48% PF 0.87 exp -0.048R (-0.18%) tot -12R t -0.80 halves -2/-10 wk 3.6 stop 5.3% | cap3 PF 0.84 n 228 
+A       A|atr8|LH|4h           T1R_24h  oos  maker n   246 win 51% PF 1.02 exp +0.006R (+0.07%) tot +2R t +0.11 halves +5/-4 wk 3.6 stop 5.3% | cap3 PF 0.98 n 228 
+B       B|p45_7d|EMA|4h        act3_tr5 pre  taker n   173 win 35% PF 0.62 exp -0.154R (-0.88%) tot -27R t -1.77 halves -13/-14 wk 2.3 stop 6.2% | cap3 PF 0.60 n 87 IS FAIL
+B       B|p45_7d|EMA|4h        act3_tr5 is   taker n   173 win 39% PF 0.86 exp -0.064R (-0.24%) tot -11R t -0.38 halves -1/-10 wk 1.3 stop 5.9% | cap3 PF 0.79 n 108 IS FAIL
+B       B|p45_7d|EMA|4h        act3_tr5 oos  taker n   683 win 34% PF 0.75 exp -0.120R (-0.70%) tot -82R t -1.10 halves -76/-5 wk 9.9 stop 5.4% | cap3 PF 1.08 n 420 IS FAIL
+B       B|p45_7d|EMA|4h        act3_tr5 oos  maker n   683 win 36% PF 0.85 exp -0.068R (-0.45%) tot -46R t -0.70 halves -58/+12 wk 9.9 stop 5.4% | cap3 PF 1.21 n 420 IS FAIL
+B       B|p45_7d|EMA|4h        act0_tr5 pre  taker n   186 win 28% PF 0.56 exp -0.170R (-0.95%) tot -32R t -2.15 halves -14/-18 wk 2.5 stop 6.2% | cap3 PF 0.60 n 91 IS FAIL
+B       B|p45_7d|EMA|4h        act0_tr5 is   taker n   181 win 34% PF 0.90 exp -0.042R (-0.07%) tot -8R t -0.29 halves +3/-11 wk 1.4 stop 5.9% | cap3 PF 0.85 n 113 IS FAIL
+B       B|p45_7d|EMA|4h        act0_tr5 oos  taker n   725 win 29% PF 0.77 exp -0.095R (-0.50%) tot -69R t -1.20 halves -62/-7 wk 10.5 stop 5.4% | cap3 PF 0.94 n 439 IS FAIL
+B       B|p45_7d|EMA|4h        act0_tr5 oos  maker n   725 win 31% PF 0.89 exp -0.043R (-0.25%) tot -31R t -0.63 halves -43/+12 wk 10.5 stop 5.4% | cap3 PF 1.07 n 439 IS FAIL
+B       B|p45_7d|EMA|4h        T2R_48h  pre  taker n   161 win 23% PF 0.38 exp -0.482R (-2.90%) tot -78R t -3.28 halves -35/-42 wk 2.2 stop 6.2% | cap3 PF 0.39 n 83 IS FAIL
+B       B|p45_7d|EMA|4h        T2R_48h  is   taker n   159 win 37% PF 0.74 exp -0.158R (-0.72%) tot -25R t -0.85 halves -5/-20 wk 1.2 stop 6.0% | cap3 PF 0.75 n 100 IS FAIL
+B       B|p45_7d|EMA|4h        T2R_48h  oos  taker n   635 win 31% PF 0.68 exp -0.225R (-1.15%) tot -143R t -1.32 halves -131/-12 wk 9.2 stop 5.5% | cap3 PF 0.94 n 389 IS FAIL
+B       B|p45_7d|EMA|4h        T2R_48h  oos  maker n   635 win 31% PF 0.74 exp -0.173R (-0.90%) tot -110R t -1.12 halves -114/+4 wk 9.2 stop 5.5% | cap3 PF 1.02 n 389 IS FAIL
+B       B|p45_7d|EMA|4h        T1R_24h  pre  taker n   173 win 45% PF 0.75 exp -0.127R (-0.76%) tot -22R t -1.39 halves -9/-13 wk 2.3 stop 6.2% | cap3 PF 0.55 n 88 IS FAIL
+B       B|p45_7d|EMA|4h        T1R_24h  is   taker n   171 win 49% PF 0.85 exp -0.070R (-0.32%) tot -12R t -0.42 halves -5/-7 wk 1.3 stop 5.9% | cap3 PF 0.74 n 108 IS FAIL
+B       B|p45_7d|EMA|4h        T1R_24h  oos  taker n   684 win 45% PF 0.72 exp -0.143R (-0.78%) tot -98R t -1.74 halves -65/-33 wk 9.9 stop 5.4% | cap3 PF 0.85 n 417 IS FAIL
+B       B|p45_7d|EMA|4h        T1R_24h  oos  maker n   684 win 45% PF 0.82 exp -0.091R (-0.53%) tot -62R t -1.31 halves -47/-15 wk 9.9 stop 5.4% | cap3 PF 0.96 n 417 IS FAIL
+C-long  C|L_y25_e4             act3_tr5 pre  taker n   528 win 35% PF 0.71 exp -0.156R (-0.65%) tot -82R t -2.08 halves -19/-64 wk 7.1 stop 5.0% | cap3 PF 0.71 n 361 IS FAIL
+C-long  C|L_y25_e4             act3_tr5 is   taker n  1677 win 35% PF 0.71 exp -0.154R (-0.62%) tot -258R t -2.52 halves -133/-125 wk 12.9 stop 4.9% | cap3 PF 0.68 n 842 IS FAIL
+C-long  C|L_y25_e4             act3_tr5 oos  taker n  1450 win 36% PF 0.81 exp -0.099R (-0.38%) tot -144R t -2.21 halves -43/-102 wk 21.0 stop 5.0% | cap3 PF 0.85 n 884 IS FAIL
+C-long  C|L_y25_e4             act3_tr5 oos  maker n  1450 win 37% PF 0.91 exp -0.043R (-0.13%) tot -62R t -0.96 halves -2/-60 wk 21.0 stop 5.0% | cap3 PF 0.96 n 884 IS FAIL
+C-long  C|L_y25_e4             act4_tr3 pre  taker n   523 win 50% PF 0.77 exp -0.129R (-0.49%) tot -67R t -1.82 halves -14/-53 wk 7.1 stop 5.0% | cap3 PF 0.75 n 358 IS FAIL
+C-long  C|L_y25_e4             act4_tr3 is   taker n  1650 win 51% PF 0.80 exp -0.104R (-0.42%) tot -172R t -1.54 halves -94/-78 wk 12.7 stop 4.9% | cap3 PF 0.77 n 832 IS FAIL
+C-long  C|L_y25_e4             act4_tr3 oos  taker n  1418 win 52% PF 0.85 exp -0.075R (-0.19%) tot -107R t -1.83 halves -20/-87 wk 20.6 stop 5.0% | cap3 PF 0.91 n 875 IS FAIL
+C-long  C|L_y25_e4             act4_tr3 oos  maker n  1418 win 52% PF 0.96 exp -0.019R (+0.06%) tot -27R t -0.47 halves +20/-46 wk 20.6 stop 5.0% | cap3 PF 1.02 n 875 IS FAIL
+C-long  C|L_y25_e4             T2R_48h  pre  taker n   496 win 33% PF 0.74 exp -0.178R (-0.75%) tot -88R t -2.19 halves -14/-74 wk 6.7 stop 5.0% | cap3 PF 0.75 n 346 IS FAIL
+C-long  C|L_y25_e4             T2R_48h  is   taker n  1552 win 33% PF 0.76 exp -0.163R (-0.75%) tot -253R t -2.30 halves -146/-107 wk 11.9 stop 4.9% | cap3 PF 0.71 n 803 IS FAIL
+C-long  C|L_y25_e4             T2R_48h  oos  taker n  1316 win 34% PF 0.82 exp -0.122R (-0.41%) tot -161R t -2.49 halves -83/-78 wk 19.1 stop 5.0% | cap3 PF 0.87 n 830 IS FAIL
+C-long  C|L_y25_e4             T2R_48h  oos  maker n  1316 win 34% PF 0.90 exp -0.067R (-0.16%) tot -88R t -1.36 halves -47/-41 wk 19.1 stop 5.0% | cap3 PF 0.94 n 830 IS FAIL
+C-long  C|L_y25_e4             T1R_24h  pre  taker n   526 win 44% PF 0.71 exp -0.157R (-0.64%) tot -83R t -2.46 halves -29/-54 wk 7.1 stop 5.0% | cap3 PF 0.70 n 362 IS FAIL
+C-long  C|L_y25_e4             T1R_24h  is   taker n  1683 win 47% PF 0.76 exp -0.123R (-0.52%) tot -207R t -2.02 halves -138/-69 wk 12.9 stop 4.8% | cap3 PF 0.71 n 843 IS FAIL
+C-long  C|L_y25_e4             T1R_24h  oos  taker n  1426 win 48% PF 0.81 exp -0.096R (-0.36%) tot -136R t -2.71 halves -55/-81 wk 20.7 stop 5.0% | cap3 PF 0.84 n 872 IS FAIL
+C-long  C|L_y25_e4             T1R_24h  oos  maker n  1426 win 48% PF 0.92 exp -0.039R (-0.11%) tot -56R t -1.10 halves -15/-41 wk 20.7 stop 5.0% | cap3 PF 0.94 n 872 IS FAIL
+C-short C|S_y10_e4             act3_tr5 pre  taker n  3054 win 36% PF 0.86 exp -0.083R (-0.42%) tot -252R t -0.79 halves -6/-247 wk 41.3 stop 4.2% | cap3 PF 0.94 n 707 IS FAIL
+C-short C|S_y10_e4             act3_tr5 is   taker n  8608 win 39% PF 1.05 exp +0.024R (-0.04%) tot +209R t +0.32 halves -46/+255 wk 66.1 stop 3.8% | cap3 PF 1.11 n 1436 IS FAIL
+C-short C|S_y10_e4             act3_tr5 oos  taker n  8941 win 39% PF 0.97 exp -0.013R (+0.10%) tot -118R t -0.19 halves +176/-294 wk 129.6 stop 3.7% | cap3 PF 0.91 n 1317 IS FAIL
+C-short C|S_y10_e4             act3_tr5 oos  maker n  8941 win 41% PF 1.14 exp +0.064R (+0.35%) tot +573R t +0.91 halves +517/+56 wk 129.6 stop 3.7% | cap3 PF 1.05 n 1317 IS FAIL
+C-short C|S_y10_e4             act4_tr3 pre  taker n  2991 win 47% PF 0.90 exp -0.058R (-0.28%) tot -172R t -0.56 halves +44/-216 wk 40.4 stop 4.2% | cap3 PF 0.94 n 704 IS FAIL
+C-short C|S_y10_e4             act4_tr3 is   taker n  8427 win 51% PF 1.10 exp +0.052R (+0.04%) tot +436R t +0.69 halves +218/+218 wk 64.7 stop 3.8% | cap3 PF 1.14 n 1427 IS FAIL
+C-short C|S_y10_e4             act4_tr3 oos  taker n  8787 win 53% PF 0.98 exp -0.011R (+0.04%) tot -95R t -0.22 halves +140/-235 wk 127.3 stop 3.7% | cap3 PF 0.88 n 1310 IS FAIL
+C-short C|S_y10_e4             act4_tr3 oos  maker n  8787 win 53% PF 1.14 exp +0.067R (+0.29%) tot +585R t +1.34 halves +476/+109 wk 127.3 stop 3.7% | cap3 PF 1.01 n 1310 IS FAIL
+C-short C|S_y10_e4             T2R_48h  pre  taker n  2832 win 35% PF 0.77 exp -0.153R (-0.68%) tot -432R t -1.62 halves -117/-315 wk 38.3 stop 4.2% | cap3 PF 0.78 n 697 IS FAIL
+C-short C|S_y10_e4             T2R_48h  is   taker n  8113 win 39% PF 0.95 exp -0.034R (-0.20%) tot -275R t -0.44 halves -107/-168 wk 62.3 stop 3.8% | cap3 PF 0.93 n 1410 IS FAIL
+C-short C|S_y10_e4             T2R_48h  oos  taker n  8369 win 43% PF 1.07 exp +0.043R (+0.17%) tot +356R t +0.69 halves +431/-75 wk 121.3 stop 3.7% | cap3 PF 0.85 n 1309 IS FAIL
+C-short C|S_y10_e4             T2R_48h  oos  maker n  8369 win 44% PF 1.22 exp +0.120R (+0.42%) tot +1008R t +1.90 halves +754/+254 wk 121.3 stop 3.7% | cap3 PF 0.97 n 1309 IS FAIL
+C-short C|S_y10_e4             T1R_24h  pre  taker n  3116 win 45% PF 0.71 exp -0.150R (-0.57%) tot -468R t -2.53 halves -166/-302 wk 42.1 stop 4.1% | cap3 PF 0.79 n 714 IS FAIL
+C-short C|S_y10_e4             T1R_24h  is   taker n  9078 win 51% PF 0.88 exp -0.055R (-0.23%) tot -502R t -1.07 halves -285/-217 wk 69.7 stop 3.7% | cap3 PF 0.83 n 1451 IS FAIL
+C-short C|S_y10_e4             T1R_24h  oos  taker n  9392 win 54% PF 0.97 exp -0.011R (-0.02%) tot -101R t -0.28 halves +233/-335 wk 136.1 stop 3.6% | cap3 PF 0.80 n 1319 IS FAIL
+C-short C|S_y10_e4             T1R_24h  oos  maker n  9392 win 55% PF 1.17 exp +0.068R (+0.23%) tot +637R t +1.67 halves +598/+38 wk 136.1 stop 3.6% | cap3 PF 0.96 n 1319 IS FAIL
+
+== by year, picks, default + tuned exit, taker ==
+A A|atr8|LH|4h act3_tr5 {2021: '8/0.40/-2R', 2022: '22/0.52/-5R', 2023: '54/0.82/-4R', 2024: '60/1.94/+18R', 2025: '105/0.80/-10R', 2026: '159/0.58/-32R'}
+A A|atr8|LH|4h act4_tr5 {2021: '8/0.27/-4R', 2022: '22/0.66/-4R', 2023: '54/0.95/-1R', 2024: '59/1.98/+20R', 2025: '102/0.87/-7R', 2026: '159/0.53/-40R'}
+B B|p45_7d|EMA|4h act3_tr5 {2021: '34/0.69/-7R', 2022: '139/0.59/-20R', 2023: '12/0.04/-7R', 2024: '92/1.02/+1R', 2025: '424/0.60/-84R', 2026: '328/0.98/-3R'}
+B B|p45_7d|EMA|4h act0_tr5 {2021: '36/0.81/-3R', 2022: '150/0.48/-28R', 2023: '12/0.04/-7R', 2024: '97/1.09/+3R', 2025: '450/0.63/-69R', 2026: '347/0.97/-5R'}
+C-long C|L_y25_e4 act3_tr5 {2021: '234/0.91/-11R', 2022: '294/0.57/-71R', 2023: '363/0.75/-50R', 2024: '872/0.70/-139R', 2025: '932/0.83/-81R', 2026: '960/0.74/-132R'}
+C-long C|L_y25_e4 act4_tr3 {2021: '230/0.91/-10R', 2022: '293/0.66/-57R', 2023: '353/0.87/-25R', 2024: '860/0.75/-116R', 2025: '920/0.95/-23R', 2026: '935/0.77/-115R'}
+C-short C|S_y10_e4 act3_tr5 {2021: '881/0.63/-185R', 2022: '2173/0.95/-67R', 2023: '1109/0.94/-38R', 2024: '3694/0.88/-234R', 2025: '7903/1.18/+697R', 2026: '4843/0.88/-332R'}
+C-short C|S_y10_e4 act4_tr3 {2021: '856/0.73/-133R', 2022: '2135/0.97/-40R', 2023: '1096/1.07/+49R', 2024: '3609/0.98/-38R', 2025: '7744/1.14/+529R', 2026: '4765/0.93/-199R'}
+
+== exit grid per pick (PF IS -> OOS, taker) ==
+A A|atr8|LH|4h act0_tr3:0.92->0.68 act0_tr5:1.16->0.71 act0_tr7:1.20->0.63 act1_tr3:1.01->0.71 act1_tr5:1.19->0.69 act1_tr7:1.19->0.62 act2_tr3:1.12->0.70 act2_tr5:1.23->0.67 act2_tr7:1.18->0.62 act3_tr3:1.08->0.76 act3_tr5:1.16->0.66 act3_tr7:1.17->0.61 act4_tr3:1.23->0.73 act4_tr5:1.31->0.63 act4_tr7:1.29->0.60 T2R_48h:1.18->0.81 T1R_24h:0.84->0.87
+B B|p45_7d|EMA|4h act0_tr3:0.64->0.77 act0_tr5:0.90->0.77 act0_tr7:0.59->0.73 act1_tr3:0.66->0.77 act1_tr5:0.85->0.78 act1_tr7:0.58->0.73 act2_tr3:0.59->0.70 act2_tr5:0.88->0.74 act2_tr7:0.59->0.73 act3_tr3:0.64->0.86 act3_tr5:0.86->0.75 act3_tr7:0.58->0.73 act4_tr3:0.75->0.84 act4_tr5:0.81->0.72 act4_tr7:0.57->0.72 T2R_48h:0.74->0.68 T1R_24h:0.85->0.72
+C-long C|L_y25_e4 act0_tr3:0.69->0.72 act0_tr5:0.72->0.78 act0_tr7:0.74->0.83 act1_tr3:0.71->0.76 act1_tr5:0.72->0.78 act1_tr7:0.74->0.83 act2_tr3:0.73->0.77 act2_tr5:0.73->0.78 act2_tr7:0.73->0.83 act3_tr3:0.75->0.85 act3_tr5:0.71->0.81 act3_tr7:0.73->0.83 act4_tr3:0.80->0.85 act4_tr5:0.75->0.81 act4_tr7:0.74->0.83 T2R_48h:0.76->0.82 T1R_24h:0.76->0.81
+C-short C|S_y10_e4 act0_tr3:0.98->0.84 act0_tr5:1.05->0.97 act0_tr7:1.02->1.04 act1_tr3:0.98->0.87 act1_tr5:1.04->0.97 act1_tr7:1.02->1.04 act2_tr3:1.01->0.91 act2_tr5:1.04->0.97 act2_tr7:1.03->1.04 act3_tr3:1.07->0.94 act3_tr5:1.05->0.97 act3_tr7:1.03->1.04 act4_tr3:1.10->0.98 act4_tr5:1.05->0.99 act4_tr7:1.03->1.04 T2R_48h:0.95->1.07 T1R_24h:0.88->0.97
