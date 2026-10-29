@@ -104,9 +104,14 @@ def fit(mode: str, price: float, atr1: float, swing_hi: float | None, swing_lo: 
     return last or {}
 
 
-def plan(symbol: str, investment: float = 50.0, *, data=None) -> dict:
+def plan(symbol: str, investment: float | None = None, *, data=None) -> dict:
     """Build the plan. `data` = optional {tf: technicals dict} for tests."""
     from desk.agents.factpack import technicals
+    if investment is None:
+        try:
+            from config import POSITION_MARGIN_USD as investment
+        except Exception:                          # noqa: BLE001
+            investment = 50.0
     base = symbol.upper().replace("-USD", "").replace("USDT", "")
     sym_usd = f"{base}-USD"
     if data is None:
@@ -178,7 +183,7 @@ def text(p: dict) -> str:
         f"Why: {p['reason']}.",
         f"Trend: {tf_line}",
         "",
-        "<b>Bybit Futures Grid, Manual tab:</b>",
+        "<b>Futures Grid (Pionex or Bybit), manual setup:</b>",
         f"• Mode: <b>{side}</b>, Arithmetic, <b>{g['grids']} grids</b>",
         f"• Price range: <b>{_p(g['lo'])}</b> to <b>{_p(g['hi'])}</b>",
         f"• Leverage: <b>{g['leverage']}x</b> · Investment: <b>${g['investment']:,.2f}</b>",

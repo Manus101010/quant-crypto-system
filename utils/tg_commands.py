@@ -28,7 +28,7 @@ _HELP = ("🤖 <b>Commands</b>\n/status — market gate, BTC, armed setups, risk
          "/guard long BTCUSDT 65000 63000 10x 50 — check a plain trade (entry stop lev margin)\n"
          "/addbot BOTID SYMBOL — watch a Bybit grid bot · /rmbot BOTID · /bots\n"
          "/desk SOL long [entry stop] — AI desk review (veto only) · /deskstats — is the desk helping?\n"
-         "/bot SOL [investment] — grid bot plan for any coin (mode, range, leverage, stop)\n"
+         "/bot SOL [investment] — grid bot plan for any coin (mode, range, leverage, stop; default $80)\n"
          "<i>Signal only — the bot never trades.</i>")
 
 
@@ -156,7 +156,7 @@ def handle(text: str) -> str:
         if not parts:
             return "Usage: /bot SOL [investment], e.g. /bot SOL 50"
         try:
-            inv = float(parts[1]) if len(parts) > 1 else 50.0
+            inv = float(parts[1]) if len(parts) > 1 else None
         except ValueError:
             return "Investment must be a number, e.g. /bot SOL 50"
         from desk import botplan

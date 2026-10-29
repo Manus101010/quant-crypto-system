@@ -14,6 +14,8 @@ Newest first. Each line says what was decided, why, and what would change it.
 | Validation record | Distribution Short entry recomputed and `locked`, so Run Validation can't overwrite it | Old entry was hand edited and inconsistent | New survivor free study |
 | New intraday edges | None adopted | 7 families tested on 486 perps, all failed out of sample; costs eat 0.07 to 0.12R per intraday trade | n/a |
 | Watch only | New listing ORB72 short, liquidity filter, BTC below 50d gate, OI 3d rising: logged, not gated | Not significant after correction | Enough forward data |
+| Sizing | $80 margin, $20 risk per trade (25% of margin), $300 sleeve: $75 open risk and daily caps | Trader wants bigger trades; $20 keeps a half the account losing streak at about 8.6% odds over 40 trades vs 65.6% at $37.50 | Account passes $500 (step to $25) |
+| Bot venue | Pionex for grid bots if bots are the main instrument; Bybit stays for scanner trades | Pionex grid tools (adjust range, add margin, stop on a running grid); scanner coverage and read only API are on Bybit | n/a |
 | Desk sizing | Desk fact pack sizes exactly like the alert (wide stops sized down at 1x count as within rules) | Desk was rejecting trades the alert allowed | n/a |
 
 ## 28 Oct 2026
