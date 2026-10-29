@@ -76,7 +76,7 @@ DEPLOY_THRESHOLDS = {
 # (leverage = 25% / stop distance). Ten such trades = the whole sleeve, so the
 # open-risk cap is 10 x $12.50 = $125.
 SLEEVE_USD: float = float(_secret("SLEEVE_USD") or 300)   # 29 Oct 2026: $300 account
-POSITION_MARGIN_USD: float = float(_secret("POSITION_MARGIN_USD") or 80)   # 25% of $80 = $20 risk per trade
+POSITION_MARGIN_USD: float = float(_secret("POSITION_MARGIN_USD") or 150)   # trader choice 29 Oct: $150 x 2 trades; 25% = $37.50 max loss each
 MAX_LOSS_PCT_OF_MARGIN: float = float(_secret("MAX_LOSS_PCT_OF_MARGIN") or 25)
 MAX_LEVERAGE: int = int(_secret("MAX_LEVERAGE") or 20)
 RISK_PER_TRADE_USD: float = float(_secret("RISK_PER_TRADE_USD")
