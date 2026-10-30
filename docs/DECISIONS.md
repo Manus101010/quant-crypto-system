@@ -46,3 +46,8 @@ Newest first. Each line says what was decided, why, and what would change it.
 | Data | Free first: OKX, MEXC, Hyperliquid, DEX Screener, Coinalyze (free key). Skip CoinGlass Hobbyist (4h only) and Whale Alert 14.95 (no API) | Budget 50 USD a month; free sources cover the same ground |
 | Features | Positioning snapshot logged on every alert; nothing used as a filter until it passes on live data. Two OI rules pre registered | 9 filters tested, none survived a multiple testing correction |
 | Runner | Read only watcher must run from a non US host: Supabase Edge Function in Sydney first, Oracle Always Free Sydney VM second | Bybit blocks US IPs including GitHub runners; Singapore is restricted |
+
+## 30 Oct 2026: daily movers board
+* He trades the day's top gainers and losers by hand. Built `desk/movers.py` to do that sorting: top 5 each side, a state (rolling over, still running, stretched, still dumping, turning up, chop), a 0 to 100 fit score and the backtest verdict. Available as `/movers`, in the morning brief, and on the web app's Movers page.
+* Tested his states (docs/edge_fix/movers.md): the fade to the midline and the bounce long both lose. Shorting losers that keep dumping is the best (PF 1.35 in 2023-25 and 2025-26) but weak statistically, so it stays paper only, gated on BTC below its 50 day.
+* The old web scanner's tiles (Momentum Runner, Overextended, Z-Score Extreme) were daily-bar labels that were never backtested; their volume of names came from labelling, not from edge.
