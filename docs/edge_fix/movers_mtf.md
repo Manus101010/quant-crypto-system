@@ -35,3 +35,10 @@ Read:
 ## What this means for the system
 * These definitions stay on the movers board as reading aids, not alerts, with the tested verdict next to each.
 * Your discretion (what you skip, how you size, when you close) is the part a backtest of a rule cannot test. It gets tested on your own trades instead: every bot logged with its result in R. After 30 or more, we compare your picks with the rule's break-even base rate.
+
+## The 4h tell (research/movers/mtf_filter.py)
+His rule: "if the 4h is rolling over and you get a 15m entry, a 15m bounce rarely breaks the 4h turn". Lower timeframe entries were split by the 4h state, which counts only once the 4h bar has closed.
+* Fading a 15m rollover while the 4h SAR is still under price: PF 0.86 over 664 trades (in sample 0.82, out of sample 0.91). That is worse than random entries in the same state. The tell is right: those fades lose.
+* Fades with the 4h already down or turned are rare: 26 to 66 trades in four years across 477 coins. They show PF 1.06 to 1.88, but that is too few to confirm.
+* For dumps and runs, the 4h filter does not separate signal from random. For example, DUMP 15m with the 4h rolling over has PF 1.18 in sample and 0.96 out of sample, and random entries did the same.
+* Live: the movers board now labels a 1h rollover with a rising 4h SAR as "FADE AGAINST 4H: skip".
