@@ -67,3 +67,14 @@ def test_board_text(monkeypatch):
     txt = movers.text(b)
     assert "AAA" in txt and "CCC" in txt and "Still Dumping" in txt
     assert "Long gate is closed" in txt and "What the backtest says" in txt
+
+
+def test_fade_against_rising_4h_is_skipped(monkeypatch):
+    monkeypatch.setattr("utils.breadth.long_gate", lambda: (False, ""))
+    monkeypatch.setattr(movers, "classify", lambda f, side: ("ROLLING OVER", 70, "x"))
+    tk = {"AAA/USDT:USDT": {"percentage": 35, "quoteVolume": 5e6}}
+    up4h = _df(list(np.linspace(1.0, 1.5, 40)))
+    b = movers.board(tickers=tk, candles={"AAA": _df(list(np.linspace(1.0, 1.35, 81))), "AAA@4h": up4h}, store=False)
+    r = b["rows"][0]
+    assert r["state"] == "FADE AGAINST 4H" and r["up4"] is True
+    assert "skip" in movers.text(b)

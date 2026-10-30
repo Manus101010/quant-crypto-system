@@ -51,3 +51,7 @@ Newest first. Each line says what was decided, why, and what would change it.
 * He trades the day's top gainers and losers by hand. Built `desk/movers.py` to do that sorting: top 5 each side, a state (rolling over, still running, stretched, still dumping, turning up, chop), a 0 to 100 fit score and the backtest verdict. Available as `/movers`, in the morning brief, and on the web app's Movers page.
 * Tested his states (docs/edge_fix/movers.md): the fade to the midline and the bounce long both lose. Shorting losers that keep dumping is the best (PF 1.35 in 2023-25 and 2025-26) but weak statistically, so it stays paper only, gated on BTC below its 50 day.
 * The old web scanner's tiles (Momentum Runner, Overextended, Z-Score Extreme) were daily-bar labels that were never backtested; their volume of names came from labelling, not from edge.
+
+## 30 Oct 2026 (later): movers on 15m/1h/4h, as grids
+* Tested his playbook as the trade he takes, a Pionex short grid (docs/edge_fix/movers_mtf.md). In R per trade, every version on every timeframe is about break even, and grids do worse than plain positions on directional ideas. Fades reach the midline 7 times in 10, but the misses cost as much.
+* Decision: backtests decide what becomes an automatic alert and how it is sized. His discretion is measured on his own logged trades in R, not by backtesting a rule. The movers board stays a reading aid, with the tested verdicts.

@@ -45,8 +45,9 @@ TOP_N = 5
 MIN_QV_USD = 2_000_000            # 24h quote volume on MEXC perps (thinner is untradeable)
 
 VERDICT = {
-    "ROLLING OVER": ("🔻", "tested: lost as a short to the midline (PF 0.84). Small grid or skip"),
-    "STILL RUNNING": ("🚀", "tested: break even since 2023. Longs only if the long gate is open"),
+    "ROLLING OVER": ("🔻", "4h has turned too (the rare aligned case, PF 1.06 to 1.88 but under 70 trades). Without the 4h:  back to the midline 7 times in 10, but the 3 misses cost as much (about break even). A grid here does worse than a plain short"),
+    "FADE AGAINST 4H": ("⛔", "skip: fading a rollover while the 4h is still rising lost (PF 0.86, 664 trades, 15m)"),
+    "STILL RUNNING": ("🚀", "tested 15m, 1h, 4h: break even, random entries on the list did as well. Longs only if the long gate is open"),
     "STRETCHED UP": ("⏳", "not turned yet, wait for the SAR to flip"),
     "STILL DUMPING": ("📉", "tested: best of the eight (PF 1.35, 2023 to 2026), weak stats, paper only, BTC below 50 day"),
     "TURNING UP": ("⚠️", "tested: worst of the eight (PF 0.18). Do not buy these bounces"),
@@ -108,6 +109,15 @@ def features_1h(df: pd.DataFrame) -> dict | None:
             "comp": float(comp), "stretch_up": (hh12 - m) / a, "stretch_dn": (m - ll12) / a,
             "since_mid": since, "flip_dn": bool(flip_dn), "flip_up": bool(flip_up),
             "hh12": hh12, "ll12": ll12}
+
+
+def sar4_up(df: pd.DataFrame | None) -> bool | None:
+    """True when the 4h SAR is under price on the last closed 4h bar (4h still rising)."""
+    if df is None or len(df) < 10:
+        return None
+    d = df.iloc[:-1]
+    _, up = _psar(d["high"].to_numpy(float), d["low"].to_numpy(float))
+    return bool(up[-1] == 1)
 
 
 def _clip(x, lo=0.0, hi=1.0):
@@ -189,7 +199,19 @@ def board(n: int = TOP_N, *, tickers: dict | None = None, candles: dict | None =
                                     "state": "NO DATA", "score": 0, "why": ""})
                 continue
             st, sc, why = classify(f, side)
-            out["rows"].append({"base": base, "side": side, "pct": pct, "qv": qv, "state": st,
+            up4 = None
+            try:
+                d4 = candles.get(base + "@4h") if candles is not None else None
+                if d4 is None and candles is None:
+                    from utils.exchange import get_ohlcv
+                    d4 = get_ohlcv(f"{base}-USD", "4h", 60, exchange="mexc")
+                up4 = sar4_up(d4)
+            except Exception as exc:      # noqa: BLE001
+                log.debug("movers 4h %s: %s", base, exc)
+            if st == "ROLLING OVER" and up4:
+                st, sc = "FADE AGAINST 4H", 0
+                why += "; but the 4h SAR is still under price"
+            out["rows"].append({"up4": up4, "base": base, "side": side, "pct": pct, "qv": qv, "state": st,
                                 "score": sc, "why": why, "price": f["close"], "mid": f["mid"],
                                 "sar": f["sar"], "hh12": f["hh12"], "ll12": f["ll12"]})
     if store:
