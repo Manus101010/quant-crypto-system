@@ -263,3 +263,69 @@ def text(b: dict) -> str:
     lines.append("")
     lines.append("<i>Score = how cleanly it fits the state, not a profit forecast. Signal only.</i>")
     return "\n".join(lines)
+
+
+# ── One coin, every timeframe (web app Trade Desk "scan this coin") ───────────
+LADDER_TFS = (("15m", 160), ("1h", 160), ("4h", 160), ("1d", 160), ("1w", 120))
+
+
+def tf_state(f: dict) -> str:
+    """Plain state of one timeframe, same definitions as the movers board."""
+    dist = (f["close"] - f["mid"]) / f["atr"]
+    if f["stretch_up"] >= 3 and f["comp"] <= 0.7 and f["flip_dn"] and dist > 0.5:
+        return "Rolling over at the top"
+    if f["stretch_dn"] >= 3 and f["comp"] <= 0.7 and f["flip_up"] and dist < -0.5:
+        return "Turning up at the bottom"
+    if f["up"] == 1 and dist > 0 and f["since_mid"] >= 12 and f["stretch_up"] < 6:
+        return "Running up"
+    if f["up"] == -1 and dist < 0 and f["since_mid"] >= 12 and f["stretch_dn"] < 6:
+        return "Running down"
+    if f["stretch_up"] >= 3:
+        return "Stretched up"
+    if f["stretch_dn"] >= 3:
+        return "Stretched down"
+    return "Above the midline" if dist > 0 else "Below the midline"
+
+
+def ladder(symbol: str, *, frames: dict | None = None) -> dict:
+    """{rows: [...], read: str} for one coin on 15m, 1h, 4h, 1d, 1w.
+    frames: {tf: DataFrame} for tests; otherwise candles come from the exchange chain."""
+    rows = []
+    for tf, lim in LADDER_TFS:
+        if frames is not None:
+            df = frames.get(tf)
+        else:
+            from utils.exchange import get_ohlcv
+            df = get_ohlcv(symbol, tf, lim)
+        f = features_1h(df) if df is not None and len(df) > 40 else None
+        if f is None:
+            rows.append({"tf": tf, "state": "no data"})
+            continue
+        rows.append({"tf": tf, "state": tf_state(f), "sar": "under price ▲" if f["up"] == 1 else "above price ▼",
+                     "mid_atr": round((f["close"] - f["mid"]) / f["atr"], 2),
+                     "bars": round(f["comp"], 2), "since_mid": f["since_mid"], "mid": f["mid"],
+                     "high12": f["hh12"], "low12": f["ll12"], "up": f["up"]})
+    by = {r["tf"]: r for r in rows}
+    low = [by.get(t, {}).get("state", "") for t in ("15m", "1h")]
+    up4 = by.get("4h", {}).get("up")
+    hi_up = [by.get(t, {}).get("up") for t in ("1d", "1w")]
+    if any(s in ("Rolling over at the top", "Stretched up") for s in low):
+        if up4 == 1:
+            read = ("Short side fade on the 15m/1h, but the 4h SAR is still under price: "
+                    "fading against a rising 4h lost in testing (PF 0.86). Skip or wait for the 4h.")
+        else:
+            read = ("Short side fade on the 15m/1h with the 4h already turned down: the aligned case. "
+                    "Rare in testing and not proven (PF 1.06 to 1.88 on under 70 trades). Small size.")
+    elif any(s in ("Turning up at the bottom", "Stretched down") for s in low):
+        read = "Bounce setup on the 15m/1h: buying these bounces was the worst result in testing. Skip."
+    elif all(by.get(t, {}).get("up") == 1 for t in ("15m", "1h", "4h")):
+        read = "15m, 1h and 4h all trending up: a runner. Tested about break even; longs only if the long gate is open."
+    elif all(by.get(t, {}).get("up") == -1 for t in ("15m", "1h", "4h")):
+        read = "15m, 1h and 4h all trending down: a dumper. Tested about break even with this rule set."
+    else:
+        read = "Timeframes disagree: no clean state."
+    if all(x == 1 for x in hi_up):
+        read += " Daily and weekly are both up (careful shorting into a higher timeframe uptrend)."
+    elif all(x == -1 for x in hi_up):
+        read += " Daily and weekly are both down."
+    return {"rows": rows, "read": read}
