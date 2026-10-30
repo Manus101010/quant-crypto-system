@@ -111,7 +111,8 @@ def _conn() -> sqlite3.Connection:
 _OUTCOME_COLS = [("outcome", "TEXT"), ("exit_price", "REAL"), ("exit_at", "TEXT"),
                  ("r_multiple", "REAL"), ("peak_price", "REAL"), ("trail_stop", "REAL"),
                  ("bars_held", "INTEGER"),
-                 ("taken", "INTEGER")]    # 1 = you actually took this trade (heat counts only these)
+                 ("taken", "INTEGER"),    # 1 = you actually took this trade (heat counts only these)
+                 ("tp", "REAL")]          # take profit while trailing (Distribution Short 2R); also in condition_json
 
 
 def init_db() -> None:
@@ -173,12 +174,20 @@ def active_symbols() -> list[str]:
     return [r[0] for r in rows]
 
 
-def mark_fired(trigger_id: int, fired_price: float, note: str | None = None) -> None:
+# Plan fields that may be rewritten at fire time (stop re-anchored to the fire
+# price, its take profit, the condition JSON carrying the basket-cap label).
+_FIRE_EXTRA = ("stop", "tp", "condition_json")
+
+
+def mark_fired(trigger_id: int, fired_price: float, note: str | None = None,
+               extra: dict | None = None) -> None:
+    extra = {k: v for k, v in (extra or {}).items() if k in _FIRE_EXTRA}
+    sets = "".join(f", {k}=?" for k in extra)
     with _conn() as con:
         con.execute(
             "UPDATE triggers SET status='fired', fired_at=?, fired_price=?, "
-            "note=COALESCE(?, note) WHERE id=?",
-            (datetime.utcnow().isoformat(), fired_price, note, trigger_id),
+            f"note=COALESCE(?, note){sets} WHERE id=?",
+            (datetime.utcnow().isoformat(), fired_price, note, *extra.values(), trigger_id),
         )
 
 

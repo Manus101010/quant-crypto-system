@@ -75,8 +75,8 @@ DEPLOY_THRESHOLDS = {
 # risks $12.50 and leverage is set per trade so the stop costs <= $12.50
 # (leverage = 25% / stop distance). Ten such trades = the whole sleeve, so the
 # open-risk cap is 10 x $12.50 = $125.
-SLEEVE_USD: float = float(_secret("SLEEVE_USD") or 500)
-POSITION_MARGIN_USD: float = float(_secret("POSITION_MARGIN_USD") or 50)
+SLEEVE_USD: float = float(_secret("SLEEVE_USD") or 300)   # 29 Oct 2026: $300 account
+POSITION_MARGIN_USD: float = float(_secret("POSITION_MARGIN_USD") or 150)   # trader choice 29 Oct: $150 x 2 trades; 25% = $37.50 max loss each
 MAX_LOSS_PCT_OF_MARGIN: float = float(_secret("MAX_LOSS_PCT_OF_MARGIN") or 25)
 MAX_LEVERAGE: int = int(_secret("MAX_LEVERAGE") or 20)
 RISK_PER_TRADE_USD: float = float(_secret("RISK_PER_TRADE_USD")
@@ -127,7 +127,32 @@ BYBIT_TRAIL = {
     "Donchian Breakout (55d)":   {"k_atr": 4.5,  "activate_r": 1.0},
     "Squeeze Breakout":          {"k_atr": 4.5,  "activate_r": 0.0},
     "Volume Breakout":           {"k_atr": 6.0,  "activate_r": 0.0},
+    # docs/edge_fix/shorts.md: Bybit style intrabar trail at 3.5 x the SIGNAL ATR
+    # (the stored plan ATR), immediate. Before this entry paper tracking trailed
+    # at the live stop distance, which equals 3.5 ATR only when entry = signal close.
+    "Distribution Short":        {"k_atr": 3.5,  "activate_r": 0.0},
 }
+# Setups retired by research: never armed, never in the validated set, still shown
+# by the scanner for display. docs/edge_fix/shorts.md: Breakdown Short (55d low)
+# produced 10 live-rule trades in 58 months (untestable) and the full rule has no
+# edge (n 920, PF 1.04, +0.014R).
+RETIRED_SETUPS = {"Breakdown Short (55d low)"}
+# Setups validated by a separate research harness (docs/edge_fix/shorts.md: 1h
+# Bybit style trail, 2R take profit, 50% stop cap, funding, survivor free). The
+# weekly decay watch (revalidate.py) re-tests with the old daily per-bar harness,
+# which models none of that, so for these a failing run is REPORTED on Telegram
+# but never auto-deactivates; switch them off by hand (Validation page).
+DECAY_WATCH_MANUAL_ONLY = {"Distribution Short"}
+# Entry drift bounds for the "enter now" research shorts (skills/new_setups.py),
+# measured from the SIGNAL close: no entry after price fell more than DOWN % (the
+# move already happened) or bounced more than UP % (docs/edge_fix/CHANGES.md).
+ENTRY_DRIFT_DOWN_MAX_PCT = 3.0
+ENTRY_DRIFT_UP_MAX_PCT = 3.0
+# Basket risk guard (a risk rule, not an edge): at most this many NEW signals per
+# Sydney day per direction are alerted as tradeable, counting all setups. Extra
+# fires are still tracked as paper, labelled "basket cap" (forensics.md: 35 longs
+# fired in 48 hours and moved as one bet; four DS fired on one night).
+FIRE_CAP_PER_DIR_PER_DAY = 3
 ENTRY_MAX_SLIP_PCT = 0.3       # don't chase more than this past the signal price
 # Round-trip fees (entry + stop, taker) as % of the position, added to the stop
 # distance with ENTRY_MAX_SLIP_PCT when choosing leverage, so the WORST allowed
@@ -135,12 +160,16 @@ ENTRY_MAX_SLIP_PCT = 0.3       # don't chase more than this past the signal pric
 SIZING_FEE_PCT = 0.15
 CANDLE_VENUE = "bybit"
 # Max 5 armed per scan (was 15): same-direction alts move together, so a big batch is one bet.
-# At most this many positions open at once (paper or taken, current tracking
-# period); research-backed limit. Same-direction alts move together, so more at
+# At most this many positions open at once. Counts only trades you TOOK: paper
+# signals you skipped no longer fill the book (fix (f), trade_flow.md). Same-direction alts move together, so more at
 # once is one bigger bet. A scan arms at most (MAX_OPEN_POSITIONS - open) setups.
 MAX_OPEN_POSITIONS = 10
+# Live candles are MEXC perps (Bybit blocks the US host). MEXC volume is a median
+# 13.4x below the Binance volume all research floors were measured on, so floors
+# are divided by this factor live (docs/edge_fix/trade_flow.md, fix (e)).
+LIVE_VOLUME_FACTOR = 13.4
 AUTO_SCAN_PARAMS = {"source": "bybit_perps", "top_n": 5, "expiry_hours": 72,
-                    "min_vol_usd_m": 0.5, "max_stop_pct": 25.0}
+                    "min_vol_usd_m": 0.5 / LIVE_VOLUME_FACTOR, "max_stop_pct": 25.0}
 # Per-setup override of max_stop_pct. research/dist_wide_stops.py (2020-26):
 # Distribution Short with a 25-50% stop did BETTER (PF 2.71, n 217) than with a
 # tight one, and the 25% cap dropped ~16 of 19 signals on Oct 11-24. A wide stop

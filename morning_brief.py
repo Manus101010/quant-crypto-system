@@ -198,6 +198,15 @@ def _week_ahead() -> str:
         return ""
 
 
+def _movers() -> str:
+    try:
+        from desk import movers
+        return movers.text(movers.board())
+    except Exception as exc:                       # noqa: BLE001
+        log.debug("movers failed: %s", exc)
+        return ""
+
+
 def build_brief() -> str:
     tdb.init_db()
     today = datetime.datetime.utcnow().strftime("%a %d %b %Y")
@@ -209,6 +218,9 @@ def build_brief() -> str:
     wa = _week_ahead()
     if wa:
         parts.append(wa)
+    mv = _movers()
+    if mv:
+        parts.append(mv)
     rec = _track_record()
     if rec:
         parts.append(rec)
@@ -230,6 +242,8 @@ COMMANDS_CHEATSHEET = (
     "<code>/guard long SOL 182.4 176.9 7x 50</code> check a plain trade (entry stop lev margin)\n"
     "<code>/guard short DOODUSDT grid 0.0016 0.00221 200 3x 263.86 sl 0.002221</code> check a grid\n"
     "<code>/addbot BOTID DOOD</code> watch a grid bot · <code>/bots</code> list\n"
+    "<code>/movers</code> top gainers and losers, sorted into states with scores\n"
+    "<code>/bot SOL 50</code> grid bot plan for any coin: mode, range, leverage, stop\n"
     "<code>/desk SOL long 182.4 176.9</code> AI desk review · <code>/deskstats</code> is it helping\n"
     "<code>/help</code> full list"
 )

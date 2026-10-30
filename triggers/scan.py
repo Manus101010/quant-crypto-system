@@ -108,17 +108,43 @@ def _armed_plan(r: dict) -> dict:
     trade = r.get("trade") or {}
     direction = "long" if trade.get("action") == "BUY" else "short"
     ref = r.get("price")
-    entry = _num(trade.get("entry")) or ref
-    stop, target = _num(trade.get("stop")), _num(trade.get("target"))
     plan = trade.get("plan")
+    # A plan carries its numeric entry; text is only parsed for generic setups.
+    entry = (plan or {}).get("entry") or _num(trade.get("entry")) or ref
+    stop, target = _num(trade.get("stop")), _num(trade.get("target"))
     if plan and entry:
         # skills/new_setups.py signals carry their exact researched plan.
+        from skills.new_setups import restop
+        from config import ENTRY_DRIFT_DOWN_MAX_PCT, ENTRY_DRIFT_UP_MAX_PCT
+        short = direction == "short"
         stop, target = plan["stop"], plan.get("target")
+        # ATR-multiple stops (Distribution Short) are re-anchored to this entry.
+        rs, tp = restop(entry, plan.get("atr"), plan.get("trail_atr"), plan.get("tp_r"), short)
+        if rs is not None:
+            stop = rs
+        else:
+            tp = None
         trailing = target is None
-        rr = None if trailing else abs(entry - target) / abs(stop - entry)
+        rr = (None if trailing else abs(entry - target) / abs(stop - entry))
+        if tp is not None:
+            rr = float(plan.get("tp_r"))
         stop_pct = abs(entry - stop) / entry * 100
+        sc = plan.get("signal_close")
+        drift = (entry / sc - 1) * 100 if sc else None
+        sg = -1 if short else 1          # adverse drift = against the trade's entry side
+        blocked = None
+        if drift is not None:
+            if sg * drift > ENTRY_DRIFT_DOWN_MAX_PCT:
+                blocked = "moved"
+            elif rs is not None and -sg * drift > ENTRY_DRIFT_UP_MAX_PCT:
+                # upper bound only for re-stopped (ATR multiple) plans, i.e.
+                # Distribution Short; DBF keeps its researched level stop and no bound
+                blocked = "bounced"
         return {"direction": direction, "entry": entry, "stop": stop, "target": target,
-                "trailing": trailing, "stop_pct": stop_pct, "rr": rr}
+                "trailing": trailing, "stop_pct": stop_pct, "rr": rr, "tp": tp,
+                "tp_r": plan.get("tp_r") if tp is not None else None,
+                "atr": plan.get("atr"), "trail_atr": plan.get("trail_atr"),
+                "signal_close": sc, "drift_pct": drift, "drift_blocked": blocked}
     mgmt = _management_params(r.get("setup_label"))
     trailing = bool(mgmt and mgmt.get("trailing"))
     atr = r.get("atr_14")
@@ -218,6 +244,14 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     `max_per_setup`: cap how many of any one setup can be armed, so the armed set
     is diverse (None/0 = no cap).
     """
+    # Live volume scaling: candles (and so volume) come from MEXC on the US host,
+    # which reads a median 13.4x below the Binance volume the floors were set on.
+    try:
+        from skills import new_setups as _ns
+        from config import LIVE_VOLUME_FACTOR
+        _ns.QV_SOURCE_FACTOR = float(LIVE_VOLUME_FACTOR) if source in ("bybit_perps", "mexc_perps", "mexc") else 1.0
+    except Exception:                                  # noqa: BLE001
+        pass
     if source == "bybit_perps":
         # Every Bybit crypto USDT perpetual — the trading venue (perp candles).
         from utils.exchange import list_perp_symbols
@@ -283,7 +317,8 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         # Subtract setups auto-deactivated by the revalidation job (edge decayed).
         # They stop arming NEW triggers; existing armed triggers are left alone.
         deactivated = tdb.get_deactivated()
-        valid = valid - deactivated
+        from config import RETIRED_SETUPS
+        valid = valid - deactivated - set(RETIRED_SETUPS)   # retired: never armed
         kept = [r for r in rows if r.get("setup_label") in valid]
         watch_only = [r for r in rows if r.get("setup_label") not in valid]
         gated_out = sorted({r.get("setup_label") for r in rows
@@ -343,6 +378,10 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
             r["_status"] = "btc_downtrend"   # BTC below 200d — no new longs
         elif not plan["stop_pct"] or plan["stop_pct"] < 0.3:
             r["_status"] = "bad_plan"      # zero/too-tight risk → would invalidate instantly
+        elif plan.get("drift_blocked"):
+            # Live price already more than ENTRY_DRIFT_*_MAX_PCT from the signal
+            # close: the research entry is gone (bounced = setup likely failed).
+            r["_status"] = "drifted"
         elif plan["stop"] is not None and plan["direction"] == "long" and plan["stop"] <= 0:
             r["_status"] = "wide_stop"
             wide_stop_excluded.append(f"{r['ticker']} (stop ≤ 0)")
@@ -360,7 +399,12 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     # Concurrent cap: open trades (paper or taken, this tracking period: the same
     # set that blocks coins above) + new arms may not exceed MAX_OPEN_POSITIONS.
     from config import MAX_OPEN_POSITIONS
-    n_open = len(open_all)
+    # Paper rows over the per-day basket cap were never tradeable alerts: they
+    # still block their coin (held, above) but do not use a concurrent slot.
+    from triggers.outcomes import is_basket_capped
+    # Only trades you actually took use a slot: skipped paper signals (DS can be
+    # held 60 days) were filling the book and silencing new shorts (trade_flow.md (f)).
+    n_open = sum(1 for t in open_all if t.get("taken") and not is_basket_capped(t))
     slots = max(0, MAX_OPEN_POSITIONS - n_open)
     n_arm = min(top_n, slots)
     # Diversify: cap any single setup so the armed set is a spread across types.
@@ -386,12 +430,14 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
         _bt = (load_validation() or {}).get("stats", {})
     except Exception:                              # noqa: BLE001
         _bt = {}
+    from config import RETIRED_SETUPS as _retired
     watch = [{"ticker": r["ticker"], "setup_label": r.get("setup_label"),
               "direction": r.get("direction"), "price": r.get("price"),
               "setup_desc": r.get("setup_desc"), "category": r.get("setup_category"),
               "bt_pf": (_bt.get(r.get("setup_label")) or {}).get("profit_factor"),
               "bt_n": (_bt.get(r.get("setup_label")) or {}).get("n"),
-              "off": r.get("setup_label") in deactivated}
+              "off": r.get("setup_label") in deactivated,
+              "retired": r.get("setup_label") in _retired}
              for r in sorted(watch_only, key=lambda r: -(r.get("conviction") or 0))]
     common = {"candidates": candidates, "edge_gated": valid is not None, "watch_only": watch,
               "gated_out_setups": gated_out, "actionable": len(rows),
@@ -429,9 +475,20 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
 
         if trade.get("plan"):
             # skills/new_setups.py signal: enter on the next poll (as researched).
+            from config import (ENTRY_DRIFT_DOWN_MAX_PCT, ENTRY_DRIFT_UP_MAX_PCT,
+                                MAX_STOP_PCT_BY_SETUP as _MSP)
             ctype, cval = "enter_now_short", entry
             cond = {"kind": "enter_now_short", "entry": entry, "stop": stop,
-                    "target": target, "max_drift": 0.03}
+                    "target": target, "max_drift": ENTRY_DRIFT_DOWN_MAX_PCT / 100,
+                    # upper bound only where the stop is re-anchored (DS), see _armed_plan
+                    "max_drift_up": (ENTRY_DRIFT_UP_MAX_PCT / 100
+                                     if plan.get("atr") and plan.get("trail_atr") else None),
+                    "signal_close": plan.get("signal_close"),
+                    # restop at fire: stop = fire price + trail_atr x atr, TP at tp_r
+                    "atr": plan.get("atr"), "trail_atr": plan.get("trail_atr"),
+                    "tp_r": plan.get("tp_r"), "tp": plan.get("tp"),
+                    "max_stop_pct": max(max_stop_pct or 0,
+                                        _MSP.get(r.get("setup_label"), 0)) or None}
             desc = f"enter now near {entry:.4g} (invalidate>stop)"
         elif cat == "mean_reversion" and direction == "long":
             # Multi-factor bounce confirmation (evaluated live by the monitor):
@@ -458,6 +515,8 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
             ctype, cval = "breakdown_short", level
             cond = {"kind": "breakdown", "level": level, "stop": stop, "rsi_min": 20}
             desc = f"close<{level:.4g} breakdown + RSI14>20 (invalidate>stop)"
+        if r.get("fwd_flags"):
+            cond["fwd"] = r["fwd_flags"]     # forward-test flags: logged, never gating
 
         tid = tdb.add_trigger(
             symbol=r["ticker"], condition_type=ctype, condition_value=float(cval),

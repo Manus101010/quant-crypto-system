@@ -162,11 +162,23 @@ def build(symbol: str, direction: str, *, entry: float | None = None, stop: floa
         from guard import preflight as pf
         if not (entry and stop):
             return None
-        sz = _sizing(direction, entry, stop)
+        from config import POSITION_MARGIN_USD
+        from triggers.outcomes import planned_position
+        pp = planned_position(entry, stop)       # exactly what the alert sizes
+        if not pp:
+            return None
+        sz = {"margin": round(pp["margin"], 2), "leverage": pp["leverage"]}
+        plain = {"id": "plain", **sz, "entry": entry, "stop": stop, "target": target,
+                 "risk_usd": round(pp["risk_usd"], 2)}
+        if pp["leverage"] == 1 and pp["margin"] < POSITION_MARGIN_USD:
+            # Wide stop: the alert deliberately sizes down at 1x so a stop out
+            # still loses at most 1R. That is within the rules, not a breach.
+            return {"verdict": "ACCEPT", "failures": [],
+                    "metrics": {"sized_down_wide_stop": True, **{k: round(v, 4) for k, v in pp.items()}},
+                    "plain": plain}
         v = pf.check_plain(direction, entry, stop, sz["leverage"], sz["margin"])
         return {"verdict": v.verdict, "failures": [f["rule"] for f in v.failures],
-                "metrics": v.metrics, "plain": {"id": "plain", **sz, "entry": entry, "stop": stop,
-                                                "target": target}}
+                "metrics": v.metrics, "plain": plain}
     g = _safe(pack, "guard", _guard)
     pack["guard"] = {"verdict": g["verdict"], "failures": g["failures"], "metrics": g["metrics"]} if g else None
     options: dict = {"plain": g["plain"]} if g else {}

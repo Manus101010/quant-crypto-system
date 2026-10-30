@@ -2,6 +2,24 @@
 
 Newest first. Each line says what was decided, why, and what would change it.
 
+## 29 Oct 2026
+
+| Area | Decision | Why | Revisit when |
+| --- | --- | --- | --- |
+| Live losses | The minus 4.06R since 8 Oct was a basket of Momentum Runner longs (10 to 12 Oct), not the shorts | Forensics replayed the live ledger (38 of 40 fires reproduced) | n/a |
+| Distribution Short | KEEP with a 2R take profit, 3.5 ATR trail from the signal ATR, stop recomputed at fire, no entry after a bounce above 3% | Survivor free study: n 778, PF 2.01; 2R TP out of sample PF 2.36, +0.427R, both halves positive. 2026 loss was one Jul to Sep alt rally episode | Weekly decay warning arrives (manual decision only, never auto deactivated) |
+| Downtrend Bounce Fade | KEEP as is | Out of sample PF 1.32, both halves positive; thin | Out of sample PF falls below 1 |
+| Breakdown Short (55d low) | RETIRE (`RETIRED_SETUPS`) | 10 live eligible trades in 58 months; full rule PF 1.04 | n/a |
+| Basket cap | At most 3 new fired signals per direction per Sydney day; extras are paper only | 35 correlated longs in 48h caused the loss | n/a |
+| Validation record | Distribution Short entry recomputed and `locked`, so Run Validation can't overwrite it | Old entry was hand edited and inconsistent | New survivor free study |
+| New intraday edges | None adopted | 7 families tested on 486 perps, all failed out of sample; costs eat 0.07 to 0.12R per intraday trade | n/a |
+| Watch only | New listing ORB72 short, liquidity filter, BTC below 50d gate, OI 3d rising: logged, not gated | Not significant after correction | Enough forward data |
+| Signal silence | Liquidity floors scaled for MEXC volume (x13.4) and the open cap counts only taken trades | Funnel: live floor used MEXC volume (13.4x below the Binance volume the research used) and skipped paper trades filled the 10 slot cap. Expected 4 to 6 tested short alerts a week instead of 1 to 2 | Bybit reachable host (use Bybit turnover) |
+| Your own setups | Rollover short, capitulation long, trend pullback with the +3% / 5% trail: rejected as live setups | 1,360 variants on 496 coins: none pass out of sample; random entries scored as well | Trade history review shows a personal edge |
+| Sizing | Trader choice: $150 margin per trade, max 2 at once, 25% max loss ($37.50) each, $300 sleeve: $75 open risk and daily caps (two stop outs end the day). Claude recommended $80 / $20 | Trader wants bigger trades; $20 keeps a half the account losing streak at about 8.6% odds over 40 trades vs 65.6% at $37.50 | Account passes $500 (step to $25) |
+| Bot venue | Pionex for grid bots if bots are the main instrument; Bybit stays for scanner trades | Pionex grid tools (adjust range, add margin, stop on a running grid); scanner coverage and read only API are on Bybit | n/a |
+| Desk sizing | Desk fact pack sizes exactly like the alert (wide stops sized down at 1x count as within rules) | Desk was rejecting trades the alert allowed | n/a |
+
 ## 28 Oct 2026
 
 | Area | Decision | Why | Revisit when |
@@ -28,3 +46,8 @@ Newest first. Each line says what was decided, why, and what would change it.
 | Data | Free first: OKX, MEXC, Hyperliquid, DEX Screener, Coinalyze (free key). Skip CoinGlass Hobbyist (4h only) and Whale Alert 14.95 (no API) | Budget 50 USD a month; free sources cover the same ground |
 | Features | Positioning snapshot logged on every alert; nothing used as a filter until it passes on live data. Two OI rules pre registered | 9 filters tested, none survived a multiple testing correction |
 | Runner | Read only watcher must run from a non US host: Supabase Edge Function in Sydney first, Oracle Always Free Sydney VM second | Bybit blocks US IPs including GitHub runners; Singapore is restricted |
+
+## 30 Oct 2026: daily movers board
+* He trades the day's top gainers and losers by hand. Built `desk/movers.py` to do that sorting: top 5 each side, a state (rolling over, still running, stretched, still dumping, turning up, chop), a 0 to 100 fit score and the backtest verdict. Available as `/movers`, in the morning brief, and on the web app's Movers page.
+* Tested his states (docs/edge_fix/movers.md): the fade to the midline and the bounce long both lose. Shorting losers that keep dumping is the best (PF 1.35 in 2023-25 and 2025-26) but weak statistically, so it stays paper only, gated on BTC below its 50 day.
+* The old web scanner's tiles (Momentum Runner, Overextended, Z-Score Extreme) were daily-bar labels that were never backtested; their volume of names came from labelling, not from edge.

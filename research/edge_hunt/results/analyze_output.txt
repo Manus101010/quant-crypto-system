@@ -1,0 +1,292 @@
+variants tried: 81
+
+== IN SAMPLE (2023-02 .. 2025-06) ==
+                                              n    win     pf    exp  t_day        h1        h2   per_wk
+variant                                                                                                 
+C1 fund<=-0.10% confirm | trail_96h        2491  0.425  0.843 -0.077 -2.417   -96.672   -96.010   19.860
+C1 fund<=-0.10% confirm | T2R_48h          2544  0.372  0.840 -0.084 -2.515   -77.405  -135.612   20.282
+C1 fund<=-0.10% at print | T2R_48h         2959  0.373  0.850 -0.081 -2.544  -118.462  -120.033   23.591
+C1 fund<=-0.10% at print | trail_96h       2880  0.395  0.823 -0.091 -2.685   -82.942  -179.664   22.961
+C1 fund<=-0.05% confirm | T2R_48h          5158  0.379  0.837 -0.089 -2.801  -171.539  -287.706   41.030
+C1 fund<=-0.05% confirm | trail_96h        5049  0.426  0.816 -0.095 -3.099  -189.341  -290.285   40.162
+C1 fund<=-0.05% at print | T2R_48h         6110  0.369  0.798 -0.118 -3.743  -263.445  -454.924   48.658
+C1 fund<=-0.10% confirm | T1R_24h          3015  0.444  0.782 -0.090 -3.897  -107.417  -163.389   24.038
+C1 fund<=-0.05% at print | trail_96h       5884  0.395  0.762 -0.127 -4.084  -217.621  -532.282   46.858
+C1 fund<=-0.10% at print | T1R_24h         3860  0.449  0.773 -0.097 -4.447  -171.800  -202.441   30.774
+C1 fund<=-0.05% confirm | T1R_24h          6177  0.457  0.769 -0.099 -4.590  -260.021  -351.057   49.135
+C1 fund<=-0.05% at print | T1R_24h         7970  0.454  0.738 -0.118 -5.502  -386.831  -553.969   63.470
+C2 prem8>=0.05% | trail_96h                4351  0.471  0.939 -0.030 -0.489  -396.282   266.575   35.374
+C2 prem8>=0.10% | trail_96h                1167  0.452  0.898 -0.053 -0.745  -115.549    53.878    9.690
+C2 prem8>=0.05% | T2R_48h                  4605  0.417  0.906 -0.049 -0.849  -259.395    31.467   37.439
+C2 prem8>=0.10% | T2R_48h                  1208  0.411  0.869 -0.070 -1.115  -120.705    36.183   10.031
+C2 prem8>=0.05% | T1R_24h                  5968  0.480  0.847 -0.061 -1.719  -270.446   -90.663   48.520
+C2 prem8>=0.10% | T1R_24h                  1422  0.460  0.777 -0.094 -2.349  -117.527   -15.580   11.808
+C3 6sigma green | T1R_24h                  1633  0.525  0.864 -0.049 -0.410   -27.205   -52.182   13.049
+C3 6sigma green | T2R_48h                  1632  0.415  0.772 -0.110 -0.747  -209.237    30.173   13.041
+C3 6sigma green | trail_96h                1633  0.448  0.775 -0.108 -0.761  -140.557   -35.652   13.049
+C3 4sigma +OI flush green | T1R_24h         435  0.492  0.762 -0.085 -0.967   -20.952   -15.935    3.528
+C3 4sigma green | T1R_24h                  2679  0.495  0.764 -0.096 -1.124    -7.705  -249.044   21.408
+C3 4sigma +OI flush green | T2R_48h         435  0.402  0.720 -0.134 -1.130   -48.877    -9.325    3.528
+C3 4sigma green | T2R_48h                  2676  0.408  0.766 -0.122 -1.143  -167.160  -159.107   21.384
+C3 4sigma green | trail_96h                2677  0.430  0.761 -0.122 -1.180  -123.717  -202.056   21.392
+C3 4sigma +OI flush at close | T1R_24h      394  0.495  0.711 -0.114 -1.182   -14.039   -31.035    3.196
+C3 4sigma +OI flush at close | T2R_48h      394  0.393  0.692 -0.169 -1.226   -32.091   -34.590    3.196
+C3 4sigma +OI flush green | trail_96h       435  0.444  0.701 -0.150 -1.240   -46.308   -18.801    3.528
+C3 6sigma at close | T2R_48h               1494  0.371  0.657 -0.199 -1.260   -86.330  -210.363   11.938
+C3 6sigma at close | T1R_24h               1506  0.471  0.641 -0.158 -1.386     5.224  -243.451   12.034
+C3 4sigma +OI flush at close | trail_96h    392  0.408  0.634 -0.205 -1.401   -34.991   -45.214    3.180
+C3 6sigma at close | trail_96h             1485  0.382  0.615 -0.222 -1.502   -64.070  -264.952   11.866
+C3 4sigma at close | trail_96h             2395  0.366  0.635 -0.218 -1.964   -31.070  -490.704   19.138
+C3 4sigma at close | T2R_48h               2403  0.361  0.632 -0.228 -1.986   -12.855  -533.964   19.202
+C3 4sigma at close | T1R_24h               2429  0.457  0.587 -0.200 -2.300    45.514  -531.910   19.410
+C4 rally>=10% OI<=-6% | T2R_48h             342  0.368  0.782 -0.145 -0.804   -85.548    36.028    2.871
+C4 rally>=10% OI<=-3% | T2R_48h             533  0.368  0.787 -0.141 -0.913  -111.881    36.492    4.468
+C4 rally>=10% OI<=-6% | T1R_24h             348  0.477  0.738 -0.137 -0.939   -70.465    22.834    2.921
+C4 rally>=10% OI<=-3% | trail_96h           541  0.421  0.721 -0.159 -1.107  -113.075    26.807    4.535
+C4 rally>=10% OI<=-3% | T1R_24h             542  0.480  0.740 -0.136 -1.134   -96.539    23.049    4.544
+C4 rally>=10% OI<=-6% | trail_96h           346  0.425  0.680 -0.183 -1.189   -81.179    18.018    2.904
+C4 rally>=6% OI<=-6% | T2R_48h              695  0.351  0.764 -0.164 -1.270  -128.243    14.331    5.785
+C4 rally>=6% OI<=-3% | T2R_48h             1320  0.356  0.795 -0.143 -1.409  -221.001    32.883   10.820
+C4 rally>=6% OI<=-3% | trail_96h           1341  0.424  0.746 -0.146 -1.552  -192.463    -3.896   10.992
+C4 rally>=6% OI<=-6% | T1R_24h              714  0.469  0.693 -0.166 -1.709  -116.526    -1.851    5.943
+C4 rally>=6% OI<=-6% | trail_96h            704  0.419  0.653 -0.202 -1.844  -130.529   -11.684    5.860
+C4 rally>=6% OI<=-3% | T1R_24h             1357  0.481  0.728 -0.144 -1.958  -193.340    -1.749   11.123
+C5 soup55 long | T2R_48h                  16531  0.380  0.760 -0.152 -2.577 -1614.171  -897.001  131.497
+C5 soup55 long | trail_96h                16706  0.423  0.737 -0.150 -2.732 -1618.976  -882.366  132.889
+C5 soup55 short | T2R_48h                 16646  0.379  0.815 -0.121 -3.408  -999.203 -1010.626  132.411
+C5 soup55 long | T1R_24h                  17323  0.476  0.697 -0.154 -3.555 -1490.550 -1171.380  137.797
+C5 soup55 short | trail_96h               17033  0.423  0.736 -0.147 -4.061 -1390.421 -1113.879  135.490
+C5 soup20 short | T2R_48h                 30669  0.372  0.802 -0.133 -4.138 -2124.983 -1949.214  243.958
+C5 soup20 long | T2R_48h                  32022  0.356  0.718 -0.191 -4.369 -2854.072 -3265.142  254.720
+C5 soup20 short | trail_96h               31282  0.421  0.736 -0.149 -4.731 -2678.002 -1997.733  248.834
+C5 soup20 long | trail_96h                32455  0.399  0.682 -0.190 -4.765 -2868.247 -3305.336  258.165
+C5 soup55 short | T1R_24h                 17573  0.499  0.766 -0.116 -4.859  -960.578 -1080.490  139.785
+C5 soup20 long | T1R_24h                  33682  0.472  0.676 -0.171 -5.392 -2449.830 -3323.153  267.925
+C5 soup20 short | T1R_24h                 32299  0.491  0.738 -0.133 -6.003 -1839.792 -2465.103  256.924
+C6 absorb 0.45/0.54 short | T2R_48h         333  0.399  0.892 -0.065 -0.846    -6.508   -15.091    2.673
+C6 absorb 0.45/0.54 short | trail_96h       334  0.452  0.861 -0.078 -1.001    -7.167   -18.868    2.681
+C6 absorb 0.46/0.53 short | T2R_48h         627  0.388  0.857 -0.087 -1.424   -47.340    -7.118    5.027
+C6 absorb 0.46/0.53 short | trail_96h       629  0.436  0.759 -0.139 -2.379   -54.660   -32.605    5.044
+C6 absorb 0.45/0.54 short | T1R_24h         340  0.471  0.720 -0.138 -2.514   -17.547   -29.215    2.729
+C6 absorb 0.46/0.53 long | T2R_48h         1733  0.373  0.784 -0.138 -2.560  -189.054   -49.867   13.801
+C6 absorb 0.46/0.53 long | trail_96h       1731  0.417  0.729 -0.156 -2.906  -229.206   -40.187   13.785
+C6 absorb 0.45/0.54 long | trail_96h        819  0.398  0.664 -0.201 -3.099  -130.817   -33.759    6.522
+C6 absorb 0.45/0.54 long | T2R_48h          820  0.343  0.688 -0.208 -3.221  -118.529   -52.116    6.530
+C6 absorb 0.46/0.53 long | T1R_24h         1797  0.465  0.727 -0.135 -3.259  -186.727   -55.946   14.311
+C6 absorb 0.46/0.53 short | T1R_24h         636  0.461  0.714 -0.141 -3.421   -46.587   -42.882    5.100
+C6 absorb 0.45/0.54 long | T1R_24h          839  0.433  0.628 -0.196 -4.010  -107.010   -57.773    6.681
+C7 newlist time3d | hold_7d                 175  0.526  1.549  0.212  1.570    18.062    18.979    1.400
+C7 newlist time3d | T2R_14d                 175  0.537  1.264  0.113  1.295     3.456    16.297    1.400
+C7 newlist orb72 | T2R_14d                  132  0.561  1.304  0.116  1.253    -0.845    16.200    1.062
+C7 newlist time3d | trail_14d               175  0.560  1.287  0.108  1.198     9.077     9.840    1.400
+C7 newlist orb72 | trail_14d                132  0.598  1.222  0.079  1.006    -0.666    11.091    1.062
+C7 newlist orb24 | T2R_14d                  138  0.551  1.173  0.066  0.759     4.022     5.099    1.110
+C7 newlist orb24 | trail_14d                138  0.580  1.151  0.056  0.712     5.532     2.149    1.110
+C7 newlist orb72 | hold_7d                  132  0.538  1.106  0.035  0.472    -0.050     4.676    1.062
+C7 newlist orb24 | hold_7d                  138  0.543  1.114  0.035  0.462     6.399    -1.606    1.110
+
+Bonferroni one sided 5% over 81 IS variants needs t >= 3.23
+OOS: 7 selected tests, Bonferroni one sided 5% needs t >= 2.45
+
+C1 [IS FAIL] C1 fund<=-0.10% confirm | trail_96h
+   IS : n  2491 win 42% PF 0.84 exp -0.077R tot -192.7R t -2.42 halves -96.7/-96.0 wk 19.9 fund +0.050 lev 3.8 dd 217.0
+   OOS: n  5082 win 41% PF 0.80 exp -0.104R tot -528.6R t -4.30 halves -320.2/-208.4 wk 78.2 fund +0.079 lev 4.3 dd 574.4 | gate False | bonf False
+   OOS gross -0.107R, cost 0.076R, funding +0.079R per trade; median stop 5.8%
+   OOS PF at 0.20% cost 0.86 | BTC bear PF 0.7818267459642291 (n 3338) | Bybit listed PF 0.80 | 2026 PF 0.830079554195271 (n 2754)
+C2 [IS FAIL] C2 prem8>=0.05% | trail_96h
+   IS : n  4351 win 47% PF 0.94 exp -0.030R tot -129.7R t -0.49 halves -396.3/+266.6 wk 35.4 fund +0.013 lev 5.0 dd 476.2
+   OOS: n  2803 win 49% PF 0.93 exp -0.031R tot -87.6R t -1.17 halves -13.3/-74.4 wk 40.7 fund +0.013 lev 3.6 dd 121.1 | gate False | bonf False
+   OOS gross +0.023R, cost 0.068R, funding +0.013R per trade; median stop 6.9%
+   OOS PF at 0.20% cost 1.00 | BTC bear PF 0.8730491523209704 (n 1454) | Bybit listed PF 0.94 | 2026 PF 0.941492114556668 (n 1803)
+C3 [IS FAIL] C3 6sigma green | T1R_24h
+   IS : n  1633 win 53% PF 0.86 exp -0.049R tot -79.4R t -0.41 halves -27.2/-52.2 wk 13.0 fund -0.001 lev 3.4 dd 187.2
+   OOS: n   562 win 46% PF 0.72 exp -0.123R tot -69.3R t -1.20 halves -80.0/+10.7 wk 8.2 fund +0.005 lev 5.4 dd 102.6 | gate False | bonf False
+   OOS gross -0.031R, cost 0.097R, funding +0.005R per trade; median stop 4.6%
+   OOS PF at 0.20% cost 0.81 | BTC bear PF 0.5397230409879825 (n 254) | Bybit listed PF 0.72 | 2026 PF 1.1125890139457015 (n 369)
+C4 [IS FAIL] C4 rally>=10% OI<=-6% | T2R_48h
+   IS : n   342 win 37% PF 0.78 exp -0.145R tot -49.5R t -0.80 halves -85.5/+36.0 wk 2.9 fund -0.001 lev 5.7 dd 89.2
+   OOS: n   165 win 39% PF 0.62 exp -0.246R tot -40.7R t -1.50 halves -26.9/-13.8 wk 2.8 fund +0.001 lev 6.2 dd 41.8 | gate False | bonf False
+   OOS gross -0.150R, cost 0.097R, funding +0.001R per trade; median stop 4.0%
+   OOS PF at 0.20% cost 0.67 | BTC bear PF 0.6024931068025006 (n 132) | Bybit listed PF 0.62 | 2026 PF 0.965247624309907 (n 62)
+C5 [IS FAIL] C5 soup55 long | T2R_48h
+   IS : n 16531 win 38% PF 0.76 exp -0.152R tot -2511.2R t -2.58 halves -1614.2/-897.0 wk 131.5 fund -0.002 lev 6.8 dd 2818.1
+   OOS: n 11508 win 36% PF 0.74 exp -0.173R tot -1987.8R t -3.24 halves -1236.7/-751.1 wk 167.1 fund +0.007 lev 7.6 dd 2044.4 | gate False | bonf False
+   OOS gross -0.059R, cost 0.121R, funding +0.007R per trade; median stop 3.3%
+   OOS PF at 0.20% cost 0.81 | BTC bear PF 0.7786946100266293 (n 7189) | Bybit listed PF 0.74 | 2026 PF 0.8128309292625217 (n 5981)
+C6 [IS FAIL] C6 absorb 0.45/0.54 short | T2R_48h
+   IS : n   333 win 40% PF 0.89 exp -0.065R tot -21.6R t -0.85 halves -6.5/-15.1 wk 2.7 fund -0.004 lev 7.1 dd 45.6
+   OOS: n   340 win 42% PF 0.96 exp -0.021R tot -7.3R t -0.31 halves -2.2/-5.0 wk 5.0 fund -0.003 lev 5.9 dd 32.2 | gate False | bonf False
+   OOS gross +0.080R, cost 0.098R, funding -0.003R per trade; median stop 4.2%
+   OOS PF at 0.20% cost 1.04 | BTC bear PF 1.0351538896811578 (n 173) | Bybit listed PF 0.96 | 2026 PF 0.9494386877467214 (n 192)
+C7 [IS ok] C7 newlist time3d | hold_7d
+   IS : n   175 win 53% PF 1.55 exp +0.212R tot +37.0R t +1.57 halves +18.1/+19.0 wk 1.4 fund -0.006 lev 1.1 dd 7.6
+   OOS: n    70 win 43% PF 0.85 exp -0.085R tot -5.9R t -0.53 halves -5.3/-0.7 wk 1.2 fund -0.022 lev 1.0 dd 17.1 | gate False | bonf False
+   OOS gross -0.042R, cost 0.021R, funding -0.022R per trade; median stop 26.2%
+   OOS PF at 0.20% cost 0.86 | BTC bear PF 0.8082298958094918 (n 40) | Bybit listed PF 0.85 | 2026 PF 0.9693045337332222 (n 26)
+
+== clustering, per day cap 3 per direction, BTC 4h trend alignment (OOS) ==
+C1 IS C1 fund<=-0.10% confirm | trail_96h: days 646 per day med 2 p90 9 max 24 | 72% of trades on days with > 3
+   cap3        : n  1391 win 40% PF 0.76 exp -0.123R tot -171.7R t -3.59 halves -56.1/-115.6 wk 11.1 fund +0.050 lev 3.6 dd 182.8
+   BTC aligned : n  1050 win 43% PF 0.92 exp -0.039R tot -40.6R t -0.81 halves -9.1/-31.5 wk 8.4 fund +0.054 lev 3.4 dd 88.6
+   cap3+aligned: n   630 win 40% PF 0.86 exp -0.069R tot -43.3R t -1.25 halves -6.1/-37.2 wk 5.0 fund +0.051 lev 3.1 dd 69.6 | gate False
+C1 OOS C1 fund<=-0.10% confirm | trail_96h: days 456 per day med 9 p90 21 max 39 | 98% of trades on days with > 3
+   cap3        : n  1356 win 41% PF 0.79 exp -0.109R tot -148.4R t -3.23 halves -88.0/-60.5 wk 20.9 fund +0.071 lev 4.1 dd 176.2
+   BTC aligned : n  2016 win 40% PF 0.76 exp -0.124R tot -249.9R t -3.76 halves -159.5/-90.4 wk 31.1 fund +0.085 lev 4.1 dd 265.7
+   cap3+aligned: n   655 win 40% PF 0.75 exp -0.126R tot -82.7R t -2.71 halves -58.4/-24.3 wk 10.1 fund +0.076 lev 4.0 dd 98.8 | gate False
+C2 IS C2 prem8>=0.05% | trail_96h: days 650 per day med 3 p90 16 max 104 | 85% of trades on days with > 3
+   cap3        : n  1442 win 47% PF 0.90 exp -0.050R tot -71.8R t -1.34 halves -38.5/-33.4 wk 11.7 fund +0.011 lev 5.2 dd 128.0
+   BTC aligned : n  1672 win 49% PF 0.92 exp -0.035R tot -58.4R t -0.44 halves -99.7/+41.3 wk 13.7 fund +0.011 lev 3.3 dd 136.5
+   cap3+aligned: n   537 win 50% PF 0.92 exp -0.036R tot -19.5R t -0.67 halves -11.5/-8.0 wk 4.4 fund +0.009 lev 3.8 dd 44.5 | gate False
+C2 OOS C2 prem8>=0.05% | trail_96h: days 478 per day med 5 p90 10 max 25 | 92% of trades on days with > 3
+   cap3        : n  1355 win 48% PF 0.89 exp -0.053R tot -72.2R t -1.61 halves -41.6/-30.5 wk 19.7 fund +0.013 lev 3.7 dd 89.8
+   BTC aligned : n  1354 win 49% PF 0.94 exp -0.029R tot -39.5R t -0.77 halves +15.4/-55.0 wk 19.7 fund +0.012 lev 3.3 dd 89.6
+   cap3+aligned: n   652 win 48% PF 0.85 exp -0.074R tot -48.3R t -1.63 halves -17.4/-30.9 wk 9.5 fund +0.012 lev 3.3 dd 63.1 | gate False
+C3 IS C3 6sigma green | T1R_24h: days 163 per day med 1 p90 35 max 140 | 90% of trades on days with > 3
+   cap3        : n   296 win 46% PF 0.70 exp -0.143R tot -42.4R t -2.08 halves -8.8/-33.6 wk 2.4 fund -0.001 lev 5.4 dd 53.6
+   BTC aligned : n   387 win 64% PF 1.40 exp +0.100R tot +38.5R t +0.60 halves +24.5/+14.0 wk 3.2 fund -0.003 lev 4.0 dd 32.7
+   cap3+aligned: n    99 win 44% PF 0.73 exp -0.123R tot -12.2R t -1.22 halves -1.7/-10.5 wk 0.8 fund -0.003 lev 4.8 dd 15.4 | gate False
+C3 OOS C3 6sigma green | T1R_24h: days 194 per day med 1 p90 3 max 51 | 59% of trades on days with > 3
+   cap3        : n   283 win 45% PF 0.66 exp -0.168R tot -47.5R t -2.85 halves -38.6/-8.9 wk 4.1 fund +0.007 lev 5.3 dd 48.0
+   BTC aligned : n   161 win 37% PF 0.62 exp -0.155R tot -24.9R t -1.31 halves -9.7/-15.2 wk 2.4 fund +0.009 lev 3.6 dd 26.8
+   cap3+aligned: n   107 win 48% PF 0.87 exp -0.052R tot -5.5R t -0.58 halves -7.7/+2.2 wk 1.6 fund +0.014 lev 4.0 dd 9.4 | gate False
+C4 IS C4 rally>=10% OI<=-6% | T2R_48h: days 87 per day med 1 p90 8 max 42 | 72% of trades on days with > 3
+   cap3        : n   157 win 34% PF 0.74 exp -0.187R tot -29.3R t -1.45 halves -19.6/-9.6 wk 1.3 fund -0.002 lev 6.0 dd 32.1
+   BTC aligned : n   136 win 21% PF 0.37 exp -0.527R tot -71.6R t -1.80 halves -52.6/-19.0 wk 1.3 fund -0.002 lev 5.4 dd 71.6
+   cap3+aligned: n    51 win 24% PF 0.45 exp -0.448R tot -22.8R t -2.28 halves -13.8/-9.0 wk 0.5 fund -0.001 lev 5.2 dd 25.6 | gate False
+C4 OOS C4 rally>=10% OI<=-6% | T2R_48h: days 60 per day med 1 p90 4 max 27 | 59% of trades on days with > 3
+   cap3        : n    92 win 46% PF 0.98 exp -0.011R tot -1.0R t -0.08 halves +0.7/-1.7 wk 1.6 fund +0.003 lev 6.3 dd 10.1
+   BTC aligned : n    55 win 24% PF 0.33 exp -0.517R tot -28.4R t -1.34 halves -26.5/-1.9 wk 1.4 fund -0.003 lev 5.5 dd 30.2
+   cap3+aligned: n    27 win 41% PF 0.78 exp -0.124R tot -3.4R t -0.52 halves +0.2/-3.5 wk 0.7 fund -0.002 lev 3.8 dd 7.4 | gate False
+C5 IS C5 soup55 long | T2R_48h: days 636 per day med 7 p90 76 max 255 | 98% of trades on days with > 3
+   cap3        : n  1594 win 34% PF 0.65 exp -0.248R tot -395.0R t -6.01 halves -188.3/-206.7 wk 12.7 fund -0.002 lev 8.9 dd 425.8
+   BTC aligned : n  2281 win 47% PF 1.13 exp +0.066R tot +151.1R t +0.54 halves +59.9/+91.2 wk 18.1 fund -0.002 lev 5.8 dd 208.5
+   cap3+aligned: n   477 win 37% PF 0.83 exp -0.113R tot -53.7R t -1.51 halves -34.5/-19.1 wk 3.9 fund -0.002 lev 8.2 dd 84.8 | gate False
+C5 OOS C5 soup55 long | T2R_48h: days 466 per day med 12 p90 64 max 285 | 99% of trades on days with > 3
+   cap3        : n  1307 win 35% PF 0.76 exp -0.164R tot -214.5R t -3.83 halves -158.7/-55.8 wk 19.0 fund +0.016 lev 8.2 dd 219.9
+   BTC aligned : n  2267 win 37% PF 0.83 exp -0.107R tot -242.1R t -1.16 halves -144.8/-97.3 wk 33.3 fund +0.013 lev 6.8 dd 275.0
+   cap3+aligned: n   565 win 36% PF 0.84 exp -0.102R tot -57.6R t -1.62 halves -38.2/-19.4 wk 8.3 fund +0.025 lev 7.1 dd 61.5 | gate False
+C6 IS C6 absorb 0.45/0.54 short | T2R_48h: days 236 per day med 1 p90 2 max 6 | 10% of trades on days with > 3
+   cap3        : n   322 win 40% PF 0.90 exp -0.061R tot -19.7R t -0.79 halves -9.2/-10.5 wk 2.6 fund -0.004 lev 7.2 dd 40.9
+   BTC aligned : n   159 win 43% PF 1.06 exp +0.036R tot +5.7R t +0.30 halves +1.9/+3.7 wk 1.3 fund -0.005 lev 6.3 dd 21.0
+   cap3+aligned: n   156 win 44% PF 1.09 exp +0.053R tot +8.2R t +0.45 halves +3.0/+5.2 wk 1.3 fund -0.005 lev 6.3 dd 18.4 | gate True
+C6 OOS C6 absorb 0.45/0.54 short | T2R_48h: days 223 per day med 1 p90 3 max 8 | 11% of trades on days with > 3
+   cap3        : n   325 win 43% PF 1.02 exp +0.011R tot +3.5R t +0.15 halves +7.2/-3.7 wk 4.8 fund -0.004 lev 5.9 dd 28.6
+   BTC aligned : n   171 win 42% PF 0.96 exp -0.023R tot -4.0R t -0.24 halves +2.1/-6.1 wk 2.5 fund -0.008 lev 5.2 dd 18.9
+   cap3+aligned: n   164 win 44% PF 1.04 exp +0.021R tot +3.4R t +0.21 halves +10.9/-7.5 wk 2.4 fund -0.009 lev 5.3 dd 18.9 | gate False
+C7 IS C7 newlist time3d | hold_7d: days 140 per day med 1 p90 2 max 3 | 0% of trades on days with > 3
+   cap3        : n   175 win 53% PF 1.55 exp +0.212R tot +37.0R t +1.57 halves +18.1/+19.0 wk 1.4 fund -0.006 lev 1.1 dd 7.6
+   BTC aligned : n    71 win 55% PF 1.39 exp +0.122R tot +8.6R t +1.11 halves +7.0/+1.6 wk 0.6 fund -0.016 lev 1.0 dd 4.6
+   cap3+aligned: n    71 win 55% PF 1.39 exp +0.122R tot +8.6R t +1.11 halves +7.0/+1.6 wk 0.6 fund -0.016 lev 1.0 dd 4.6 | gate True
+C7 OOS C7 newlist time3d | hold_7d: days 56 per day med 1 p90 2 max 3 | 0% of trades on days with > 3
+   cap3        : n    70 win 43% PF 0.85 exp -0.085R tot -5.9R t -0.53 halves -5.3/-0.7 wk 1.2 fund -0.022 lev 1.0 dd 17.1
+   BTC aligned : n    40 win 42% PF 0.68 exp -0.174R tot -7.0R t -0.96 halves -9.3/+2.3 wk 0.7 fund -0.011 lev 1.0 dd 10.2
+   cap3+aligned: n    40 win 42% PF 0.68 exp -0.174R tot -7.0R t -0.96 halves -9.3/+2.3 wk 0.7 fund -0.011 lev 1.0 dd 10.2 | gate False
+C7 post hoc IS C7 newlist orb72 | T2R_14d: days 114 per day med 1 p90 2 max 3 | 0% of trades on days with > 3
+   cap3        : n   132 win 56% PF 1.30 exp +0.116R tot +15.4R t +1.25 halves -0.8/+16.2 wk 1.1 fund -0.002 lev 1.0 dd 17.7
+   BTC aligned : n    91 win 55% PF 1.22 exp +0.087R tot +8.0R t +0.74 halves -4.3/+12.2 wk 0.7 fund -0.003 lev 1.1 dd 11.4
+   cap3+aligned: n    91 win 55% PF 1.22 exp +0.087R tot +8.0R t +0.74 halves -4.3/+12.2 wk 0.7 fund -0.003 lev 1.1 dd 11.4 | gate False
+C7 post hoc OOS C7 newlist orb72 | T2R_14d: days 52 per day med 1 p90 2 max 3 | 0% of trades on days with > 3
+   cap3        : n    59 win 63% PF 1.89 exp +0.297R tot +17.5R t +1.96 halves +15.7/+1.8 wk 1.0 fund -0.024 lev 0.8 dd 5.9
+   BTC aligned : n    42 win 57% PF 1.56 exp +0.209R tot +8.8R t +1.16 halves +13.8/-5.0 wk 0.7 fund -0.020 lev 0.7 dd 7.2
+   cap3+aligned: n    42 win 57% PF 1.56 exp +0.209R tot +8.8R t +1.16 halves +13.8/-5.0 wk 0.7 fund -0.020 lev 0.7 dd 7.2 | gate False
+
+== random entry baseline (same coins, side, stop %, exit; OOS window) ==
+C1 C1 fund<=-0.10% confirm | trail_96h
+   random: n 15246 win 41% PF 0.81 exp -0.096R tot -1468.1R t -4.91 halves -559.5/-908.6 wk 223.3 fund +0.025 lev 4.3 dd 1599.7
+C2 C2 prem8>=0.05% | trail_96h
+   random: n  8409 win 45% PF 0.89 exp -0.054R tot -450.0R t -2.83 halves -192.0/-258.0 wk 123.1 fund +0.005 lev 3.6 dd 516.6
+C3 C3 6sigma green | T1R_24h
+   random: n  1686 win 45% PF 0.72 exp -0.120R tot -202.3R t -5.01 halves -124.0/-78.3 wk 24.7 fund +0.001 lev 5.4 dd 217.3
+C4 C4 rally>=10% OI<=-6% | T2R_48h
+   random: n   495 win 44% PF 1.00 exp -0.002R tot -1.2R t -0.04 halves +16.9/-18.1 wk 7.3 fund -0.003 lev 6.2 dd 32.0
+C5 C5 soup55 long | T2R_48h
+   random: n 34523 win 34% PF 0.73 exp -0.183R tot -6312.5R t -7.75 halves -3126.9/-3185.6 wk 505.6 fund +0.005 lev 7.6 dd 6592.4
+C6 C6 absorb 0.45/0.54 short | T2R_48h
+   random: n  1020 win 42% PF 0.92 exp -0.044R tot -45.0R t -1.02 halves -5.3/-39.7 wk 15.0 fund -0.002 lev 5.9 dd 58.4
+C7 C7 newlist time3d | hold_7d
+   random: n    96 win 47% PF 1.00 exp -0.001R tot -0.1R t -0.01 halves +1.2/-1.3 wk 1.6 fund -0.003 lev 1.5 dd 13.1
+
+== OOS all variants (for transparency, NOT used for selection) ==
+                                              n    win     pf    exp   t_day        h1        h2   per_wk
+variant                                                                                                  
+C1 fund<=-0.10% confirm | T2R_48h          5129  0.342  0.843 -0.089  -3.511  -244.255  -211.839   78.908
+C1 fund<=-0.05% confirm | T2R_48h          8258  0.348  0.825 -0.103  -3.834  -324.878  -526.588  126.768
+C1 fund<=-0.10% confirm | trail_96h        5082  0.411  0.798 -0.104  -4.304  -320.196  -208.425   78.185
+C1 fund<=-0.05% confirm | trail_96h        8185  0.416  0.781 -0.116  -4.607  -401.294  -544.542  125.647
+C1 fund<=-0.05% at print | T2R_48h        11158  0.339  0.788 -0.133  -5.347  -566.540  -918.735  171.285
+C1 fund<=-0.10% confirm | T1R_24h          6271  0.431  0.780 -0.098  -5.792  -368.057  -247.151   96.265
+C1 fund<=-0.05% confirm | T1R_24h         10119  0.446  0.777 -0.101  -5.854  -476.546  -546.480  155.336
+C1 fund<=-0.05% at print | trail_96h      10694  0.368  0.737 -0.148  -6.172  -667.733  -912.636  164.162
+C1 fund<=-0.10% at print | T2R_48h         7136  0.325  0.761 -0.148  -6.318  -497.552  -555.900  109.544
+C1 fund<=-0.10% at print | trail_96h       6776  0.357  0.698 -0.169  -7.089  -621.861  -522.930  104.018
+C1 fund<=-0.05% at print | T1R_24h        15548  0.438  0.705 -0.145  -9.357 -1052.877 -1206.580  238.675
+C1 fund<=-0.10% at print | T1R_24h         9984  0.418  0.684 -0.156 -10.280  -762.564  -799.184  153.263
+C2 prem8>=0.10% | trail_96h                1400  0.504  0.957 -0.020  -0.638     8.711   -36.839   20.502
+C2 prem8>=0.05% | T2R_48h                  3050  0.435  0.949 -0.026  -0.888    17.024   -96.698   44.295
+C2 prem8>=0.10% | T2R_48h                  1498  0.441  0.934 -0.034  -1.043   -22.898   -27.869   21.891
+C2 prem8>=0.05% | trail_96h                2803  0.494  0.935 -0.031  -1.167   -13.269   -74.380   40.707
+C2 prem8>=0.10% | T1R_24h                  1851  0.511  0.932 -0.025  -1.171   -28.287   -18.413   26.994
+C2 prem8>=0.05% | T1R_24h                  4019  0.506  0.889 -0.042  -2.428   -70.385   -99.250   58.367
+C3 4sigma +OI flush green | T2R_48h         198  0.460  1.227  0.101   0.581   -24.674    44.757    3.020
+C3 6sigma green | T2R_48h                   562  0.427  1.042  0.022   0.140   -76.245    88.861    8.213
+C3 4sigma +OI flush green | trail_96h       198  0.424  0.979 -0.010  -0.067   -28.078    26.147    3.020
+C3 4sigma green | T2R_48h                  1374  0.406  0.932 -0.039  -0.390  -196.567   142.754   20.079
+C3 6sigma green | trail_96h                 562  0.390  0.859 -0.075  -0.590  -107.571    65.187    8.213
+C3 4sigma +OI flush green | T1R_24h         198  0.444  0.770 -0.087  -0.790   -24.331     7.201    3.020
+C3 4sigma +OI flush at close | trail_96h    183  0.284  0.668 -0.188  -1.052   -38.329     4.001    2.791
+C3 4sigma green | trail_96h                1376  0.403  0.820 -0.097  -1.076  -220.850    87.169   20.109
+C3 6sigma green | T1R_24h                   562  0.456  0.721 -0.123  -1.198   -79.990    10.737    8.213
+C3 6sigma at close | trail_96h              487  0.226  0.545 -0.303  -1.541  -133.749   -13.633    7.207
+C3 6sigma at close | T2R_48h                487  0.281  0.562 -0.308  -1.564  -139.732   -10.498    7.207
+C3 4sigma +OI flush at close | T2R_48h      184  0.315  0.629 -0.221  -1.663   -43.566     2.947    2.806
+C3 6sigma at close | T1R_24h                487  0.355  0.440 -0.327  -1.750  -112.055   -47.328    7.207
+C3 4sigma green | T1R_24h                  1380  0.464  0.725 -0.127  -1.773  -185.067     9.918   20.167
+C3 4sigma at close | trail_96h             1175  0.274  0.606 -0.251  -2.003  -242.119   -53.095   17.389
+C3 4sigma +OI flush at close | T1R_24h      184  0.359  0.505 -0.243  -2.040   -24.627   -20.090    2.806
+C3 4sigma at close | T2R_48h               1174  0.304  0.622 -0.261  -2.150  -261.500   -44.519   17.374
+C3 4sigma at close | T1R_24h               1181  0.405  0.541 -0.252  -2.374  -196.153  -101.876   17.478
+C4 rally>=6% OI<=-6% | T2R_48h              381  0.404  0.822 -0.112  -0.906   -23.153   -19.339    5.674
+C4 rally>=6% OI<=-6% | T1R_24h              389  0.504  0.835 -0.079  -0.938   -21.947    -8.875    5.794
+C4 rally>=6% OI<=-3% | T2R_48h              780  0.396  0.835 -0.107  -1.121   -40.742   -42.344   11.495
+C4 rally>=10% OI<=-3% | T2R_48h             288  0.399  0.747 -0.158  -1.137   -29.222   -16.287    4.354
+C4 rally>=6% OI<=-3% | T1R_24h              797  0.503  0.808 -0.093  -1.336   -34.801   -39.216   11.745
+C4 rally>=6% OI<=-6% | trail_96h            388  0.446  0.731 -0.137  -1.381   -34.585   -18.555    5.779
+C4 rally>=10% OI<=-3% | T1R_24h             293  0.451  0.716 -0.141  -1.411   -20.996   -20.217    4.430
+C4 rally>=10% OI<=-6% | T1R_24h             168  0.452  0.685 -0.164  -1.441   -19.162    -8.390    2.847
+C4 rally>=10% OI<=-6% | T2R_48h             165  0.394  0.617 -0.246  -1.501   -26.869   -13.791    2.797
+C4 rally>=6% OI<=-3% | trail_96h            789  0.454  0.759 -0.126  -1.632   -58.012   -41.167   11.627
+C4 rally>=10% OI<=-3% | trail_96h           293  0.406  0.652 -0.187  -1.685   -35.100   -19.780    4.430
+C4 rally>=10% OI<=-6% | trail_96h           168  0.387  0.520 -0.261  -2.019   -30.199   -13.609    2.847
+C5 soup20 short | T2R_48h                 16807  0.401  0.875 -0.079  -1.901  -618.456  -706.664  243.580
+C5 soup55 short | T2R_48h                  8615  0.398  0.854 -0.091  -2.004  -384.157  -402.936  125.114
+C5 soup20 short | trail_96h               17072  0.436  0.834 -0.090  -2.402  -860.892  -675.474  247.420
+C5 soup55 short | trail_96h                8773  0.428  0.793 -0.112  -2.879  -550.403  -434.958  127.409
+C5 soup55 short | T1R_24h                  8999  0.508  0.803 -0.095  -3.112  -444.429  -412.308  130.691
+C5 soup20 short | T1R_24h                 17576  0.515  0.821 -0.086  -3.124  -676.221  -829.537  254.725
+C5 soup55 long | T2R_48h                  11508  0.356  0.742 -0.173  -3.245 -1236.708  -751.086  167.129
+C5 soup55 long | trail_96h                11719  0.401  0.711 -0.168  -3.320 -1089.282  -875.570  170.193
+C5 soup55 long | T1R_24h                  12125  0.477  0.723 -0.141  -3.341  -948.126  -758.875  176.089
+C5 soup20 long | trail_96h                21845  0.392  0.720 -0.164  -3.729 -1969.044 -1621.135  316.594
+C5 soup20 long | T2R_48h                  21460  0.354  0.753 -0.169  -3.731 -2223.118 -1394.992  311.014
+C5 soup20 long | T1R_24h                  22658  0.476  0.708 -0.153  -4.541 -2015.436 -1440.033  328.377
+C6 absorb 0.45/0.54 short | trail_96h       339  0.481  0.979 -0.011  -0.161    -0.265    -3.313    4.985
+C6 absorb 0.45/0.54 short | T2R_48h         340  0.421  0.962 -0.021  -0.307    -2.239    -5.036    5.000
+C6 absorb 0.46/0.53 short | T2R_48h         650  0.409  0.945 -0.031  -0.551    -9.477   -10.804    9.479
+C6 absorb 0.46/0.53 short | trail_96h       649  0.470  0.904 -0.051  -0.917   -26.937    -5.986    9.465
+C6 absorb 0.45/0.54 long | trail_96h        720  0.444  0.856 -0.074  -1.060   -50.513    -3.087   10.500
+C6 absorb 0.45/0.54 short | T1R_24h         352  0.486  0.839 -0.069  -1.411   -11.526   -12.611    5.176
+C6 absorb 0.46/0.53 long | trail_96h       1383  0.431  0.833 -0.090  -1.438   -93.849   -31.093   20.127
+C6 absorb 0.46/0.53 short | T1R_24h         669  0.492  0.862 -0.059  -1.502   -26.663   -12.558    9.756
+C6 absorb 0.45/0.54 long | T2R_48h          719  0.380  0.829 -0.104  -1.548   -59.609   -14.891   10.485
+C6 absorb 0.46/0.53 long | T2R_48h         1381  0.375  0.851 -0.091  -1.634  -102.110   -23.629   20.098
+C6 absorb 0.45/0.54 long | T1R_24h          743  0.482  0.799 -0.090  -2.311   -57.117    -9.948   10.835
+C6 absorb 0.46/0.53 long | T1R_24h         1442  0.458  0.731 -0.129  -3.699  -129.296   -56.531   20.985
+C7 newlist orb72 | trail_14d                 59  0.661  2.002  0.300   2.249    14.392     3.314    0.952
+C7 newlist orb72 | T2R_14d                   59  0.627  1.891  0.297   1.956    15.710     1.821    0.952
+C7 newlist orb72 | hold_7d                   59  0.661  2.138  0.274   1.932    15.029     1.121    0.952
+C7 newlist orb24 | T2R_14d                   31  0.677  2.235  0.357   1.891    10.273     0.806    0.502
+C7 newlist orb24 | trail_14d                 31  0.677  1.905  0.262   1.605     7.518     0.603    0.502
+C7 newlist orb24 | hold_7d                   31  0.645  1.473  0.131   0.778     5.153    -1.107    0.502
+C7 newlist time3d | T2R_14d                  70  0.457  0.988 -0.006  -0.044    -3.008     2.557    1.153
+C7 newlist time3d | hold_7d                  70  0.429  0.848 -0.085  -0.529    -5.261    -0.656    1.153
+C7 newlist time3d | trail_14d                70  0.471  0.824 -0.079  -0.688    -9.008     3.501    1.153

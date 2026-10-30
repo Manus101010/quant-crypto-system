@@ -1,0 +1,3 @@
+cache/
+results/trades.parquet
+__pycache__/

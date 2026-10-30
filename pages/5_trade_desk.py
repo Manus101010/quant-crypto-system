@@ -298,43 +298,60 @@ for tfk in A.TIMEFRAMES:
     })
 st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
-# ── Grid bot parameters ───────────────────────────────────────────────────────
-st.subheader("Grid bot parameters — starting suggestion")
-atr_d = (tf_reads.get("1d") or {}).get("atr")
-grid = A.grid_params(_dir, price, atr_d, struct.get("realized_vol_d"), struct, chg_24h)
-if not grid.get("ok"):
-    st.warning(grid.get("note", "Grid parameters unavailable."))
+# ── Bot plan: SAME engine as /bot in Telegram (desk/botplan.py + guard) ───────
+st.subheader("Grid bot plan (same as /bot in Telegram)")
+_inv = st.number_input("Investment per bot ($)", min_value=10.0, value=float(__import__("config").POSITION_MARGIN_USD),
+                       step=10.0, key=f"inv_{symbol}")
+try:
+    from desk import botplan as _BP
+    _bp = _BP.plan(symbol, _inv)
+except Exception as _exc:                      # noqa: BLE001
+    _bp = {"mode": None, "reason": f"bot planner unavailable ({_exc})", "warnings": []}
+if not _bp.get("mode"):
+    st.info(f"🤖 No bot right now: {_bp.get('reason', '')}.")
 else:
-    gd = {"long": "Long grid", "short": "Short grid", "neutral": "Neutral grid"}[_dir]
-    lev = grid["leverage"]
-    lev_txt = (f"<b style='color:#e6e6e6'>{lev}×</b>" if lev else
-               "<b style='color:#ea3943'>none</b>")
-    caps = (" · capped: " + ", ".join(grid["leverage_caps"])) if grid["leverage_caps"] else ""
+    _g = _bp["grid"]
+    _side = "Short grid" if _g["mode"] == "short" else "Long grid"
+    _gc = _SHORT if _g["mode"] == "short" else _LONG
+    _cells = [("Direction", _side, _gc), ("Range low", _BP._p(_g["lo"]), "#e6e6e6"),
+              ("Range high", _BP._p(_g["hi"]), "#e6e6e6"), ("Grids", f"{_g['grids']} arithmetic", "#e6e6e6"),
+              ("Leverage", f"{_g['leverage']}x", "#e6e6e6"), ("Stop loss", _BP._p(_g["stop"]), _SHORT),
+              ("Worst case", f"${_g['worst_loss']:.2f}", "#e6e6e6"),
+              ("Liquidation", _BP._p(_g["liq"]) if _g.get("liq") else "n/a", _MUTE)]
     st.markdown(
-        f"<div style='border:1px solid #262b38;border-radius:12px;padding:14px 18px;background:#161a25'>"
-        f"<div style='display:flex;gap:26px;flex-wrap:wrap'>"
-        f"<div><div style='font-size:11px;color:{_MUTE};text-transform:uppercase'>Direction</div>"
-        f"<div style='font-size:16px;font-weight:700;color:{_dc}'>{gd}</div></div>"
-        f"<div><div style='font-size:11px;color:{_MUTE};text-transform:uppercase'>Range low</div>"
-        f"<div style='font-size:16px;font-weight:700;color:{_SHORT}'>{_fmt(grid['range_low'])}</div></div>"
-        f"<div><div style='font-size:11px;color:{_MUTE};text-transform:uppercase'>Range high</div>"
-        f"<div style='font-size:16px;font-weight:700;color:{_LONG}'>{_fmt(grid['range_high'])}</div></div>"
-        f"<div><div style='font-size:11px;color:{_MUTE};text-transform:uppercase'>Grids</div>"
-        f"<div style='font-size:16px;font-weight:700;color:#e6e6e6'>{grid['grid_count']}</div></div>"
-        f"<div><div style='font-size:11px;color:{_MUTE};text-transform:uppercase'>Leverage</div>"
-        f"<div style='font-size:16px;font-weight:700'>{lev_txt}</div></div>"
-        f"</div></div>", unsafe_allow_html=True)
+        "<div style='border:1px solid #262b38;border-radius:12px;padding:14px 18px;background:#161a25'>"
+        "<div style='display:flex;gap:26px;flex-wrap:wrap'>"
+        + "".join(f"<div><div style='font-size:11px;color:{_MUTE};text-transform:uppercase'>{k}</div>"
+                  f"<div style='font-size:16px;font-weight:700;color:{c}'>{v}</div></div>" for k, v, c in _cells)
+        + "</div></div>", unsafe_allow_html=True)
+    st.caption(f"Why: {_bp['reason']}. Close it after {_g['max_hold_h']}h if neither the stop nor your exit has hit. "
+               "Set it on Pionex or Bybit yourself; nothing is placed for you.")
+    for _w in _bp.get("warnings", []):
+        st.warning(_w)
+    st.caption("Not edge tested: the best grid setup broke even in the backtest. "
+               f"After launching, send /addbot BOTID {symbol.replace('-USD', '')} in Telegram so it gets scored.")
 
-    st.caption(
-        f"**Range** — {grid['basis']} → width {grid['width_pct']:.1f}% of price.  \n"
-        f"**Grids** — {grid['grid_count']} rungs at ~{grid['step_pct']:.2f}% each "
-        f"(≈0.5×ATR, so each rung is a real swing, not noise).  \n"
-        f"**Leverage** — a break out of the range against you ≈ {grid['adverse_pct']:.1f}% "
-        f"(half-range + 1×ATR); that hits liquidation at ~{grid['lev_liq']:.1f}×, so travelling "
-        f"only ⅓ of the way suggests **{(str(lev)+'×') if lev else 'no leverage'}**{caps}.")
-    if grid.get("too_volatile"):
-        st.warning("📛 " + grid["note"])
-    st.caption("⚠️ Signal only — set this on Bybit yourself. Not wired to place anything.")
+# ── Positioning (funding, OI, long/short, DEX) ────────────────────────────────
+with st.expander("Positioning: funding, open interest, long/short, DEX volume"):
+    try:
+        from features.snapshot import snapshot as _snap, alert_line as _aline
+        _sn = _snap(symbol.replace("-USD", "USDT"), _bp.get("mode") or "short")
+        st.markdown(_aline(_sn) or "No positioning data right now.")
+    except Exception as _exc:                  # noqa: BLE001
+        st.caption(f"Positioning unavailable ({_exc}).")
+
+# ── AI desk (veto only) ───────────────────────────────────────────────────────
+if st.button("🧠 Ask the AI desk (about 1 cent, 1 to 2 minutes)"):
+    with st.spinner("Analysts, bull vs bear, trader, risk and PM …"):
+        try:
+            from desk.agents.service import review as _review
+            from desk.agents.report import telegram_text as _tt
+            import re as _re
+            _dir_for_desk = _bp.get("mode") or ("short" if _dir == "short" else "long")
+            _res = _review(symbol, _dir_for_desk, send=False)
+            st.markdown(_re.sub(r"<[^>]+>", "", _tt(_res)).replace("\n", "  \n"))
+        except Exception as _exc:              # noqa: BLE001
+            st.error(f"Desk unavailable: {_exc}")
 
 # ── Fundamentals (light Claude + live web search) ────────────────────────────
 st.subheader("Fundamentals — fast read")

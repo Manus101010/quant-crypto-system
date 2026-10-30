@@ -30,11 +30,12 @@ def _get_client():
 
 def claude_call(system: str, user: str, schema_name: str, schema: dict,
                 model: str, temperature: float = 0.0) -> dict:
-    """Ask Claude for exactly one tool call matching `schema`. Raises on failure."""
+    """Ask Claude for exactly one tool call matching `schema`. Raises on failure.
+    `temperature` is accepted for interface compatibility but NOT sent: the
+    anthropic SDK 2.x removed it from messages.create (passing it raises TypeError)."""
     resp = _get_client().messages.create(
         model=model,
         max_tokens=1500,
-        temperature=temperature,
         system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
         tools=[{"name": f"submit_{schema_name}",
                 "description": f"Submit the {schema_name} report.",

@@ -23,6 +23,23 @@ def is_configured() -> bool:
     return bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
 
 
+def split_text(text: str, limit: int = 3900) -> list[str]:
+    """Split on blank lines (sections), then lines, so HTML tags stay whole."""
+    parts, cur = [], ""
+    for block in text.split("\n\n"):
+        pieces = [block] if len(block) <= limit else block.split("\n")
+        for p in pieces:
+            sep = "\n\n" if p is block else "\n"
+            if cur and len(cur) + len(sep) + len(p) > limit:
+                parts.append(cur)
+                cur = p[:limit]
+            else:
+                cur = f"{cur}{sep}{p}" if cur else p[:limit]
+    if cur:
+        parts.append(cur)
+    return parts
+
+
 def send_message(text: str, *, parse_mode: str = "HTML",
                  disable_preview: bool = True) -> bool:
     """
@@ -32,7 +49,12 @@ def send_message(text: str, *, parse_mode: str = "HTML",
     if not is_configured():
         log.info("telegram: no-op (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID unset)")
         return False
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    if len(text) > 4000:                  # Telegram's hard limit is 4096: send in parts
+        ok = True
+        for part in split_text(text):
+            ok = send_message(part, parse_mode=parse_mode, disable_preview=disable_preview) and ok
+        return ok
+    url =f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": text,

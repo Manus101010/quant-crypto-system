@@ -111,9 +111,13 @@ def run_crypto_validation(universe_size: int = 40, days: int = 600,
 # ── Edge gate: which setups are actually tradeable ────────────────────────────
 def validated_setups(stats: dict[str, dict],
                       min_pf: float = _MIN_EDGE_PF, min_n: int = _MIN_EDGE_N) -> set[str]:
-    """Setups with a measured positive edge (PF>min_pf, net of cost) and enough trades."""
+    """Setups with a measured positive edge (PF>min_pf, net of cost) and enough trades.
+    Setups in config.RETIRED_SETUPS are never validated, whatever their stats."""
+    from config import RETIRED_SETUPS
     out = set()
     for label, s in stats.items():
+        if label in RETIRED_SETUPS:
+            continue
         pf = s.get("profit_factor")
         if pf is None:                       # inf PF (no losers) → treat as strong
             pf = 99.0
@@ -123,7 +127,22 @@ def validated_setups(stats: dict[str, dict],
 
 
 def save_validation(res: dict) -> None:
+    """Save a validation run. Stats entries marked "locked" in the current file
+    (hand audited from survivor free research, e.g. Distribution Short) are kept,
+    so a "Run Validation" on the old per bar harness can't overwrite them."""
     try:
+        old = load_validation() or {}
+        locked = {k: v for k, v in (old.get("stats") or {}).items()
+                  if isinstance(v, dict) and v.get("locked")}
+        if locked:
+            res = dict(res)
+            res["stats"] = {**(res.get("stats") or {}), **locked}
+            val = list(res.get("validated") or [])
+            for k in locked:
+                if k in (old.get("validated") or []) and k not in val:
+                    val.append(k)
+            if "validated" in res or val:
+                res["validated"] = val
         _SAVE_PATH.write_text(json.dumps(res, indent=2, default=str))
     except Exception as exc:                 # noqa: BLE001
         log.warning("crypto_validation: save failed — %s", exc)
@@ -143,4 +162,5 @@ def validated_labels() -> set[str] | None:
     v = load_validation()
     if not v:
         return None
-    return set(v.get("validated", []))
+    from config import RETIRED_SETUPS
+    return set(v.get("validated", [])) - set(RETIRED_SETUPS)

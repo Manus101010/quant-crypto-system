@@ -130,9 +130,16 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
                      f"({_pct(price, ppx)}, +{part['at_r']:g}× your risk)"
                      + (", then move your stop to your entry — the rest can't lose"
                         if part.get("breakeven") else ""))
+    tp = trg.get("tp")
+    if tp and stop:
+        tpr = abs(price - tp) / abs(price - stop) if abs(price - stop) else 0
+        lines.append(f"• Take profit: <b>{_fmt_price(tp)}</b>  ({_pct(price, tp)}, +{tpr:.0f}× your "
+                     "risk) for the whole position")
     if trailing:
-        lines.append(("• For the rest: no" if part.get("at_r") else "• No")
-                     + " fixed target — a <b>trailing stop</b> follows the price "
+        lines.append(("• Until then a" if tp else
+                      "• For the rest: no fixed target — a" if part.get("at_r") else
+                      "• No fixed target — a")
+                     + " <b>trailing stop</b> follows the price "
                      f"{'down' if short else 'up'} and locks in profit (Bybit does this for "
                      "you — see below).")
     elif target:
@@ -194,18 +201,29 @@ def _projection_line(trg: dict, price: float, label: str) -> str:
         if not st_ or not stop or not st_.get("avg_loss"):
             return ""
         wr = st_["win_rate"]
-        win_r = st_["avg_win"] / abs(st_["avg_loss"])        # typical winner, in R
+        in_r = st_.get("avg_unit") == "R"           # research entries store R, not %
+        win_r = st_["avg_win"] if in_r else st_["avg_win"] / abs(st_["avg_loss"])
+        loss_r = abs(st_["avg_loss"]) if in_r else 1.0
         short = (trg.get("direction") or "long") == "short"
         dist = abs(price - stop)
         px = price - win_r * dist if short else price + win_r * dist
         risk = portfolio_heat()["next_risk"] or portfolio_heat()["risk_per_trade"]
+        try:     # the $ this sized position actually risks (integer leverage floor)
+            from triggers.outcomes import planned_position
+            pp = planned_position(price, stop)
+            if pp:
+                risk = min(risk, pp["risk_usd"])
+        except Exception:                           # noqa: BLE001
+            pass
         odds = f"{wr * 100:.0f}% of trades"
         days = st_.get("median_bars_held")
+        rest = (f"The losers averaged ≈ −${loss_r * risk:,.2f}" if in_r
+                else f"The rest usually hit the stop (≈ −${risk:,.0f})")
         return (f"📈 <b>What to expect</b> (backtest, {st_['n']:,} past trades): {odds} win. "
                 f"Winners averaged ~{win_r:.1f}× the risk → around {_fmt_price(px)} "
                 f"({_pct(price, px)}), ≈ +${win_r * risk:,.0f}"
                 + (f", usually within ~{days:.0f} days" if days else "")
-                + f". The rest usually hit the stop (≈ −${risk:,.0f}).")
+                + f". {rest}.")
     except Exception as exc:                        # noqa: BLE001
         log.debug("projection failed: %s", exc)
         return ""
@@ -232,8 +250,14 @@ def _bybit_block(trg: dict, price: float, m: dict) -> str:
                f"(or Market if it's still within {ENTRY_MAX_SLIP_PCT:g}% — skip it beyond {f(cap)})",
                f"2. <b>Stop-loss</b>: trigger <b>{f(stop)}</b>, trigger by <b>Mark price</b>, Market close"]
         n = 3
+        tp = trg.get("tp")
         if target:
             out.append(f"{n}. <b>Take-profit</b>: trigger <b>{f(target)}</b>, Limit at {f(target)} (whole position)")
+            n += 1
+        elif tp:
+            tpr = abs(price - tp) / risk if risk else 0
+            out.append(f"{n}. <b>Take-profit</b>: trigger <b>{f(tp)}</b> ({tpr:.0f}R, {_pct(price, tp)}), "
+                       f"trigger by Last price, Market close, whole position (set it with the trailing stop)")
             n += 1
         if part.get("at_r"):
             ppx = price + sg * part["at_r"] * risk
@@ -242,7 +266,12 @@ def _bybit_block(trg: dict, price: float, m: dict) -> str:
             n += 1
         if trailing:
             cfg = BYBIT_TRAIL.get(trg.get("setup_label") or "", BYBIT_TRAIL["default"])
-            atr = risk / float(m.get("stop_mult") or 1.0)
+            try:
+                atr = float(json.loads(trg.get("condition_json") or "{}").get("atr") or 0)
+            except Exception:                       # noqa: BLE001
+                atr = 0.0
+            if atr <= 0:
+                atr = risk / float(m.get("stop_mult") or 1.0)
             dist = (cfg["k_atr"] * atr) if cfg.get("k_atr") else risk
             act_r = float(cfg.get("activate_r") or 0)
             act = price + sg * act_r * risk
@@ -327,18 +356,19 @@ def _sizing_line(trg: dict, price: float) -> str:
         if h["next_risk"] <= 0:
             return (f"{budget}\n⚠️ <b>You're at your limit</b> — skip this one, or wait "
                     f"until an open trade is closed or safe.")
-        from config import (POSITION_MARGIN_USD, MAX_LOSS_PCT_OF_MARGIN, MAX_LEVERAGE,
-                            ENTRY_MAX_SLIP_PCT, SIZING_FEE_PCT)
+        from config import (POSITION_MARGIN_USD, MAX_LOSS_PCT_OF_MARGIN, ENTRY_MAX_SLIP_PCT)
+        from triggers.outcomes import planned_position
         coin = trg["symbol"].replace("-USD", "")
         # Fixed margin, leverage chosen so the WORST allowed case (entry filled at
         # the slip cap, plus round-trip fees) loses at most MAX_LOSS_PCT of it.
-        worst = frac + (ENTRY_MAX_SLIP_PCT + SIZING_FEE_PCT) / 100
-        lev = int(min(MAX_LEVERAGE, (MAX_LOSS_PCT_OF_MARGIN / 100) / worst))
-        if lev < 1:
+        # Same rule the close alert uses to report the actual $ (outcomes.py).
+        pp = planned_position(price, stop)
+        lev, worst = pp["leverage"], pp["worst_loss"] / pp["notional"]
+        if pp["margin"] < POSITION_MARGIN_USD:
             # Wide stop: no leverage and a smaller position, so a stop-out still
             # loses only your max (25% of the normal $50 margin = $12.50).
-            pos = POSITION_MARGIN_USD * (MAX_LOSS_PCT_OF_MARGIN / 100) / worst
-            loss = pos * worst
+            pos = pp["notional"]
+            loss = pp["worst_loss"]
             if loss > h["next_risk"] + 1e-9:
                 return (f"{budget}\n⚠️ <b>You're at your limit</b> — skip this one, or wait "
                         f"until an open trade is closed or safe.")
@@ -467,9 +497,23 @@ def _evaluate(trg: dict, ind: dict) -> tuple[str, str]:
         entry, tgt = cond.get("entry"), cond.get("target")
         if tgt is not None and price <= tgt:
             return ("invalidate", f"already at the target {_fmt_price(tgt)}")
-        if entry and price < entry * (1 - cond.get("max_drift", 0.03)):
-            return ("invalidate", f"moved more than {cond.get('max_drift', 0.03) * 100:.0f}% "
+        # Drift is measured from the SIGNAL close (the research entry); triggers
+        # armed before 28 Oct 2026 have no signal_close and use the arm price.
+        # Upper bound only when the scan stored one (re-stopped DS plans); triggers
+        # armed before it and DBF keep the old behaviour (no upper bound).
+        ref = cond.get("signal_close") or entry
+        dn = cond.get("max_drift", 0.03)
+        up = cond.get("max_drift_up")
+        if ref and price < ref * (1 - dn):
+            return ("invalidate", f"moved more than {dn * 100:.0f}% "
                                   f"below the signal price before you could enter")
+        if ref and up is not None and price > ref * (1 + up):
+            return ("invalidate", f"bounced more than {up * 100:.0f}% above the signal close "
+                                  f"({_fmt_price(ref)}) before you could enter")
+        atr, k, cap = cond.get("atr"), cond.get("trail_atr"), cond.get("max_stop_pct")
+        if atr and k and cap and k * atr / price * 100 > cap:
+            return ("invalidate", f"re-anchored stop would be {k * atr / price * 100:.0f}% away "
+                                  f"(cap {cap:.0f}%)")
         return ("fire", "research setup on the daily close; enter now")
 
     if kind == "breakdown":
@@ -525,6 +569,66 @@ def _regime_vetoes(trg: dict) -> bool:
     return False
 
 
+def _cond_of(trg: dict) -> dict:
+    try:
+        return json.loads(trg.get("condition_json") or "{}")
+    except Exception:                               # noqa: BLE001
+        return {}
+
+
+def _fire_plan(trg: dict, price: float) -> dict:
+    """Stop (and take profit) re-anchored to the FIRE price for plans whose stop is
+    an ATR multiple (Distribution Short: stop = price + 3.5 x signal ATR, TP at 2R),
+    so the trade carries the researched risk wherever it is entered. The stop that
+    was armed from the signal close is kept in condition_json for the record.
+    {} for every other trigger (their stop is a level or set at arm time)."""
+    cond = _cond_of(trg)
+    if cond.get("kind") != "enter_now_short" or not cond.get("atr") or not cond.get("trail_atr"):
+        return {}
+    from skills.new_setups import restop
+    short = (trg.get("direction") or "short") == "short"
+    stop, tp = restop(price, float(cond["atr"]), float(cond["trail_atr"]),
+                      cond.get("tp_r"), short)
+    if stop is None:
+        return {}
+    return {"stop": stop, "tp": tp}
+
+
+def _fired_today_counts(now: datetime.datetime | None = None) -> dict:
+    """NEW signals alerted as tradeable today (Sydney day), per direction. Fires
+    over the basket cap do not count (they were paper only)."""
+    from guard.ledger import sydney_day
+    from triggers.outcomes import is_basket_capped
+    today = sydney_day(now)
+    out = {"long": 0, "short": 0}
+    for t in tdb.get_fired_trades():
+        fa = t.get("fired_at")
+        if not fa or is_basket_capped(t):
+            continue
+        try:     # any ISO form (Postgres trims microsecond zeros: .12345+00:00)
+            ts = pd.Timestamp(str(fa)).to_pydatetime()
+        except (ValueError, TypeError):
+            continue
+        if sydney_day(ts) != today:
+            continue
+        d = t.get("direction") or "long"
+        out[d] = out.get(d, 0) + 1
+    return out
+
+
+def _basket_cap_text(trg: dict, price: float, n_today: int, cap: int) -> str:
+    coin = trg["symbol"].replace("-USD", "")
+    d = trg.get("direction") or "long"
+    word = "short" if d == "short" else "long"
+    return (f"⏸ <b>{coin} {word}: not a trade today (basket cap)</b>\n"
+            f"<i>{trg.get('setup_label') or 'setup'}</i> fired at {_fmt_price(price)}, but "
+            f"{n_today} new {word} signals have already been sent today (Sydney day). "
+            f"Your cap is {cap} per direction per day, because same-direction alts move "
+            f"together and a 4th or 5th one is the same bet again.\n"
+            "It is tracked as a paper trade only (labelled \"basket cap\"). "
+            "Do not place it. Nothing to do.")
+
+
 def poll_once() -> dict:
     """One evaluation pass over all active triggers. Returns a summary."""
     now_iso = datetime.datetime.utcnow().isoformat()
@@ -556,7 +660,8 @@ def poll_once() -> dict:
     if missing:
         candles.update(exchange.get_ohlcv_batch(missing, timeframe="1d", limit=_CANDLE_LIMIT))
 
-    fired = invalidated = 0
+    fired = invalidated = capped_n = 0
+    fire_counts = None          # per-direction tradeable fires today, loaded on first fire
     for t in active:
         df = candles.get(t["symbol"])
         if df is None:
@@ -586,25 +691,66 @@ def poll_once() -> dict:
                          t["id"], t["symbol"], mx["ext_4h"])
                 continue
         if verdict == "fire":
-            text = _alert_text(t, ind["price"], reason)
+            price = ind["price"]
+            d = t.get("direction") or "long"
+            # Re-anchor ATR-multiple stops (Distribution Short) to the fire price.
+            fp = _fire_plan(t, price)
+            t_fire = {**t, **{k: v for k, v in fp.items() if v is not None}}
+            cond = _cond_of(t)
+            if fp:
+                cond.update({"stop_armed": t.get("stop"), "stop": fp["stop"],
+                             "tp": fp.get("tp"), "restop_at_fire": True})
+            # Basket risk guard: at most FIRE_CAP_PER_DIR_PER_DAY new tradeable
+            # alerts per Sydney day per direction (all setups). Extra fires are
+            # tracked as paper, labelled "basket cap", and not sent as a trade.
+            from config import FIRE_CAP_PER_DIR_PER_DAY as _cap
+            if fire_counts is None:
+                try:
+                    fire_counts = _fired_today_counts()
+                except Exception as exc:                  # noqa: BLE001 — fail open
+                    log.warning("basket cap count failed — %s", exc)
+                    fire_counts = {}
+            capped = bool(_cap) and fire_counts.get(d, 0) >= _cap
+            if capped:
+                cond["basket_cap"] = True
+                text = _basket_cap_text(t_fire, price, fire_counts.get(d, 0), _cap)
+            else:
+                text = _alert_text(t_fire, price, reason)
             snap = None
             try:                           # positioning features: logged, never blocking
                 from features.snapshot import snapshot, alert_line
                 snap = snapshot(t["symbol"].replace("-USD", "USDT"), t.get("direction"))
                 line = alert_line(snap)
-                if line:
+                if line and not capped:
                     text += f"\n📡 {line}"
             except Exception as exc:                      # noqa: BLE001
                 log.debug("feature snapshot failed: %s", exc)
+            # Forward-test flags (docs/edge_fix/shorts.md section 4): logged on the
+            # row, never gating. Liquidity + BTC 50d come from the scan, OI from OKX.
+            fwd = _fwd_flags(t, cond)
+            cond["fwd"] = fwd
+            if snap is not None:
+                snap.update({f"fwd_{k}": v for k, v in fwd.items()})
             delivered = telegram.send_message(text)
             # Mark fired if delivered (or Telegram is a no-op); leave active to
             # retry on a transient send failure so a real alert isn't lost.
             if delivered or not telegram.is_configured():
-                tdb.mark_fired(t["id"], ind["price"], note=reason)
+                extra = {"condition_json": json.dumps(cond, default=str)}
+                if fp:
+                    extra["stop"] = fp["stop"]
+                    if fp.get("tp") is not None:
+                        extra["tp"] = fp["tp"]
+                tdb.mark_fired(t["id"], price,
+                               note=(f"basket cap: {reason}" if capped else reason), extra=extra)
                 fired += 1
+                if capped:
+                    capped_n += 1
+                else:
+                    fire_counts[d] = fire_counts.get(d, 0) + 1
                 try:                       # desk: background review, replies in ~1 to 2 min
-                    from desk.agents.service import review_trigger_async
-                    review_trigger_async(t, ind["price"])
+                    if not capped:
+                        from desk.agents.service import review_trigger_async
+                        review_trigger_async(t_fire, price)
                 except Exception as exc:                  # noqa: BLE001
                     log.debug("desk queue failed: %s", exc)
                 if snap:
@@ -616,16 +762,17 @@ def poll_once() -> dict:
                 try:                       # guard: this alert is "issued", not revenge
                     from guard.ledger import Ledger
                     from config import POSITION_MARGIN_USD
-                    if t.get("direction") in ("long", "short"):
+                    if t.get("direction") in ("long", "short") and not capped:
                         # alert sent ≠ trade taken: the 1R lock is only used up on /took
                         Ledger().issue({"symbol": t["symbol"], "type": "plain",
                                         "direction": t["direction"],
-                                        "entry": ind["price"], "stop": t.get("stop"),
+                                        "entry": price, "stop": t_fire.get("stop"),
                                         "margin": POSITION_MARGIN_USD, "trigger_id": t["id"]},
                                        consume_lock=False)
                 except Exception as exc:                  # noqa: BLE001
                     log.debug("guard issue failed: %s", exc)
-                log.info("FIRED #%d %s — %s", t["id"], t["symbol"], reason)
+                log.info("FIRED #%d %s — %s%s", t["id"], t["symbol"], reason,
+                         " (basket cap: paper only)" if capped else "")
             else:
                 log.warning("trigger #%d met but Telegram send failed; will retry", t["id"])
         elif verdict == "invalidate":
@@ -633,7 +780,23 @@ def poll_once() -> dict:
             invalidated += 1
             log.info("INVALIDATED #%d %s — %s", t["id"], t["symbol"], reason)
 
-    return {"active": len(active), "fired": fired, "invalidated": invalidated, **track}
+    return {"active": len(active), "fired": fired, "invalidated": invalidated,
+            "basket_capped": capped_n, **track}
+
+
+def _fwd_flags(trg: dict, cond: dict) -> dict:
+    """Post hoc forward-test flags for a fired signal (logged only): liquidity
+    (20d turnover >= $5M and listed >= 180d) and BTC below its 50d from the scan
+    that armed it, OI (coin units) change over 72h from OKX at fire time."""
+    out = dict(cond.get("fwd") or {})
+    try:
+        from features.derivs import oi_change_okx
+        oi = oi_change_okx(trg["symbol"], 72)
+    except Exception:                               # noqa: BLE001
+        oi = None
+    out["oi_chg_72h"] = oi
+    out["oi_3d_rising"] = None if oi is None else bool(oi > 0)
+    return out
 
 
 def main() -> None:
