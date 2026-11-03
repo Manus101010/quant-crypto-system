@@ -41,7 +41,9 @@ print("DIAG setup hits in last 15 daily bars:", dict(hits))
 print("DIAG recent:", sorted(recent, key=lambda r: r[1])[-20:])
 try:
     from triggers import db
-    print("DIAG deactivated setups:", db.get_deactivated())
+    print("DIAG deactivated (raw):", db.get_deactivated())
+    from triggers.scan import effective_deactivated
+    print("DIAG deactivated (effective):", effective_deactivated())
 except Exception as exc:  # noqa: BLE001
     print("DIAG deactivated check failed:", exc)
 try:

@@ -226,6 +226,25 @@ def _diversify(rows: list[dict], n: int, max_per_setup: int | None) -> list[dict
     return picked
 
 
+_AUTO_DECAY_REASON = re.compile(r"^PF [-0-9.]+ / n \d+ on ")
+
+
+def effective_deactivated() -> set[str]:
+    """Setups switched off for arming. An AUTO decay deactivation (reason written by
+    revalidate.py, "PF x / n y on DATE") is ignored for DECAY_WATCH_MANUAL_ONLY setups:
+    the weekly re-test cannot model how those are traded, so only a manual switch-off
+    counts. Fixes 3 Nov 2026: a stale auto row silently blocked every Distribution
+    Short and Downtrend Bounce Fade (35 + 10 matches in 15 days, 0 armed)."""
+    from config import DECAY_WATCH_MANUAL_ONLY
+    out = set()
+    for d in tdb.get_deactivations():
+        lab = d.get("setup_label")
+        if lab in DECAY_WATCH_MANUAL_ONLY and _AUTO_DECAY_REASON.match(str(d.get("reason") or "")):
+            continue
+        out.add(lab)
+    return out
+
+
 def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
                      regime_score: float | None = None,
                      expiry_hours: int = 48,
@@ -316,7 +335,7 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     if valid is not None:
         # Subtract setups auto-deactivated by the revalidation job (edge decayed).
         # They stop arming NEW triggers; existing armed triggers are left alone.
-        deactivated = tdb.get_deactivated()
+        deactivated = effective_deactivated()
         from config import RETIRED_SETUPS
         valid = valid - deactivated - set(RETIRED_SETUPS)   # retired: never armed
         kept = [r for r in rows if r.get("setup_label") in valid]

@@ -142,7 +142,7 @@ RETIRED_SETUPS = {"Breakdown Short (55d low)"}
 # weekly decay watch (revalidate.py) re-tests with the old daily per-bar harness,
 # which models none of that, so for these a failing run is REPORTED on Telegram
 # but never auto-deactivates; switch them off by hand (Validation page).
-DECAY_WATCH_MANUAL_ONLY = {"Distribution Short"}
+DECAY_WATCH_MANUAL_ONLY = {"Distribution Short", "Downtrend Bounce Fade"}
 # Entry drift bounds for the "enter now" research shorts (skills/new_setups.py),
 # measured from the SIGNAL close: no entry after price fell more than DOWN % (the
 # move already happened) or bounced more than UP % (docs/edge_fix/CHANGES.md).
