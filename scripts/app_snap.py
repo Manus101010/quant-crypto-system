@@ -36,6 +36,12 @@ with sync_playwright() as p:
     pg.goto(f"{BASE}/trade_desk", wait_until="domcontentloaded", timeout=120_000)
     t = wait_text(pg, "Manual Trade Desk")
     print("trade desk loaded:", bool(t))
+    pg.screenshot(path=str(OUT / "first.png"), full_page=True)
+    for fr in pg.frames:
+        try:
+            print("FRAME", fr.url[:90], "|", fr.inner_text("body", timeout=3000)[:1500].replace("\n", " / "))
+        except Exception as exc:  # noqa: BLE001
+            print("FRAME", fr.url[:90], "| (no text)", exc)
     if t:
         fr = app_frame(pg)
         box = fr.get_by_placeholder("e.g. SOL, WIF, PEPE")
