@@ -78,3 +78,11 @@ def test_fade_against_rising_4h_is_skipped(monkeypatch):
     r = b["rows"][0]
     assert r["state"] == "FADE AGAINST 4H" and r["up4"] is True
     assert "skip" in movers.text(b)
+
+
+def test_ladder_reads_five_timeframes():
+    up = _df(list(np.linspace(1.0, 1.4, 120)))
+    lad = movers.ladder("AAA-USD", frames={"15m": up, "1h": up, "4h": up, "1d": up, "1w": up})
+    assert [r["tf"] for r in lad["rows"]] == ["15m", "1h", "4h", "1d", "1w"]
+    assert all(r["state"] == "Running up" for r in lad["rows"])
+    assert "runner" in lad["read"] and "Daily and weekly are both up" in lad["read"]

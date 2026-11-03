@@ -298,6 +298,20 @@ for tfk in A.TIMEFRAMES:
     })
 st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
+# ── Your five timeframes (same state labels as /movers) ─────────────────────
+st.subheader("Your timeframes: 15m, 1h, 4h, daily, weekly")
+try:
+    from desk import movers as _mv
+    _lad = _mv.ladder(symbol)
+    st.info(_lad["read"])
+    st.dataframe(pd.DataFrame([{
+        "TF": r["tf"], "State": r["state"], "SAR": r.get("sar", ""),
+        "From midline (ATR)": r.get("mid_atr", ""), "Bar size vs before": r.get("bars", ""),
+        "Bars since midline touch": r.get("since_mid", ""), "Midline": _fmt(r.get("mid")),
+    } for r in _lad["rows"]]), width="stretch", hide_index=True)
+except Exception as _exc:          # noqa: BLE001
+    st.caption(f"Timeframe ladder unavailable ({_exc}).")
+
 # ── Bot plan: SAME engine as /bot in Telegram (desk/botplan.py + guard) ───────
 st.subheader("Grid bot plan (same as /bot in Telegram)")
 _inv = st.number_input("Investment per bot ($)", min_value=10.0, value=float(__import__("config").POSITION_MARGIN_USD),
