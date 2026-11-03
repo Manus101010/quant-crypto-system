@@ -117,7 +117,9 @@ def _watchlist() -> str:
 
 
 def _decay() -> str:
-    d = tdb.get_deactivations()
+    from triggers.scan import effective_deactivated
+    off = effective_deactivated()
+    d = [x for x in tdb.get_deactivations() if x["setup_label"] in off]
     if not d:
         return ""
     names = ", ".join(x["setup_label"] for x in d)
