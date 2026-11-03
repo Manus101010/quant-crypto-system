@@ -16,7 +16,7 @@ concurrency:
 jobs:
   visit:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,4 +27,9 @@ jobs:
           pip install playwright==1.48.0
           python -m playwright install --with-deps chromium
       - name: Visit the app
-        run: python scripts/keepalive.py
+        run: python scripts/app_snap.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: snaps
+          path: snaps/
