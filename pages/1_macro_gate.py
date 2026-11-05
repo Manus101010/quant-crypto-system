@@ -131,6 +131,8 @@ def plain_read(key: str, sig: dict) -> str:
         return ("BTC in a strong uptrend" if s >= 70 else
                 "BTC trend is mixed" if s >= 45 else "BTC in a downtrend — caution")
     if key == "crypto_breadth":
+        if v is None:                      # breadth source failed (CoinGecko 429 on cloud IPs)
+            return "Breadth data unavailable right now"
         return (f"Broad — most coins trending up ({v:.0f}%)" if s >= 65 else
                 f"Mixed participation ({v:.0f}%)" if s >= 40 else
                 f"Narrow — few coins holding up ({v:.0f}%), fragile")

@@ -268,10 +268,16 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     try:
         from skills import new_setups as _ns
         from config import LIVE_VOLUME_FACTOR
-        _ns.QV_SOURCE_FACTOR = float(LIVE_VOLUME_FACTOR) if source in ("bybit_perps", "mexc_perps", "mexc") else 1.0
+        _ns.QV_SOURCE_FACTOR = float(LIVE_VOLUME_FACTOR) if source in ("pionex_perps", "bybit_perps", "mexc_perps", "mexc") else 1.0
     except Exception:                                  # noqa: BLE001
         pass
-    if source == "bybit_perps":
+    if source == "pionex_perps":
+        # Every Pionex crypto USDT perpetual: the venue he trades (6 Nov 2026).
+        # Candles: the same coin's MEXC perp (utils.exchange._pionex_perps).
+        from utils.exchange import list_perp_symbols
+        tickers = list_perp_symbols("pionex")
+        exchange = "pionex"
+    elif source == "bybit_perps":
         # Every Bybit crypto USDT perpetual — the trading venue (perp candles).
         from utils.exchange import list_perp_symbols
         tickers = list_perp_symbols("bybit")
@@ -471,11 +477,16 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     # weak in chop/bear per the backtest), so only ARM in a risk-on regime.
     # Below the threshold we still show candidates but arm nothing and keep any
     # existing triggers untouched. The macro Deployment Score is the filter.
+    # 6 Nov 2026: the gate blocks LONGS only. The live research setups are shorts
+    # built for a weak tape and were tested with no macro gate, so a low score
+    # must not silence them (it removed every short on risk-off days).
     if regime_score is not None and regime_score < _MIN_DEPLOY_TO_ARM:
-        return {**common, "armed": [], "regime_blocked": True,
-                "regime_score": regime_score,
-                "management": "Exits are set per setup (breakouts trail; mean-reversion "
-                              "& momentum take a fixed target)."}
+        top = [r for r in top if r["_plan"]["direction"] == "short"]
+        if not top:
+            return {**common, "armed": [], "regime_blocked": True,
+                    "regime_score": regime_score,
+                    "management": "Exits are set per setup (breakouts trail; mean-reversion "
+                                  "& momentum take a fixed target)."}
 
     # A fresh scan supersedes the previous armed set.
     cancelled = tdb.clear_active()

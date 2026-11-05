@@ -3,7 +3,7 @@ Page 5: Manual Trade Desk — a deep read on ONE coin you already have in mind,
 before you place a manual trade. Distinct from the scanner (a wide net). On
 demand only; NOT wired to the scanner or the monitor. Signal-only: it never
 places or integrates an order — the grid parameters are a starting suggestion
-you set on Bybit yourself.
+you set on Pionex yourself.
 """
 import streamlit as st
 from config import DARK_THEME_CSS
@@ -156,11 +156,11 @@ def _macd_svg(cs, w=720, h=90) -> str:
 st.title("🎯 Manual Trade Desk")
 st.caption("Deep read on ONE coin before a manual trade. Raw ccxt OHLC, all indicators "
            "computed in code. *Signal-only — grid params are a starting suggestion you set "
-           "on Bybit yourself; nothing here places or controls an order.*")
+           "on Pionex yourself; nothing here places or controls an order.*")
 
 c1, c2, c3 = st.columns([3, 1, 1])
 with c1:
-    raw = st.text_input("Coin symbol (Bybit)", value="", placeholder="e.g. SOL, WIF, PEPE").strip()
+    raw = st.text_input("Coin symbol (Pionex)", value="", placeholder="e.g. SOL, WIF, PEPE").strip()
 with c2:
     st.write("")
     go = st.button("🔎 Read", type="primary", width="stretch")
@@ -339,7 +339,7 @@ else:
                   f"<div style='font-size:16px;font-weight:700;color:{c}'>{v}</div></div>" for k, v, c in _cells)
         + "</div></div>", unsafe_allow_html=True)
     st.caption(f"Why: {_bp['reason']}. Close it after {_g['max_hold_h']}h if neither the stop nor your exit has hit. "
-               "Set it on Pionex or Bybit yourself; nothing is placed for you.")
+               "Set it on Pionex yourself; nothing is placed for you.")
     for _w in _bp.get("warnings", []):
         st.warning(_w)
     st.caption("Not edge tested: the best grid setup broke even in the backtest. "

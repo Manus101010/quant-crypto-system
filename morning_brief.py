@@ -300,12 +300,28 @@ def _week_short() -> str:
         return ""
 
 
+def _universe_warning() -> str:
+    """The scanner's saved Pionex coin list goes stale: say so after 21 days."""
+    try:
+        import json
+        from config import ROOT_DIR
+        d = json.loads((ROOT_DIR / "data" / "pionex_perps.json").read_text())
+        age = (datetime.date.today() - datetime.date.fromisoformat(d["updated"])).days
+        if age > 21:
+            return (f"⚠️ The Pionex coin list is {age} days old; new listings are being missed. "
+                    "Ask Claude to refresh it.")
+    except Exception:                              # noqa: BLE001
+        return "⚠️ The saved Pionex coin list is missing; ask Claude to fix it."
+    return ""
+
+
 def build_brief() -> str:
     """6 Nov 2026 rewrite: short, plain, Pionex first. No dollar results, no command
     list, no internal state (deactivated setups, deployment score)."""
     tdb.init_db()
     parts = [_date_line(), _btc_line(), _new_trades(), _movers_short(),
-             _results_line(), _week_short(), "<i>/help lists the commands.</i>"]
+             _results_line(), _week_short(), _universe_warning(),
+             "<i>/help lists the commands.</i>"]
     return "\n\n".join(p for p in parts if p)
 
 

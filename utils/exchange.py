@@ -183,6 +183,60 @@ def is_non_crypto(base: str, trad: set[str], crypto: set[str]) -> bool:
             or (b + "STOCK" in trad and b not in crypto))
 
 
+# ── Pionex (6 Nov 2026): the venue he actually trades ──────────────────────────
+# Pionex's public API answers from most hosts but returns 403 to GitHub Actions
+# runners, and ccxt has no Pionex client. So the universe is Pionex's own perp
+# list (live, else data/pionex_perps.json) and candles always come from the SAME
+# coin's MEXC perp (_fallback_perp_ohlcv), like the Bybit setup before it.
+_PIONEX_SYMBOLS_URL = "https://api.pionex.com/api/v1/common/symbols?type=PERP"
+# Pionex lists stocks, ETFs, metals, oil and pre IPO names as perps with no tag.
+_PIONEX_NON_CRYPTO = {"ANTHROPIC", "OPENAI", "BRENTOIL", "COPPER", "HYUNDAI", "NATGAS",
+                      "SKHY", "SMSN", "WTI", "CL", "XAG", "XAU", "XPD", "XPT", "XAUT",
+                      "PAXG", "USD", "USDC", "USDT"}
+# Bases ending in X are tokenised stocks (AAPLX, NVDAX...) except these coins.
+_PIONEX_CRYPTO_X = {"AVAX", "CFX", "CVX", "FRAX", "GMX", "IMX", "MYX", "SNX", "STX", "SPX",
+                    "TRX", "ZRX", "POLYX", "INX"}
+
+
+def pionex_crypto_bases(symbols: list[dict]) -> list[str]:
+    """Crypto USDT perps from Pionex's symbol list (pure; used by the refresh script)."""
+    out = []
+    for x in symbols:
+        sym = str(x.get("symbol", ""))
+        if not sym.endswith("_USDT_PERP") or not sym.isascii():
+            continue
+        if str(x.get("status", "TRADING")).upper() != "TRADING":
+            continue
+        b = sym[: -len("_USDT_PERP")].upper()
+        if (b in _PIONEX_NON_CRYPTO or b in _COMMODITIES or b in _NON_CRYPTO
+                or (b.endswith("X") and b not in _PIONEX_CRYPTO_X)):
+            continue
+        out.append(b)
+    return sorted(set(out))
+
+
+def _pionex_perps() -> list[str]:
+    now = time.time()
+    key = "pionex:USDT:perps"
+    if key in _market_cache and now - _market_cache[key][0] < _MARKET_TTL:
+        return _market_cache[key][1]
+    res: list[str] = []
+    try:
+        import requests
+        r = requests.get(_PIONEX_SYMBOLS_URL, timeout=15)
+        r.raise_for_status()
+        res = [f"{b}-USD" for b in pionex_crypto_bases(r.json()["data"]["symbols"])]
+    except Exception as exc:                # noqa: BLE001
+        log.info("exchange: Pionex list unavailable here (%s) — using the saved list", str(exc)[:80])
+    if len(res) < 100:
+        res = _saved_universe("pionex")
+    _geo_blocked.add("pionex")              # never direct candles: always MEXC perps
+    _perp_loaded.add("pionex")
+    _market_cache[key] = (now, res)
+    log.info("exchange: pionex has %d crypto USDT perps (candles from MEXC perps)", len(res))
+    return res
+
+
 def list_perp_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
     """
     Every active crypto USDT perpetual on `exchange`, as app tickers ('BASE-USD').
@@ -191,6 +245,8 @@ def list_perp_symbols(exchange: str = "mexc", quote: str = "USDT") -> list[str]:
     symbol + contract size so get_ohlcv can fall back to perp candles for coins
     with no spot pair.
     """
+    if exchange == "pionex":
+        return _pionex_perps()
     now = time.time()
     key = f"{exchange}:{quote}:perps"
     if key in _market_cache and now - _market_cache[key][0] < _MARKET_TTL:
@@ -315,9 +371,10 @@ def _fallback_perp_ohlcv(symbol: str, timeframe: str, limit: int) -> pd.DataFram
     base = base[:-4] if base.endswith("-USD") else base
     core, mult = _split_prefix(base)
     cands = [(base, 1.0)]
-    if mult > 1:                               # only a prefixed name may map across units
-        cands += [(f"{p}{core}" if p > 1 else core, mult / p)
-                  for p in (*_PREFIXES, 1) if p != mult]
+    # Any unit may map across: Bybit 1000PEPE = MEXC PEPE x 1000, and
+    # Pionex BONK = MEXC 1000BONK / 1000. Same coin, prices scaled to the asked unit.
+    cands += [(f"{p}{core}" if p > 1 else core, mult / p)
+              for p in (*_PREFIXES, 1) if p != mult]
     for b, factor in cands:
         if f"{fb}:{b}-USD" not in _perp_info:
             continue
@@ -337,7 +394,7 @@ def in_perp_universe(symbol: str, exchange: str | None) -> bool:
     """True when `symbol` belongs to `exchange`'s perp universe (live or saved list).
     Such symbols must only ever get that perp's candles (or the fallback venue's
     perp of the same coin), never a spot pair of the same ticker elsewhere."""
-    if exchange not in ("bybit", "mexc"):
+    if exchange not in ("bybit", "mexc", "pionex"):
         return False
     try:
         return symbol.strip().upper() in set(list_perp_symbols(exchange))
@@ -352,6 +409,8 @@ def get_ohlcv(symbol: str, timeframe: str = "1d", limit: int = 400,
     Tries the spot fallback chain (or a single `exchange` if given). Empty
     DataFrame if every venue fails / lacks the pair.
     """
+    if exchange == "pionex":                   # no Pionex candles API we can use: MEXC perp
+        return _fallback_perp_ohlcv(symbol, timeframe, limit)
     if exchange in ("mexc", "bybit"):
         _ensure_perp_map(exchange)             # loads once; fills the perp map
     if exchange in _geo_blocked and exchange != _GEO_FALLBACK:

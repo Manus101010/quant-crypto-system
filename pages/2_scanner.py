@@ -62,12 +62,13 @@ c1, c2, c3 = st.columns([1.4, 1, 1])
 with c1:
     source_lbl = st.selectbox(
         "Universe",
-        ["Bybit — USDT perps", "MEXC — all pairs", "Top by market cap"],
+        ["Pionex futures", "Bybit USDT perps", "MEXC all pairs", "Top by market cap"],
         index=0,
-        help="Bybit: every crypto USDT perpetual on Bybit — the venue you trade (native "
-             "stop-loss, take-profit and trailing stops; longs and shorts).",
+        help="Pionex: every crypto USDT perpetual on Pionex, the venue you trade "
+             "(candles from the same coin's MEXC perp).",
     )
-    src = ("bybit_perps" if source_lbl.startswith("Bybit") else
+    src = ("pionex_perps" if source_lbl.startswith("Pionex") else
+           "bybit_perps" if source_lbl.startswith("Bybit") else
            "mexc" if source_lbl.startswith("MEXC") else "top_mcap")
     is_mexc = src != "top_mcap"          # venue-wide scan (name kept for the UI below)
     universe = 100
@@ -598,12 +599,14 @@ try:
         v = r * _rpt
         return f"{'+' if v >= 0 else '−'}${abs(v):,.2f}"
 
-    def _per_dollar(pf) -> str:
-        return "—" if pf is None else ("no losses yet" if pf == float("inf") else f"${pf:.2f}")
+    def _per_dollar(pf) -> str:            # profit factor as a plain ratio
+        return "—" if pf is None else ("no losses yet" if pf == float("inf") else f"{pf:.2f}")
 
-    st.caption(f"All dollar figures assume your standard trade: \\${_margin:.0f} put in, "
-               f"losing at most \\${_rpt:.2f} if the stop is hit. Needs about 30 finished "
-               "trades before the numbers mean much.")
+    def _r(r) -> str:                      # 6 Nov 2026: results in R only, never dollars
+        return "—" if r is None else f"{r:+.2f}R"
+
+    st.caption("Results are in R: 1R is what a trade risks at its stop. Needs about 30 "
+               "finished trades before the numbers mean much.")
 
     _ls = _oc.live_stats()
     _tot = _ls["total"]
@@ -612,7 +615,7 @@ try:
     _h = _oc.portfolio_heat(risk_per_trade=_rpt)
 
     @st.cache_data(ttl=900, show_spinner=False)
-    def _marks(_ids: tuple) -> dict:
+    def _marks(ids: tuple) -> dict:      # no leading _: Streamlit must hash it
         return _oc.open_marks()
     _mk = _marks(tuple(t["id"] for t in _ls["open"])) if _ls["open"] else {}
 
@@ -622,7 +625,7 @@ try:
     y1.metric("Open now", len(_ys["open"]))
     y2.metric("Finished", _yt["n"])
     y3.metric("Winners", f"{_yt['win_rate']*100:.0f}%" if _yt["win_rate"] is not None else "—")
-    y4.metric("Profit / loss", _usd(_yt["total_r"]) if _yt["n"] else "—")
+    y4.metric("Average per trade", _r(_yt["total_r"] / _yt["n"]) if _yt["n"] else "—")
     _col = "#f87171" if _h["left"] <= 0 else "#4ade80"
     st.markdown(
         f"<div style='border-left:4px solid {_col};padding:8px 12px;background:#161b22;"
@@ -637,17 +640,14 @@ try:
     st.markdown("#### 🧪 Every alert the system sent (practice trades)")
     st.caption("Each alert is followed on paper using its own exit rules, whether or not "
                "you took it. This is the honest test of the system.")
-    _ur = sum(_mk.values()) if _mk else None
-    c1, c2, c3 = st.columns(3)
+    c1, c3 = st.columns(2)
     c1.metric("Open now", len(_ls["open"]))
-    c2.metric("Open trades are currently", _usd(_ur),
-              help="Profit or loss of the open practice trades if they closed at the latest price.")
     c3.metric("Finished", _tot["n"])
     c4, c5, c6 = st.columns(3)
     c4.metric("Winners", f"{_tot['win_rate']*100:.0f}%" if _tot["win_rate"] is not None else "—")
-    c5.metric("Finished trades made / lost", _usd(_tot["total_r"]) if _tot["n"] else "—")
-    c6.metric("Won for every $1 lost", _per_dollar(_tot["pf"]),
-              help="Above $1.00 = the wins are bigger than the losses. Below $1.00 = losing overall.")
+    c5.metric("Average per trade", _r(_tot["total_r"] / _tot["n"]) if _tot["n"] else "—")
+    c6.metric("Wins vs losses (PF)", _per_dollar(_tot["pf"]),
+              help="Above 1.00 = the wins are bigger than the losses. Below 1.00 = losing overall.")
 
     if _ls["open"]:
         import pandas as _pd2
@@ -656,7 +656,7 @@ try:
             "id": t["id"], "Took it": bool(t.get("taken")),
             "Coin": t["symbol"].replace("-USD", ""),
             "Side": "Short" if t.get("direction") == "short" else "Long",
-            "Profit / loss now": _usd(_mk.get(t["id"])),
+            "Now": _r(_mk.get(t["id"])),
             "Entry": t.get("fired_price"), "Stop now": t.get("trail_stop") or t.get("stop"),
             "Days open": t.get("bars_held") or 0,
             "Setup": t.get("setup_label") or "",
@@ -677,8 +677,8 @@ try:
         with st.expander("Results by setup type (finished practice trades)"):
             st.dataframe(_pd.DataFrame([{
                 "Setup": r["setup"], "Trades": r["n"], "Winners": f"{r['win_rate']*100:.0f}%",
-                "Average per trade": _usd(r["avg_r"]), "Total": _usd(r["total_r"]),
-                "Won per $1 lost": _per_dollar(r["pf"]),
+                "Average per trade": _r(r["avg_r"]),
+                "PF": _per_dollar(r["pf"]),
                 "Same, in past testing": _per_dollar(r["bt_pf"]),
                 "Verdict": _vcol.get(r["verdict"], r["verdict"]),
             } for r in _ls["by_setup"]]), hide_index=True, width="stretch")

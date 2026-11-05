@@ -11,10 +11,10 @@ from skills import new_setups as N  # noqa: E402
 from config import LIVE_VOLUME_FACTOR  # noqa: E402
 
 N.QV_SOURCE_FACTOR = float(LIVE_VOLUME_FACTOR)
-tk = X.list_perp_symbols("bybit")
+tk = X.list_perp_symbols("pionex")
 print("DIAG universe:", len(tk), "geo:", sorted(X._geo_blocked))
 print("DIAG mexc perp map size:", sum(1 for k in X._perp_info if k.startswith("mexc:")))
-ohlc = X.get_ohlcv_batch(tk, timeframe="1d", limit=400, exchange="bybit")
+ohlc = X.get_ohlcv_batch(tk, timeframe="1d", limit=400, exchange="pionex")
 got = {k: v for k, v in ohlc.items() if v is not None and not v.empty}
 print("DIAG candles for:", len(got), "of", len(tk))
 print("DIAG fetch fail reasons:", dict(X._perp_fail.most_common(5)))
