@@ -204,7 +204,7 @@ def check_grid(mode: str, lo: float, hi: float, grids: int, leverage: float,
     if realised_loss := max(0.0, -daily_realised_pnl):
         m["daily_realised_loss"] = round(realised_loss, 2)
     if realised_loss >= DAILY_LOSS_CAP:
-        _fail(f, "daily_loss_cap", f"realised loss today ${realised_loss:.2f} >= ${DAILY_LOSS_CAP:.0f}",
+        _fail(f, "daily_loss_cap", "daily loss limit reached",
               "guard is shut until the Sydney day rolls over")
 
     # Stop: required, and Bybit only takes it beyond the range edge.
@@ -271,7 +271,7 @@ def check_grid(mode: str, lo: float, hi: float, grids: int, leverage: float,
         _fail(f, "open_risk_cap", f"open risk ${open_risk_usd:.2f} + ${loss:.2f} > ${OPEN_RISK_CAP:.0f}",
               f"this stop may lose at most ${max(0.0, OPEN_RISK_CAP - open_risk_usd):.2f}")
     if realised_loss < DAILY_LOSS_CAP and realised_loss + loss > DAILY_LOSS_CAP + 1e-9:
-        _fail(f, "daily_loss_room", f"realised ${realised_loss:.2f} + stop ${loss:.2f} > ${DAILY_LOSS_CAP:.0f}",
+        _fail(f, "daily_loss_room", "this stop would take you past today's loss limit",
               f"this stop may lose at most ${DAILY_LOSS_CAP - realised_loss:.2f} today")
     return Verdict(REJECT if f else ACCEPT, f, m, sugg)
 
@@ -349,7 +349,7 @@ def check_plain(direction: str, entry: float, stop: float | None, leverage: floa
         _fail(f, "min_margin", f"margin ${margin:.2f} < ${MIN_MARGIN:.0f}", f"use at least ${MIN_MARGIN:.0f}")
     realised_loss = max(0.0, -daily_realised_pnl)
     if realised_loss >= DAILY_LOSS_CAP:
-        _fail(f, "daily_loss_cap", f"realised loss today ${realised_loss:.2f} >= ${DAILY_LOSS_CAP:.0f}",
+        _fail(f, "daily_loss_cap", "daily loss limit reached",
               "guard is shut until the Sydney day rolls over")
     notional = margin * leverage
     qty = notional / entry
@@ -388,7 +388,7 @@ def check_plain(direction: str, entry: float, stop: float | None, leverage: floa
         _fail(f, "open_risk_cap", f"open risk ${open_risk_usd:.2f} + ${loss:.2f} > ${OPEN_RISK_CAP:.0f}",
               f"this stop may lose at most ${max(0.0, OPEN_RISK_CAP - open_risk_usd):.2f}")
     if realised_loss < DAILY_LOSS_CAP and realised_loss + loss > DAILY_LOSS_CAP + 1e-9:
-        _fail(f, "daily_loss_room", f"realised ${realised_loss:.2f} + stop ${loss:.2f} > ${DAILY_LOSS_CAP:.0f}",
+        _fail(f, "daily_loss_room", "this stop would take you past today's loss limit",
               f"this stop may lose at most ${DAILY_LOSS_CAP - realised_loss:.2f} today")
     return Verdict(REJECT if f else ACCEPT, f, m, sugg)
 

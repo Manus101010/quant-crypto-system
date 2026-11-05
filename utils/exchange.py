@@ -192,10 +192,10 @@ _PIONEX_SYMBOLS_URL = "https://api.pionex.com/api/v1/common/symbols?type=PERP"
 # Pionex lists stocks, ETFs, metals, oil and pre IPO names as perps with no tag.
 _PIONEX_NON_CRYPTO = {"ANTHROPIC", "OPENAI", "BRENTOIL", "COPPER", "HYUNDAI", "NATGAS",
                       "SKHY", "SMSN", "WTI", "CL", "XAG", "XAU", "XPD", "XPT", "XAUT",
-                      "PAXG", "USD", "USDC", "USDT"}
+                      "PAXG", "USD", "USDC", "USDT", "ANT", "CBRS", "CF", "MOONSHOT"}
 # Bases ending in X are tokenised stocks (AAPLX, NVDAX...) except these coins.
 _PIONEX_CRYPTO_X = {"AVAX", "CFX", "CVX", "FRAX", "GMX", "IMX", "MYX", "SNX", "STX", "SPX",
-                    "TRX", "ZRX", "POLYX", "INX"}
+                    "TRX", "ZRX", "POLYX", "INX", "ARX", "BEAMX", "SLX"}
 
 
 def pionex_crypto_bases(symbols: list[dict]) -> list[str]:
@@ -360,6 +360,11 @@ def _split_prefix(base: str) -> tuple[str, int]:
     return base, 1
 
 
+# Same coin, different ticker on MEXC (checked 6 Nov 2026: prices match Pionex).
+_MEXC_ALIAS = {"FIL": "FILECOIN", "TRUMP": "TRUMPOFFICIAL", "PUMP": "PUMPFUN", "MON": "MONAD",
+               "NEIRO": "NEIROCTO", "OPEN": "OPENLEDGER", "SOON": "SOONNETWORK", "ARC": "ARCSOL"}
+
+
 def _fallback_perp_ohlcv(symbol: str, timeframe: str, limit: int) -> pd.DataFrame:
     """Candles for a blocked venue's perp from _GEO_FALLBACK's PERP of the SAME
     coin — never a spot pair or a same-ticker different asset. Multiplier prefixes
@@ -369,6 +374,7 @@ def _fallback_perp_ohlcv(symbol: str, timeframe: str, limit: int) -> pd.DataFram
     _ensure_perp_map(fb)
     base = symbol.strip().upper()
     base = base[:-4] if base.endswith("-USD") else base
+    base = _MEXC_ALIAS.get(base, base)
     core, mult = _split_prefix(base)
     cands = [(base, 1.0)]
     # Any unit may map across: Bybit 1000PEPE = MEXC PEPE x 1000, and
@@ -397,7 +403,10 @@ def in_perp_universe(symbol: str, exchange: str | None) -> bool:
     if exchange not in ("bybit", "mexc", "pionex"):
         return False
     try:
-        return symbol.strip().upper() in set(list_perp_symbols(exchange))
+        sym = symbol.strip().upper()
+        if exchange == "pionex" and sym in set(_saved_universe("bybit")):
+            return True        # Bybit era triggers: never a same-ticker SPOT fallback
+        return sym in set(list_perp_symbols(exchange))
     except Exception:                          # noqa: BLE001
         return False
 
@@ -464,6 +473,17 @@ def get_ohlcv_batch(symbols: list[str], timeframe: str = "1d", limit: int = 400,
                     out[s] = df
             except Exception as exc:       # noqa: BLE001
                 log.debug("exchange: batch %s failed — %s", s, exc)
+    if _perp_fail and len(out) < len(symbols):
+        # 6 Nov 2026: MEXC rate limits (code 510) dropped about 3% of coins per scan
+        # at random. One slow, serial second pass for the ones that came back empty.
+        time.sleep(3)
+        for s in [x for x in symbols if x not in out]:
+            try:
+                df = get_ohlcv(s, timeframe, limit, exchange)
+                if not df.empty:
+                    out[s] = df
+            except Exception as exc:       # noqa: BLE001
+                log.debug("exchange: retry %s failed — %s", s, exc)
     log.info("exchange: OHLC for %d/%d symbols", len(out), len(symbols))
     if _perp_fail:
         log.info("exchange: perp candle retries — %s", dict(_perp_fail.most_common(3)))

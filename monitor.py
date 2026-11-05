@@ -119,11 +119,12 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
         from config import ENTRY_MAX_SLIP_PCT
     except Exception:                               # noqa: BLE001
         ENTRY_MAX_SLIP_PCT = 0.3
-    cap = price * (1 + (ENTRY_MAX_SLIP_PCT if short else -ENTRY_MAX_SLIP_PCT) / 100)
+    # Worst fill: lower for a short, higher for a long (wider stop, breaks sizing).
+    cap = price * (1 + (-ENTRY_MAX_SLIP_PCT if short else ENTRY_MAX_SLIP_PCT) / 100)
 
     lines = [f"{'🔴 <b>SHORT' if short else '🟢 <b>LONG'} {coin}</b> on Pionex Futures",
              f"<i>{label}: {_SETUP_PLAIN.get(label, 'a validated setup')}</i>", ""]
-    lines.append(f"Entry: <b>{f(price)}</b> (skip if {'above' if short else 'below'} {f(cap)})")
+    lines.append(f"Entry: <b>{f(price)}</b> (skip if {'below' if short else 'above'} {f(cap)})")
     if stop:
         lines.append(f"Stop loss: <b>{f(stop)}</b> ({_pct(price, stop)})")
     if take and risk:
@@ -148,6 +149,8 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     if trailing:
         how.append("I'll message you each time the stop should move down." if short
                    else "I'll message you each time the stop should move up.")
+    if m.get("max_hold"):
+        how.append(f"Close it after {int(m['max_hold'])} days if neither the stop nor take profit has hit.")
     lines += [""] + how
     lines.append(f"Took it? Send /took {coin}")
     return "\n".join(lines)

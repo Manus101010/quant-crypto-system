@@ -100,7 +100,7 @@ def _took(arg: str, taken: bool) -> str:
                 led.issue({"symbol": t["symbol"], "type": "plain",
                            "direction": t.get("direction") or "long",
                            "stop": t.get("stop"), "trigger_id": t["id"]})
-                lock_note = "\n🔒 This one is your 1R trade after the stop out: max loss $12.50."
+                lock_note = "\n🔒 This one is your 1R trade after the stop out: keep it to the planned size."
         except Exception as exc:                         # noqa: BLE001
             log.debug("guard lock on /took failed: %s", exc)
     return (f"✅ Marked {sym} as taken — it now counts toward your risk cap.{lock_note}" if taken

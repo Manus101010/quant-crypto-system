@@ -126,46 +126,6 @@ def _decay() -> str:
     return f"⛔ <b>Deactivated by decay watch:</b> {names}"
 
 
-def _track_record() -> str:
-    """Live results of fired signals, and any setup lagging its backtest."""
-    try:
-        from triggers import outcomes
-        ls = outcomes.live_stats()
-    except Exception:                              # noqa: BLE001
-        return ""
-    t = ls["total"]
-    if not t["n"] and not ls["open"]:
-        return ""
-    from config import RISK_PER_TRADE_USD as _rpt
-    since = f" since {ls['since'][:10]}" if ls.get("since") else ""
-    line = f"📒 <b>Every signal (system){since}:</b> {t['n']} closed"
-    if t["n"]:
-        line += (f", {t['win_rate']*100:.0f}% win, {t['total_r']:+.2f}R "
-                 f"(${t['total_r']*_rpt:+.2f})")
-    line += f" · {len(ls['open'])} open"
-    try:
-        y = outcomes.live_stats(taken_only=True)
-        yt = y["total"]
-        if yt["n"] or y["open"]:
-            line += f"\n🙋 <b>Your trades:</b> {yt['n']} closed"
-            if yt["n"]:
-                line += (f", {yt['win_rate']*100:.0f}% win, {yt['total_r']:+.2f}R "
-                         f"(${yt['total_r']*_rpt:+.2f})")
-            line += f" · {len(y['open'])} open"
-    except Exception:                              # noqa: BLE001
-        pass
-    try:
-        h = outcomes.portfolio_heat()
-        line += (f"\n🔥 Heat ${h['open_risk']:.0f}/${h['cap']:.0f}"
-                 + (" — <b>full</b>, skip new entries" if h["left"] <= 0 else ""))
-    except Exception:                              # noqa: BLE001
-        pass
-    lag = [r["setup"] for r in ls["by_setup"] if r["verdict"] in ("lagging backtest", "no edge live")]
-    if lag:
-        line += "\n⚠️ Underperforming live: " + ", ".join(lag)
-    return line
-
-
 def _gate_line() -> str:
     try:
         from utils.breadth import long_gate, alt_breadth
@@ -222,8 +182,8 @@ def _btc_line() -> str:
         from utils.exchange import get_ohlcv
         d = get_ohlcv("BTC-USD", "1d", 60)
         px = float(d["close"].iloc[-1]) if d is not None and len(d) else None
-        ok, _ = long_gate()
-        side = "longs and shorts allowed" if ok else "below its 50 day average, so shorts only"
+        ok, why = long_gate()
+        side = "longs and shorts allowed" if ok else f"{why}, so shorts only"
         return f"BTC {px:,.0f}: {side}." if px else f"BTC: {side}."
     except Exception:                              # noqa: BLE001
         return ""
@@ -232,8 +192,14 @@ def _btc_line() -> str:
 def _new_trades() -> str:
     """Alerts that fired in the last 24h and are still open, as Pionex orders."""
     cutoff = (datetime.datetime.utcnow() - datetime.timedelta(hours=24)).isoformat()
+    try:
+        from triggers.outcomes import is_basket_capped
+    except Exception:                              # noqa: BLE001
+        def is_basket_capped(t):                   # noqa: E306
+            return False
     rows = [t for t in tdb.get_triggers_since(cutoff)
-            if t.get("status") == "fired" and t.get("outcome") is None]
+            if t.get("status") == "fired" and t.get("outcome") is None
+            and not is_basket_capped(t)]
     if not rows:
         return "<b>New trades:</b> none in the last 24 hours."
     try:
