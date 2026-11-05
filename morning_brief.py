@@ -209,29 +209,104 @@ def _movers() -> str:
         return ""
 
 
+def _date_line() -> str:
+    import zoneinfo
+    now = datetime.datetime.now(zoneinfo.ZoneInfo("Australia/Sydney"))
+    return f"☀️ <b>{now.strftime('%a %d %b')}</b>"
+
+
+def _btc_line() -> str:
+    """One line: where BTC is and what that allows."""
+    try:
+        from utils.breadth import long_gate
+        from utils.exchange import get_ohlcv
+        d = get_ohlcv("BTC-USD", "1d", 60)
+        px = float(d["close"].iloc[-1]) if d is not None and len(d) else None
+        ok, _ = long_gate()
+        side = "longs and shorts allowed" if ok else "below its 50 day average, so shorts only"
+        return f"BTC {px:,.0f}: {side}." if px else f"BTC: {side}."
+    except Exception:                              # noqa: BLE001
+        return ""
+
+
+def _new_trades() -> str:
+    """Alerts that fired in the last 24h and are still open, as Pionex orders."""
+    cutoff = (datetime.datetime.utcnow() - datetime.timedelta(hours=24)).isoformat()
+    rows = [t for t in tdb.get_triggers_since(cutoff)
+            if t.get("status") == "fired" and t.get("outcome") is None]
+    if not rows:
+        return "<b>New trades:</b> none in the last 24 hours."
+    try:
+        from triggers.outcomes import planned_position
+    except Exception:                              # noqa: BLE001
+        planned_position = None
+    out = ["<b>New trades</b> (Pionex Futures)"]
+    for t in rows[:6]:
+        short = t.get("direction") == "short"
+        coin = t["symbol"].replace("-USD", "")
+        e, st_, tp = t.get("fired_price"), t.get("stop"), t.get("tp") or t.get("target")
+        line = f"{'🔴 Short' if short else '🟢 Long'} <b>{coin}</b>: entry {_fmt(e)}, stop {_fmt(st_)}"
+        if tp:
+            line += f", take profit {_fmt(tp)}"
+        pos = planned_position(e, st_) if planned_position else None
+        if pos:
+            line += f", ${pos['margin']:.0f} at {pos['leverage']}x"
+        out.append(line)
+    out.append("Prices may have moved since the alert: skip any that ran past the entry.")
+    return "\n".join(out)
+
+
+def _movers_short() -> str:
+    """Only the movers in a clean state; one line if there are none."""
+    try:
+        from desk import movers
+        b = movers.board()
+    except Exception as exc:                       # noqa: BLE001
+        log.debug("movers failed: %s", exc)
+        return ""
+    keep = [r for r in b["rows"] if r["state"] not in ("CHOP", "NO DATA")]
+    if not keep:
+        return "<b>Movers:</b> nothing clean in today's top gainers and losers."
+    out = ["<b>Movers worth a look</b>"]
+    for r in keep:
+        icon, verdict = movers.VERDICT.get(r["state"], ("·", ""))
+        out.append(f"{icon} <b>{r['base']}</b> {r['pct']:+.0f}%: {r['state'].lower()}. {verdict}")
+    return "\n".join(out)
+
+
+def _results_line() -> str:
+    """Win rate and average R per trade. Never dollar totals."""
+    try:
+        from triggers import outcomes
+        parts = []
+        for name, taken in (("Your trades", True), ("All alerts", False)):
+            t = outcomes.live_stats(taken_only=taken)["total"]
+            if t["n"]:
+                parts.append(f"{name}: {t['n']} closed, {t['win_rate'] * 100:.0f}% won, "
+                             f"{t['total_r'] / t['n']:+.2f}R per trade")
+        return ("<b>Results</b>\n" + "\n".join(parts)) if parts else ""
+    except Exception:                              # noqa: BLE001
+        return ""
+
+
+def _week_short() -> str:
+    try:
+        from utils import events
+        mac = events.macro_events(7)
+        if not mac:
+            return ""
+        return "<b>This week:</b> " + "; ".join(f"{e['name']} {events._when(e['date'])}" for e in mac)
+    except Exception:                              # noqa: BLE001
+        return ""
+
+
 def build_brief() -> str:
+    """6 Nov 2026 rewrite: short, plain, Pionex first. No dollar results, no command
+    list, no internal state (deactivated setups, deployment score)."""
     tdb.init_db()
-    today = datetime.datetime.utcnow().strftime("%a %d %b %Y")
-    parts = [f"☀️ <b>Morning Brief — {today} UTC</b>",
-             _regime_line(), _overnight(), _active(), _watchlist()]
-    gl = _gate_line()
-    if gl:
-        parts.append(gl)
-    wa = _week_ahead()
-    if wa:
-        parts.append(wa)
-    mv = _movers()
-    if mv:
-        parts.append(mv)
-    rec = _track_record()
-    if rec:
-        parts.append(rec)
-    decay = _decay()
-    if decay:
-        parts.append(decay)
-    parts.append(COMMANDS_CHEATSHEET)
-    parts.append("<i>Signal only — a read, not a trade. You execute manually.</i>")
-    return "\n\n".join(parts)
+    parts = [_date_line(), _btc_line(), _new_trades(), _movers_short(),
+             _results_line(), _week_short(), "<i>/help lists the commands.</i>"]
+    return "\n\n".join(p for p in parts if p)
 
 
 # Daily reminder of the Telegram commands (he won't remember them otherwise).

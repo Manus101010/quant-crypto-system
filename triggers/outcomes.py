@@ -290,15 +290,11 @@ def _close_text(t: dict, p: dict) -> str:
         kind = "paper trade (basket cap, was not a tradeable alert)"
     urgent = ""
     if t.get("taken") and p["outcome"] in ("stop", "trail", "time"):
-        urgent = (f"🚨 <b>{coin} hit its exit — check Bybit closed it.</b>\n"
-                  f"Price reached {p['exit_price']:.6g}. If you set the stop-loss / trailing "
-                  f"stop on the order, Bybit has already closed it; if not, close it now.\n\n")
+        urgent = (f"🚨 <b>{coin} hit its exit. Check Pionex closed it.</b>\n"
+                  f"Price reached {p['exit_price']:.6g}. If your stop or take profit was set, "
+                  f"Pionex has closed it; if not, close it now.\n\n")
     return urgent + (f"{icon} <b>{coin} {kind} closed</b> — {_EXIT_PLAIN.get(p['outcome'], p['outcome'])}\n"
-            f"Result: <b>{r:+.2f}R</b> — {'made' if r > 0 else 'lost'} {abs(r):.2f}× the amount risked "
-            f"(≈ {'+' if usd >= 0 else '−'}${abs(usd):,.2f} on the ${risk_usd:,.2f} the sized "
-            f"position risked"
-            + (f" at {pos['leverage']}x" if pos else "") + ") "
-            f"after {p['bars_held']} day(s).\n<i>{t.get('setup_label','')}</i>")
+            f"Result: <b>{r:+.2f}R</b> after {p['bars_held']} day(s).\n<i>{t.get('setup_label','')}</i>")
 
 
 def _maybe_partial_msg(t: dict) -> None:

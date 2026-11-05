@@ -100,94 +100,90 @@ def _pct(a, b) -> str:
 
 
 def _alert_text(trg: dict, price: float, reason: str) -> str:
+    """Compact Pionex order card (6 Nov 2026: the long Bybit form was unreadable).
+    Everything needed to place the order on Pionex Futures, nothing else."""
     short = (trg.get("direction") or "long") == "short"
     coin = trg["symbol"].replace("-USD", "")
     label = trg.get("setup_label") or "setup"
-    stop, target = trg.get("stop"), trg.get("target")
+    stop, target, tp = trg.get("stop"), trg.get("target"), trg.get("tp")
+    f = _fmt_price
     try:
         from triggers.scan import _management_params
         m = _management_params(label) or {}
     except Exception:                               # noqa: BLE001
         m = {}
     trailing = bool(m.get("trailing")) and not target
-    hold = m.get("max_hold")
+    take = target or tp
+    risk = abs(price - stop) if stop else 0
+    try:
+        from config import ENTRY_MAX_SLIP_PCT
+    except Exception:                               # noqa: BLE001
+        ENTRY_MAX_SLIP_PCT = 0.3
+    cap = price * (1 + (ENTRY_MAX_SLIP_PCT if short else -ENTRY_MAX_SLIP_PCT) / 100)
 
-    head = (f"🔴 <b>SHORT signal — {coin}</b>  (Bybit USDT perp)" if short
-            else f"🟢 <b>LONG signal — {coin}</b>  (Bybit USDT perp)")
-    lines = [head, f"<i>{label}: {_SETUP_PLAIN.get(label, 'a validated setup')}.</i>", "",
-             f"<b>Why now:</b> {_why_plain(trg)}",
-             f"<b>Price now:</b> {_fmt_price(price)}", "", "📋 <b>The plan</b>"]
-    lines.append(f"• {'Sell (short) around' if short else 'Buy around'}: {_fmt_price(price)}")
+    lines = [f"{'🔴 <b>SHORT' if short else '🟢 <b>LONG'} {coin}</b> on Pionex Futures",
+             f"<i>{label}: {_SETUP_PLAIN.get(label, 'a validated setup')}</i>", ""]
+    lines.append(f"Entry: <b>{f(price)}</b> (skip if {'above' if short else 'below'} {f(cap)})")
     if stop:
-        loss = abs(price - stop) / price * 100
-        lines.append(f"• Stop loss: {_fmt_price(stop)}  (−{loss:.1f}%) — "
-                     f"{'buy back' if short else 'sell'} if it gets here; that caps your loss")
-    part = m.get("partial") or {}
-    if part.get("at_r") and stop:
-        dist = abs(price - stop)
-        ppx = price - part["at_r"] * dist if short else price + part["at_r"] * dist
-        lines.append(f"• Take <b>{part.get('frac', 0.5) * 100:.0f}% profit at {_fmt_price(ppx)}</b> "
-                     f"({_pct(price, ppx)}, +{part['at_r']:g}× your risk)"
-                     + (", then move your stop to your entry — the rest can't lose"
-                        if part.get("breakeven") else ""))
-    tp = trg.get("tp")
-    if tp and stop:
-        tpr = abs(price - tp) / abs(price - stop) if abs(price - stop) else 0
-        lines.append(f"• Take profit: <b>{_fmt_price(tp)}</b>  ({_pct(price, tp)}, +{tpr:.0f}× your "
-                     "risk) for the whole position")
+        lines.append(f"Stop loss: <b>{f(stop)}</b> ({_pct(price, stop)})")
+    if take and risk:
+        lines.append(f"Take profit: <b>{f(take)}</b> ({_pct(price, take)}, {abs(price - take) / risk:.0f}x your risk)")
+    pos = None
+    try:
+        from triggers.outcomes import planned_position
+        pos = planned_position(price, stop)
+    except Exception:                               # noqa: BLE001
+        pass
+    if pos:
+        lines.append(f"Size: <b>${pos['margin']:.0f} margin at {pos['leverage']}x</b>, Isolated")
+    blocked = _risk_block()
+    if blocked:
+        lines += ["", blocked]
+    st_ = _backtest_stats(label)
+    if st_:
+        lines += ["", st_]
+    how = [f"On Pionex: Futures, {coin}USDT, {'Sell / Short' if short else 'Buy / Long'}, "
+           f"Limit {f(price)}, tick TP/SL and enter the stop"
+           + (" and take profit." if take else ".")]
     if trailing:
-        lines.append(("• Until then a" if tp else
-                      "• For the rest: no fixed target — a" if part.get("at_r") else
-                      "• No fixed target — a")
-                     + " <b>trailing stop</b> follows the price "
-                     f"{'down' if short else 'up'} and locks in profit (Bybit does this for "
-                     "you — see below).")
-    elif target:
-        lines.append(f"• Take profit: {_fmt_price(target)}  ({_pct(price, target)})")
-        if stop and abs(price - stop):
-            ratio = abs(target - price) / abs(price - stop)
-            lines.append(f"• Reward vs risk: about {ratio:.1f} to 1 — the win is {ratio:.1f}× the loss")
-    if hold:
-        lines.append(f"• Time limit: close it after {hold} days if nothing's hit")
-    pj = _projection_line(trg, price, label)
-    if pj:
-        lines.append(pj)
-    bb = _bybit_block(trg, price, m)
-    if bb:
-        lines += ["", bb]
-    sz = _sizing_line(trg, price)
-    if sz:
-        lines += ["", sz]
-    # Oct 2026 research: for the new research setups a plain position with a stop
-    # beat every grid tested, so no grid suggestion is attached to them.
-    gb = "" if label in _NO_GRID else _grid_block(trg, price, m)
-    if gb:
-        lines += ["", gb]
-    # Bitcoin backdrop in words (a warning, never a block).
-    try:
-        from utils import btc_regime
-        lab = btc_regime.get_btc_regime()["label"]
-        if lab == btc_regime.RISK_ON:
-            txt = ("headwind — Bitcoin is trending up, shorts are fighting it" if short
-                   else "tailwind — Bitcoin is trending up")
-        elif lab == btc_regime.RISK_OFF:
-            txt = ("tailwind — Bitcoin is weak" if short
-                   else "headwind — Bitcoin is weak, be extra careful with buys")
-        else:
-            txt = "neutral — Bitcoin is mixed, no strong push either way"
-        lines.append(f"🧭 Market: {txt}")
-    except Exception as exc:                        # noqa: BLE001 — never block an alert
-        log.debug("btc_regime stamp failed: %s", exc)
-    try:
-        from utils import events
-        for w in (events.coin_warning(trg["symbol"], 7), events.macro_warning(3)):
-            if w:
-                lines.append(w)
-    except Exception as exc:                        # noqa: BLE001 — never block an alert
-        log.debug("event warnings failed: %s", exc)
-    lines.append("\n<i>Signal only — you decide and place the trade. "
-                 "Tap \"Took it\" on the scanner if you enter.</i>")
+        how.append("I'll message you each time the stop should move down." if short
+                   else "I'll message you each time the stop should move up.")
+    lines += [""] + how
+    lines.append(f"Took it? Send /took {coin}")
     return "\n".join(lines)
+
+
+def _risk_block() -> str:
+    """Only speaks when the trade should be skipped (daily cap, 1R lock, heat full)."""
+    try:
+        from guard.ledger import Ledger
+        led = Ledger()
+        if led.day().get("cap_hit"):
+            return "🛑 <b>Skip this one.</b> Daily loss limit reached; back tomorrow."
+    except Exception:                               # noqa: BLE001
+        pass
+    try:
+        from triggers.outcomes import portfolio_heat
+        if portfolio_heat()["next_risk"] <= 0:
+            return "⚠️ <b>Skip this one.</b> Your open trades already use your full risk limit."
+    except Exception:                               # noqa: BLE001
+        pass
+    return ""
+
+
+def _backtest_stats(label: str) -> str:
+    """One line: odds from the backtest, in plain words. No dollar amounts."""
+    try:
+        from backtesting.crypto_validation import load_validation
+        st_ = ((load_validation() or {}).get("stats") or {}).get(label)
+        if not st_ or not st_.get("avg_loss"):
+            return ""
+        in_r = st_.get("avg_unit") == "R"
+        win_r = st_["avg_win"] if in_r else st_["avg_win"] / abs(st_["avg_loss"])
+        return (f"Past {st_['n']:,} trades: {st_['win_rate'] * 100:.0f}% won, "
+                f"winners averaged {win_r:.1f}x the risk.")
+    except Exception:                               # noqa: BLE001
+        return ""
 
 
 def _projection_line(trg: dict, price: float, label: str) -> str:
