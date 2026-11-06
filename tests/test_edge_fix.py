@@ -307,7 +307,8 @@ def test_close_alert_reports_actual_dollar_risk():
     t = {"symbol": "BTC-USD", "fired_price": 100.0, "stop": 109.0, "setup_label": DS}
     txt = outcomes._close_text(t, {"r_multiple": -1.0, "outcome": "stop",
                                    "exit_price": 109.0, "bars_held": 3})
-    assert "$9.00" in txt and "$12" not in txt and "2x" in txt
+    # 6 Nov 2026: exit messages report R only, never dollars (his wellbeing request)
+    assert "-1.00R" in txt and "$" not in txt
     wide = outcomes.planned_position(100.0, 130.0)     # 30% stop: 1x, smaller position
     assert wide["leverage"] == 1 and wide["margin"] < config.POSITION_MARGIN_USD
     assert wide["worst_loss"] == pytest.approx(config.RISK_PER_TRADE_USD)
@@ -460,7 +461,7 @@ def test_basket_cap_limits_tradeable_fires_per_direction(tmpdb, monkeypatch):
         assert fwd["btc_below_50d"] is True and fwd["liquid_5m_180d"] is False
     tradeable_txt = [s for s in sent if "basket cap" not in s]
     assert any("Take profit" in s and "$86.00" in s for s in tradeable_txt)
-    assert any("Take-profit" in s for s in tradeable_txt)          # Bybit order form
+    assert any("Pionex" in s for s in tradeable_txt)               # Pionex order card
     feats = json.loads(tdb.get_state(f"features:{ids[0]}"))
     assert feats["fwd_oi_3d_rising"] is True
 

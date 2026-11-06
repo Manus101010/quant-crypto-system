@@ -75,14 +75,23 @@ DEPLOY_THRESHOLDS = {
 # risks $12.50 and leverage is set per trade so the stop costs <= $12.50
 # (leverage = 25% / stop distance). Ten such trades = the whole sleeve, so the
 # open-risk cap is 10 x $12.50 = $125.
-SLEEVE_USD: float = float(_secret("SLEEVE_USD") or 300)   # 29 Oct 2026: $300 account
-POSITION_MARGIN_USD: float = float(_secret("POSITION_MARGIN_USD") or 150)   # trader choice 29 Oct: $150 x 2 trades; 25% = $37.50 max loss each
-MAX_LOSS_PCT_OF_MARGIN: float = float(_secret("MAX_LOSS_PCT_OF_MARGIN") or 25)
-MAX_LEVERAGE: int = int(_secret("MAX_LEVERAGE") or 20)
-RISK_PER_TRADE_USD: float = float(_secret("RISK_PER_TRADE_USD")
-                                  or POSITION_MARGIN_USD * MAX_LOSS_PCT_OF_MARGIN / 100)
-MAX_PORTFOLIO_RISK_USD: float = float(_secret("MAX_PORTFOLIO_RISK_USD")
-                                      or SLEEVE_USD / POSITION_MARGIN_USD * RISK_PER_TRADE_USD)
+def _num(name: str, default: float) -> float:
+    """A numeric secret that can never break every page: "$150", "", or junk -> default."""
+    raw = _secret(name)
+    try:
+        return float(str(raw).replace("$", "").replace(",", "").strip()) if raw not in (None, "") else float(default)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+SLEEVE_USD: float = _num("SLEEVE_USD", 300)   # 29 Oct 2026: $300 account
+POSITION_MARGIN_USD: float = _num("POSITION_MARGIN_USD", 150)   # trader choice 29 Oct: $150 x 2 trades; 25% = $37.50 max loss each
+MAX_LOSS_PCT_OF_MARGIN: float = _num("MAX_LOSS_PCT_OF_MARGIN", 25)
+MAX_LEVERAGE: int = int(_num("MAX_LEVERAGE", 20))
+RISK_PER_TRADE_USD: float = _num("RISK_PER_TRADE_USD",
+                                     POSITION_MARGIN_USD * MAX_LOSS_PCT_OF_MARGIN / 100)
+MAX_PORTFOLIO_RISK_USD: float = _num("MAX_PORTFOLIO_RISK_USD",
+                                         SLEEVE_USD / POSITION_MARGIN_USD * RISK_PER_TRADE_USD)
 
 # ── MEXC futures grid-bot suggestions (attached to every alert) ──────────────
 GRID_MAX_LEVERAGE = 5        # hard cap, even when the math allows more
@@ -158,7 +167,7 @@ ENTRY_MAX_SLIP_PCT = 0.3       # don't chase more than this past the signal pric
 # distance with ENTRY_MAX_SLIP_PCT when choosing leverage, so the WORST allowed
 # fill still loses at most MAX_LOSS_PCT_OF_MARGIN of the margin.
 SIZING_FEE_PCT = 0.15
-CANDLE_VENUE = "bybit"
+CANDLE_VENUE = "pionex"        # 6 Nov 2026: scan and price what he trades (Pionex), candles via MEXC perps
 # Max 5 armed per scan (was 15): same-direction alts move together, so a big batch is one bet.
 # At most this many positions open at once. Counts only trades you TOOK: paper
 # signals you skipped no longer fill the book (fix (f), trade_flow.md). Same-direction alts move together, so more at
@@ -168,7 +177,7 @@ MAX_OPEN_POSITIONS = 10
 # 13.4x below the Binance volume all research floors were measured on, so floors
 # are divided by this factor live (docs/edge_fix/trade_flow.md, fix (e)).
 LIVE_VOLUME_FACTOR = 13.4
-AUTO_SCAN_PARAMS = {"source": "bybit_perps", "top_n": 5, "expiry_hours": 72,
+AUTO_SCAN_PARAMS = {"source": "pionex_perps", "top_n": 5, "expiry_hours": 72,
                     "min_vol_usd_m": 0.5 / LIVE_VOLUME_FACTOR, "max_stop_pct": 25.0}
 # Per-setup override of max_stop_pct. research/dist_wide_stops.py (2020-26):
 # Distribution Short with a 25-50% stop did BETTER (PF 2.71, n 217) than with a

@@ -1142,6 +1142,14 @@ def _run_from_bybit(bybit_data: dict, tickers: list[str], criteria: ScanCriteria
         btc_close = btc_daily_close()
     except Exception:                              # noqa: BLE001
         btc_ret_30, btc_close = None, None
+    if btc_close is None and isinstance(bybit_data.get("BTC-USD"), pd.DataFrame):
+        # Same candles the scan already fetched (MEXC perp): the research setups
+        # need BTC's trend and return nothing without it (6 Nov 2026 single point).
+        btc_close = bybit_data["BTC-USD"]["close"]
+        log.warning("scan: BTC cache empty, using the scan's own BTC candles")
+    if btc_close is None:
+        log.warning("scan: NO BTC candles; Distribution Short and Downtrend Bounce Fade "
+                    "cannot fire this scan")
     btc_below_50d = None
     try:
         if btc_close is not None:

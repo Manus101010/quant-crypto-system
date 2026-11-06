@@ -211,17 +211,15 @@ def due_summary(now: datetime, sent: set[str]) -> str | None:
 def summary_text(items: list[dict], wallet: dict, day: dict, open_risk: float,
                  regime: dict | None, unissued: dict) -> str:
     lines = [f"🛡 <b>Guard summary</b> {datetime.now(SYD):%a %H:%M} Sydney"]
-    if wallet:
-        lines.append(f"Equity ${_f(wallet.get('totalEquity')):.2f} · available "
-                     f"${_f(wallet.get('totalAvailableBalance')):.2f}")
-    lines.append(f"Realised today ${day['realised']:+.2f} (unissued ${day['realised_unissued']:+.2f})"
-                 f" · cap -${pf.DAILY_LOSS_CAP:.0f}")
+    # 6 Nov 2026: no balances or realised dollar totals (his wellbeing request).
+    if day.get("realised", 0) <= -pf.DAILY_LOSS_CAP:
+        lines.append("🛑 Daily loss limit reached: no new trades until tomorrow.")
     lines.append(f"Open risk ${open_risk:.2f} of ${pf.OPEN_RISK_CAP:.0f}")
     for it in items:
         m = it["m"]
         stop_txt = "none" if not it.get("stop") else f"{m['stop_dist_pct']:.1f}%"
         s = (f"• {it['symbol']} {it['side']}{' grid' if it['kind'] == 'grid' else ''} "
-             f"uPnL ${it['upnl']:+.2f} · liq {m['liq_dist_pct']:.1f}% away · stop {stop_txt}")
+             f"liq {m['liq_dist_pct']:.1f}% away · stop {stop_txt}")
         if it["kind"] == "grid":
             s += f" · top {m['dist_top_pct']:.1f}% / bottom {m['dist_bottom_pct']:.1f}%"
         if it.get("unissued"):

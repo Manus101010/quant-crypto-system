@@ -268,10 +268,16 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     try:
         from skills import new_setups as _ns
         from config import LIVE_VOLUME_FACTOR
-        _ns.QV_SOURCE_FACTOR = float(LIVE_VOLUME_FACTOR) if source in ("bybit_perps", "mexc_perps", "mexc") else 1.0
+        _ns.QV_SOURCE_FACTOR = float(LIVE_VOLUME_FACTOR) if source in ("pionex_perps", "bybit_perps", "mexc_perps", "mexc") else 1.0
     except Exception:                                  # noqa: BLE001
         pass
-    if source == "bybit_perps":
+    if source == "pionex_perps":
+        # Every Pionex crypto USDT perpetual: the venue he trades (6 Nov 2026).
+        # Candles: the same coin's MEXC perp (utils.exchange._pionex_perps).
+        from utils.exchange import list_perp_symbols
+        tickers = list_perp_symbols("pionex")
+        exchange = "pionex"
+    elif source == "bybit_perps":
         # Every Bybit crypto USDT perpetual — the trading venue (perp candles).
         from utils.exchange import list_perp_symbols
         tickers = list_perp_symbols("bybit")
@@ -427,6 +433,11 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
     slots = max(0, MAX_OPEN_POSITIONS - n_open)
     n_arm = min(top_n, slots)
     # Diversify: cap any single setup so the armed set is a spread across types.
+    # Macro gate (6 Nov 2026): a low Deployment Score blocks LONGS only, and they are
+    # removed BEFORE the slot cut so lower ranked shorts still get the slots.
+    longs_regime_blocked = regime_score is not None and regime_score < _MIN_DEPLOY_TO_ARM
+    if longs_regime_blocked:
+        eligible = [r for r in eligible if r["_plan"]["direction"] == "short"]
     top = _diversify(eligible, n_arm, max_per_setup) if n_arm > 0 else []
 
     # Verdict per open trade from THIS scan: still in a validated setup (same
@@ -465,17 +476,22 @@ def run_scan_and_arm(universe_size: int = 100, top_n: int = 10,
               "held_status": held_status, "btc_below_200d": btc_down,
               "open_positions": n_open, "max_open": MAX_OPEN_POSITIONS,
               "slots_limited": n_arm < top_n, "arm_slots": n_arm,
-              "long_gate_reason": gate_reason}
+              "long_gate_reason": gate_reason,
+              "longs_regime_blocked": longs_regime_blocked, "regime_score": regime_score}
 
     # ── Regime gate: the setups' edge is regime-dependent (strong in trend,
     # weak in chop/bear per the backtest), so only ARM in a risk-on regime.
     # Below the threshold we still show candidates but arm nothing and keep any
     # existing triggers untouched. The macro Deployment Score is the filter.
-    if regime_score is not None and regime_score < _MIN_DEPLOY_TO_ARM:
-        return {**common, "armed": [], "regime_blocked": True,
-                "regime_score": regime_score,
-                "management": "Exits are set per setup (breakouts trail; mean-reversion "
-                              "& momentum take a fixed target)."}
+    # 6 Nov 2026: the gate blocks LONGS only. The live research setups are shorts
+    # built for a weak tape and were tested with no macro gate, so a low score
+    # must not silence them (it removed every short on risk-off days).
+    if longs_regime_blocked:
+        if not top:
+            return {**common, "armed": [], "regime_blocked": True,
+                    "regime_score": regime_score,
+                    "management": "Exits are set per setup (breakouts trail; mean-reversion "
+                                  "& momentum take a fixed target)."}
 
     # A fresh scan supersedes the previous armed set.
     cancelled = tdb.clear_active()

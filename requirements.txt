@@ -1,19 +1,14 @@
-fastapi>=0.111.0
-uvicorn[standard]>=0.30.0
-streamlit>=1.35.0
+# Streamlit Cloud web app only (6 Nov 2026). The scheduled jobs use
+# requirements-full.txt. Keep this list to what app.py and pages/ import:
+# vectorbt, numba, scipy, fastapi and friends made every cold boot slow.
+streamlit>=1.40,<2
+pandas>=2.2.0,<3   # 3.x removed Styler.applymap etc.
+numpy>=1.26.0,<3
+plotly>=5.22.0,<8
+pyarrow>=25.0.0
+requests>=2.32.0
+python-dotenv>=1.0.1
+ccxt>=4.5.0,<5
+supabase>=2.0.0,<3
 anthropic>=0.28.0
 yfinance>=0.2.40
-pandas>=2.2.0,<3   # match local; 3.x removed Styler.applymap etc.
-numpy>=1.26.0
-plotly>=5.22.0
-python-dotenv>=1.0.1
-requests>=2.32.0
-scipy>=1.13.0
-pandas-datareader>=0.10.0
-sqlalchemy>=2.0.30
-vectorbt>=0.26.2
-pyarrow>=25.0.0   # 24.x ships a broken dylib on Python 3.14; 25.0.1+ works
-ta>=0.11.0
-rich>=13.7.0
-ccxt>=4.5.0
-supabase>=2.0.0

@@ -142,12 +142,18 @@ def btc_return(days: int = 30, force: bool = False) -> float | None:
         with _LOCK:
             try:
                 dl = get_ohlcv("BTC-USD", "1d", limit=400)
-                _cache[key] = (time.time(), dl["close"] if not dl.empty else None)
+                if dl.empty:
+                    # 6 Nov 2026: never cache a failure for 6h. A None here made both
+                    # research setups return nothing, silently, until the cache expired.
+                    _cache.pop(key, None)
+                    log.warning("btc_regime: BTC daily candles unavailable (will retry)")
+                else:
+                    _cache[key] = (time.time(), dl["close"])
             except Exception as exc:              # noqa: BLE001
-                log.warning("btc_regime: btc_return fetch failed — %s", exc)
-                _cache[key] = (time.time(), None)
+                log.warning("btc_regime: btc_return fetch failed (will retry) — %s", exc)
+                _cache.pop(key, None)
         hit = _cache.get(key)
-    close = hit[1]
+    close = hit[1] if hit else None
     if close is None or len(close) <= days:
         return None
     return float((close.iloc[-1] / close.iloc[-1 - days] - 1) * 100)

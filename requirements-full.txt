@@ -1,0 +1,21 @@
+# Full set for the GitHub Actions jobs (scanner, monitor, brief, research). The
+# Streamlit web app installs only requirements.txt (6 Nov 2026: slow cold boots).
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+streamlit>=1.35.0
+anthropic>=0.28.0
+yfinance>=0.2.40
+pandas>=2.2.0,<3   # match local; 3.x removed Styler.applymap etc.
+numpy>=1.26.0
+plotly>=5.22.0
+python-dotenv>=1.0.1
+requests>=2.32.0
+scipy>=1.13.0
+pandas-datareader>=0.10.0
+sqlalchemy>=2.0.30
+vectorbt>=0.26.2
+pyarrow>=25.0.0   # 24.x ships a broken dylib on Python 3.14; 25.0.1+ works
+ta>=0.11.0
+rich>=13.7.0
+ccxt>=4.5.0
+supabase>=2.0.0

@@ -45,7 +45,7 @@ jobs:
           cache: pip
 
       - name: Install deps
-        run: python3 -m pip install -r requirements.txt
+        run: python3 -m pip install -r requirements-full.txt
 
       - name: Dry run (fixture)
         if: ${{ github.event.inputs.dry_run == 'true' }}

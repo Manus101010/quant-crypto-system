@@ -92,6 +92,8 @@ def summary(name: str, res: dict, regime_score) -> str:
     if res.get("regime_blocked"):
         lines.append(f"⛔ Risk-off (deployment {res.get('regime_score', 0):.0f}) — nothing armed; "
                      "existing triggers kept.")
+    elif res.get("longs_regime_blocked"):
+        lines.append(f"⛔ Macro score {res.get('regime_score') or 0:.0f}: longs blocked, shorts still armed.")
     if res.get("btc_below_200d"):
         lines.append(f"⛔ No new longs: {res.get('long_gate_reason') or 'market trend is down'}. "
                      "Shorts still allowed. (Full-cycle backtest: this filter cut the worst "
