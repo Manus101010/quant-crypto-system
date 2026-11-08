@@ -48,7 +48,7 @@ VERDICT = {
     "ROLLING OVER": ("🔻", "4h has turned too (the rare aligned case, PF 1.06 to 1.88 but under 70 trades). Without the 4h:  back to the midline 7 times in 10, but the 3 misses cost as much (about break even). A grid here does worse than a plain short"),
     "FADE AGAINST 4H": ("⛔", "skip: fading a rollover while the 4h is still rising lost (PF 0.86, 664 trades, 15m)"),
     "STILL RUNNING": ("🚀", "tested 15m, 1h, 4h: break even, random entries on the list did as well. Longs only if the long gate is open"),
-    "STRETCHED UP": ("⏳", "not turned yet, wait for the SAR to flip"),
+    "STRETCHED UP": ("⏳", "not turned yet. Do not short early: top gainers kept rising over the next 1 to 3 days in testing"),
     "STILL DUMPING": ("📉", "tested: best of the eight (PF 1.35, 2023 to 2026), weak stats, paper only, BTC below 50 day"),
     "TURNING UP": ("⚠️", "tested: worst of the eight (PF 0.18). Do not buy these bounces"),
     "STRETCHED DOWN": ("⏳", "stretched down, not turned: no trade"),
@@ -235,7 +235,8 @@ def text(b: dict) -> str:
     except Exception:                     # noqa: BLE001
         longs_ok = None
     lines = ["📊 <b>Today's movers</b> (MEXC perps, 24h, 1h chart read)"]
-    for side, head in (("gainer", "🟢 <b>Top gainers</b>"), ("loser", "🔴 <b>Top losers</b>")):
+    for side, head in (("gainer", "🟢 <b>Top gainers</b> (tested: shorting the day's top gainers lost; they tend to keep rising 1 to 3 days)"),
+                       ("loser", "🔴 <b>Top losers</b>")):
         rows = [r for r in b["rows"] if r["side"] == side]
         if not rows:
             continue

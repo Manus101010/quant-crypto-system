@@ -1,0 +1,33 @@
+PRE-REGISTRATION: NEW PERP LISTINGS DRIFT DOWN  (written 2026-11-08 before any backtest run)
+
+Event: Binance USDT-M perp listing = first 1h candle in data, excluding first candle at
+dataset start (2021-06-01), renames/redenominations (1000BTTC<-BTT, A<-EOS, RENDER<-RNDR,
+POL<-MATIC, G<-GAL, S<-FTM, VIC<-TOMO, SKY<-MKR, 1000LUNC<-LUNA classic, FET/AGIX re-adds kept
+as is: they are first perp listings), and TradFi perps (equities, ETFs, commodities, FX).
+Daily close = 00:00 UTC (close of the 23:00 1h bar). D_N = first daily close with age >= N*24h.
+Stop (all variants) = max high since listing * 1.02, clipped to [entry*1.03, entry*1.25].
+Fraction of trades where the 25% cap binds is reported (cap = practicality constraint).
+All trades short, entry at the close, max hold 30d unless stated. One trade per listing.
+
+V1  Short at D1, exit 30d time (or stop).
+V2  Short at D3, exit 30d time (or stop).
+V3  Short at D7, exit 14d time (or stop).
+V4  Short at D3, 2R target, else 30d time (or stop).
+V5  Breakdown: first daily close (age 24h..30d) below the low of the first 24h; 3R target,
+    else 30d time (or stop).
+V6  V2 restricted to listings whose first 24h quote volume > median of the previous 30
+    listings' first 24h quote volume (no lookahead).
+
+Costs: taker 0.36% round trip (primary), maker 0.11% (secondary). Funding included.
+Periods by entry time: PRE <2023, IS 2023-01-01..2025-07-01, OOS 2025-07-01..2026-10-26.
+Universes: all Binance crypto listings; Pionex subset (current Pionex perps list).
+
+Controls (same entry timestamps, same stop %, same exit rule):
+ RANDOM: 100 replicates; each trade replaced by a short on a random seasoned coin
+         (listed 182..730 days before entry, alive) at the same timestamp.
+ BTC:    short BTCUSDT at the same timestamp.
+
+PASS (Bonferroni, 6 variants): taker costs, Pionex subset AND all Binance:
+ IS t >= 2 and OOS t >= 2, pooled IS+OOS t >= 2.64 (two sided 0.05/6),
+ paired (signal R minus control R) t >= 2 vs RANDOM mean and vs BTC, and signal avg R above
+ the 95th pct of random replicate avg R. Monthly clustered t reported as a check.

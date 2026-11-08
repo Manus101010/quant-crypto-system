@@ -231,12 +231,15 @@ def _movers_short() -> str:
         log.debug("movers failed: %s", exc)
         return ""
     keep = [r for r in b["rows"] if r["state"] not in ("CHOP", "NO DATA")]
+    note = ("Reminder: shorting the day's top gainers lost in testing; they tend to keep "
+            "rising for 1 to 3 days.")
     if not keep:
-        return "<b>Movers:</b> nothing clean in today's top gainers and losers."
+        return "<b>Movers:</b> nothing clean in today's top gainers and losers.\n" + note
     out = ["<b>Movers worth a look</b>"]
     for r in keep:
         icon, verdict = movers.VERDICT.get(r["state"], ("·", ""))
         out.append(f"{icon} <b>{r['base']}</b> {r['pct']:+.0f}%: {r['state'].lower()}. {verdict}")
+    out.append(note)
     return "\n".join(out)
 
 

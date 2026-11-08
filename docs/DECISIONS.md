@@ -55,3 +55,9 @@ Newest first. Each line says what was decided, why, and what would change it.
 ## 30 Oct 2026 (later): movers on 15m/1h/4h, as grids
 * Tested his playbook as the trade he takes, a Pionex short grid (docs/edge_fix/movers_mtf.md). In R per trade, every version on every timeframe is about break even, and grids do worse than plain positions on directional ideas. Fades reach the midline 7 times in 10, but the misses cost as much.
 * Decision: backtests decide what becomes an automatic alert and how it is sized. His discretion is measured on his own logged trades in R, not by backtesting a rule. The movers board stays a reading aid, with the tested verdicts.
+
+## 8 Nov 2026: edge round 2 (funding, OI flush, listings, gainer reversal)
+* 18 pre-registered variants across 3 helpers. None passed (docs/edge_fix/edge2.md). Nothing new goes live.
+* Shorting the day's top gainers loses on Pionex coins and does worse than random. The movers board and brief now say so, because his habit is to fade top gainers.
+* Distribution Short was independently confirmed on Binance OI coins: OOS PF 1.92.
+* Persistent crowded funding short is logged for a retest in 6 to 12 months.
