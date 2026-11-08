@@ -1,0 +1,75 @@
+V1 short top5 24h 8%         taker IS  n= 4560 PF=0.80 avgR=-0.077 win=0.48 t=-6.33 tday=-4.46 wk=35.0 Lstk=27 worst=2024-05 -45.6R rand -0.053 p=1.000
+V1 short top5 24h 8%         taker OOS n= 2415 PF=0.88 avgR=-0.071 win=0.40 t=-2.65 tday=-2.51 wk=35.1 Lstk=10 worst=2026-08 -45.9R rand -0.041 p=0.985
+V1 short top5 24h 8%         maker IS  n= 4560 PF=0.87 avgR=-0.046 win=0.50 t=-3.76 tday=-2.65 wk=35.0 Lstk=27 worst=2024-05 -40.8R
+V1 short top5 24h 8%         maker OOS n= 2415 PF=0.93 avgR=-0.040 win=0.40 t=-1.48 tday=-1.41 wk=35.1 Lstk=10 worst=2026-08 -41.1R
+V2 short top5 72h hi24       taker IS  n= 4560 PF=0.81 avgR=-0.131 win=0.32 t=-5.44 tday=-3.94 wk=35.0 Lstk=35 worst=2023-01 -99.0R rand -0.067 p=1.000
+V2 short top5 72h hi24       taker OOS n= 2415 PF=0.85 avgR=-0.112 win=0.29 t=-2.81 tday=-2.77 wk=35.1 Lstk=23 worst=2025-10 -41.8R rand -0.044 p=1.000
+V2 short top5 72h hi24       maker IS  n= 4560 PF=0.89 avgR=-0.073 win=0.33 t=-3.04 tday=-2.20 wk=35.0 Lstk=30 worst=2023-01 -90.9R
+V2 short top5 72h hi24       maker OOS n= 2415 PF=0.90 avgR=-0.069 win=0.30 t=-1.74 tday=-1.71 wk=35.1 Lstk=23 worst=2025-10 -35.4R
+V3 V1 + funding>0.03%        taker IS  n= 3119 PF=0.85 avgR=-0.054 win=0.49 t=-3.70 tday=-2.45 wk=24.0 Lstk=18 worst=2024-02 -52.8R rand -0.051 p=0.710
+V3 V1 + funding>0.03%        taker OOS n= 1995 PF=0.92 avgR=-0.041 win=0.42 t=-1.45 tday=-0.71 wk=30.6 Lstk=13 worst=2026-05 -26.6R rand -0.065 p=0.055
+V3 V1 + funding>0.03%        maker IS  n= 3119 PF=0.93 avgR=-0.023 win=0.51 t=-1.56 tday=-0.89 wk=24.0 Lstk=18 worst=2024-02 -48.3R
+V3 V1 + funding>0.03%        maker OOS n= 1995 PF=0.98 avgR=-0.010 win=0.43 t=-0.34 tday=+0.24 wk=30.6 Lstk=13 worst=2026-05 -22.3R
+V4 V1 mid tercile            taker IS  n= 4560 PF=0.83 avgR=-0.053 win=0.48 t=-4.85 tday=-3.13 wk=35.0 Lstk=18 worst=2024-02 -37.6R rand -0.050 p=0.700
+V4 V1 mid tercile            taker OOS n= 2415 PF=0.88 avgR=-0.056 win=0.46 t=-2.62 tday=-2.30 wk=35.1 Lstk=15 worst=2026-04 -37.3R rand -0.045 p=0.830
+V4 V1 mid tercile            maker IS  n= 4560 PF=0.93 avgR=-0.022 win=0.50 t=-1.98 tday=-1.28 wk=35.0 Lstk=17 worst=2024-02 -33.0R
+V4 V1 mid tercile            maker OOS n= 2415 PF=0.94 avgR=-0.025 win=0.47 t=-1.16 tday=-1.02 wk=35.1 Lstk=15 worst=2026-04 -32.6R
+V5 long bot5 BTC>50d         taker IS  n= 2945 PF=0.78 avgR=-0.077 win=0.41 t=-4.68 tday=-2.94 wk=22.7 Lstk=30 worst=2024-12 -32.4R rand -0.050 p=1.000
+V5 long bot5 BTC>50d         taker OOS n= 1225 PF=0.93 avgR=-0.037 win=0.37 t=-0.78 tday=-0.76 wk=17.9 Lstk=17 worst=2026-08 -41.9R rand -0.046 p=0.335
+V5 long bot5 BTC>50d         maker IS  n= 2945 PF=0.86 avgR=-0.046 win=0.43 t=-2.78 tday=-1.75 wk=22.7 Lstk=30 worst=2024-01 -29.4R
+V5 long bot5 BTC>50d         maker OOS n= 1225 PF=0.99 avgR=-0.005 win=0.38 t=-0.12 tday=-0.11 wk=17.9 Lstk=16 worst=2026-08 -37.9R
+CTRL BTC short 24h 8%        taker IS  n=  912 PF=0.52 avgR=-0.073 win=0.38 t=-6.95 tday=-6.95 wk=7.0 Lstk=14 worst=2023-01 -6.0R
+CTRL BTC short 24h 8%        taker OOS n=  483 PF=0.66 avgR=-0.039 win=0.42 t=-3.19 tday=-3.19 wk=7.0 Lstk=11 worst=2026-08 -4.4R
+CTRL BTC short 72h hi24      taker IS  n=  359 PF=0.63 avgR=-0.185 win=0.38 t=-3.60 tday=-3.60 wk=2.8 Lstk=9 worst=2023-01 -10.2R
+CTRL BTC short 72h hi24      taker OOS n=  180 PF=0.85 avgR=-0.065 win=0.43 t=-0.85 tday=-0.85 wk=2.6 Lstk=6 worst=2026-04 -6.2R
+CTRL BTC long 24h 8%         taker IS  n=  912 PF=0.83 avgR=-0.021 win=0.41 t=-2.00 tday=-2.00 wk=7.0 Lstk=9 worst=2024-04 -3.7R
+CTRL BTC long 24h 8%         taker OOS n=  483 PF=0.59 avgR=-0.050 win=0.40 t=-4.13 tday=-4.13 wk=7.0 Lstk=9 worst=2026-06 -4.1R
+V6 portfolio K5 gross        IS  ret   days=912 mean=+3.7bp/d Sharpe=+0.26 t=+0.41 worst_mo=2025-02 -34.4%
+V6 portfolio K5 gross        IS  short days=912 mean=-9.4bp/d Sharpe=-0.31 t=-0.49 worst_mo=2024-02 -63.5%
+V6 portfolio K5 gross        IS  long  days=912 mean=+16.8bp/d Sharpe=+0.59 t=+0.93 worst_mo=2024-04 -34.7%
+V6 portfolio K5 gross        OOS ret   days=483 mean=-12.5bp/d Sharpe=-0.33 t=-0.38 worst_mo=2026-08 -51.9%
+V6 portfolio K5 gross        OOS short days=483 mean=-77.3bp/d Sharpe=-1.33 t=-1.53 worst_mo=2025-08 -80.1%
+V6 portfolio K5 gross        OOS long  days=483 mean=+52.3bp/d Sharpe=+1.00 t=+1.16 worst_mo=2026-07 -61.5%
+V6 portfolio K5 taker        IS  ret   days=912 mean=-32.3bp/d Sharpe=-2.30 t=-3.63 worst_mo=2025-02 -40.8%
+V6 portfolio K5 taker        IS  short days=912 mean=-45.4bp/d Sharpe=-1.51 t=-2.38 worst_mo=2024-02 -67.3%
+V6 portfolio K5 taker        IS  long  days=912 mean=-19.2bp/d Sharpe=-0.68 t=-1.07 worst_mo=2024-04 -41.5%
+V6 portfolio K5 taker        OOS ret   days=483 mean=-48.5bp/d Sharpe=-1.29 t=-1.48 worst_mo=2026-08 -57.1%
+V6 portfolio K5 taker        OOS short days=483 mean=-113.3bp/d Sharpe=-1.94 t=-2.24 worst_mo=2025-08 -82.3%
+V6 portfolio K5 taker        OOS long  days=483 mean=+16.3bp/d Sharpe=+0.31 t=+0.36 worst_mo=2026-07 -65.7%
+V6 portfolio K5 maker        IS  ret   days=912 mean=-7.3bp/d Sharpe=-0.52 t=-0.82 worst_mo=2025-02 -36.4%
+V6 portfolio K5 maker        IS  short days=912 mean=-20.4bp/d Sharpe=-0.68 t=-1.07 worst_mo=2024-02 -64.7%
+V6 portfolio K5 maker        IS  long  days=912 mean=+5.8bp/d Sharpe=+0.20 t=+0.32 worst_mo=2024-04 -36.9%
+V6 portfolio K5 maker        OOS ret   days=483 mean=-23.5bp/d Sharpe=-0.63 t=-0.72 worst_mo=2026-08 -53.5%
+V6 portfolio K5 maker        OOS short days=483 mean=-88.3bp/d Sharpe=-1.52 t=-1.74 worst_mo=2025-08 -80.8%
+V6 portfolio K5 maker        OOS long  days=483 mean=+41.3bp/d Sharpe=+0.79 t=+0.91 worst_mo=2026-07 -62.8%
+--- diagnostics (not pass variants) ---
+D short top3 24h 8%          taker IS  n= 2736 PF=0.79 avgR=-0.085 win=0.48 t=-5.16 tday=-4.20 wk=21.0 Lstk=17 worst=2024-02 -32.4R
+D short top3 24h 8%          taker OOS n= 1449 PF=0.86 avgR=-0.091 win=0.36 t=-2.41 tday=-2.36 wk=21.0 Lstk=17 worst=2026-08 -33.8R
+D short top3 72h hi24        taker IS  n= 2736 PF=0.78 avgR=-0.155 win=0.31 t=-4.93 tday=-4.18 wk=21.0 Lstk=27 worst=2023-01 -61.1R
+D short top3 72h hi24        taker OOS n= 1449 PF=0.82 avgR=-0.134 win=0.27 t=-2.48 tday=-2.55 wk=21.0 Lstk=29 worst=2026-01 -40.0R
+D V1 tercile 0 (0=low)       taker IS  n= 4560 PF=0.80 avgR=-0.057 win=0.48 t=-5.84 tday=-3.60 wk=35.0 Lstk=21 worst=2024-02 -50.3R
+D V1 tercile 0 (0=low)       taker OOS n= 2415 PF=0.88 avgR=-0.049 win=0.46 t=-2.31 tday=-1.89 wk=35.1 Lstk=14 worst=2026-08 -48.3R
+D V2 tercile 0 (0=low)       taker IS  n= 4560 PF=0.89 avgR=-0.072 win=0.35 t=-3.06 tday=-1.88 wk=35.0 Lstk=49 worst=2023-01 -111.1R
+D V2 tercile 0 (0=low)       taker OOS n= 2415 PF=0.86 avgR=-0.095 win=0.32 t=-2.66 tday=-2.21 wk=35.1 Lstk=28 worst=2026-08 -86.7R
+D V1 tercile 1 (0=low)       taker IS  n= 4560 PF=0.83 avgR=-0.053 win=0.48 t=-4.85 tday=-3.13 wk=35.0 Lstk=18 worst=2024-02 -37.6R
+D V1 tercile 1 (0=low)       taker OOS n= 2415 PF=0.88 avgR=-0.056 win=0.46 t=-2.62 tday=-2.30 wk=35.1 Lstk=15 worst=2026-04 -37.3R
+D V2 tercile 1 (0=low)       taker IS  n= 4560 PF=0.84 avgR=-0.106 win=0.34 t=-4.55 tday=-3.01 wk=35.0 Lstk=52 worst=2023-01 -91.8R
+D V2 tercile 1 (0=low)       taker OOS n= 2415 PF=0.85 avgR=-0.106 win=0.32 t=-2.93 tday=-2.78 wk=35.1 Lstk=25 worst=2025-07 -54.7R
+D V1 tercile 2 (0=low)       taker IS  n= 4560 PF=0.83 avgR=-0.058 win=0.49 t=-5.18 tday=-3.48 wk=35.0 Lstk=18 worst=2023-01 -41.2R
+D V1 tercile 2 (0=low)       taker OOS n= 2415 PF=0.84 avgR=-0.071 win=0.44 t=-3.23 tday=-2.89 wk=35.1 Lstk=14 worst=2026-05 -43.7R
+D V2 tercile 2 (0=low)       taker IS  n= 4560 PF=0.90 avgR=-0.066 win=0.34 t=-2.72 tday=-1.80 wk=35.0 Lstk=37 worst=2023-01 -99.1R
+D V2 tercile 2 (0=low)       taker OOS n= 2415 PF=0.84 avgR=-0.111 win=0.32 t=-3.16 tday=-2.60 wk=35.1 Lstk=26 worst=2026-05 -62.3R
+D long bot5 24h no BTC filt  taker IS  n= 4560 PF=0.83 avgR=-0.059 win=0.42 t=-4.51 tday=-2.81 wk=35.0 Lstk=34 worst=2024-06 -33.0R
+D long bot5 24h no BTC filt  taker OOS n= 2415 PF=1.02 avgR=+0.009 win=0.36 t=+0.23 tday=+0.20 wk=35.1 Lstk=17 worst=2026-08 -47.2R
+D V1 funding>0 (any)         taker IS  n= 4560 PF=0.82 avgR=-0.062 win=0.49 t=-5.43 tday=-3.63 wk=35.0 Lstk=29 worst=2024-02 -47.3R
+D V1 funding>0 (any)         taker OOS n= 2290 PF=0.91 avgR=-0.048 win=0.42 t=-1.85 tday=-1.60 wk=35.1 Lstk=17 worst=2026-08 -33.8R
+D V1 top10 funding<=0.03%    taker IS  n= 3301 PF=0.79 avgR=-0.073 win=0.48 t=-5.49 tday=-4.19 wk=25.4 Lstk=21 worst=2023-01 -40.7R
+D V1 top10 funding<=0.03%    taker OOS n= 2035 PF=0.85 avgR=-0.078 win=0.43 t=-3.09 tday=-3.20 wk=29.6 Lstk=13 worst=2026-08 -34.9R
+D V1 full univ incl delisted taker IS  n= 4560 PF=0.82 avgR=-0.073 win=0.49 t=-5.72 tday=-4.15 wk=35.0 Lstk=22 worst=2023-01 -49.6R
+D V1 full univ incl delisted taker OOS n= 2415 PF=0.91 avgR=-0.051 win=0.40 t=-1.81 tday=-1.67 wk=35.1 Lstk=13 worst=2026-08 -27.0R
+D V6 full univ taker         IS  ret   days=912 mean=-33.8bp/d Sharpe=-2.25 t=-3.55 worst_mo=2023-11 -30.4%
+D V6 full univ taker         IS  short days=912 mean=-38.3bp/d Sharpe=-1.23 t=-1.94 worst_mo=2024-02 -65.6%
+D V6 full univ taker         IS  long  days=912 mean=-29.2bp/d Sharpe=-1.01 t=-1.60 worst_mo=2024-06 -45.7%
+D V6 full univ taker         OOS ret   days=483 mean=-27.7bp/d Sharpe=-0.71 t=-0.81 worst_mo=2026-08 -56.1%
+D V6 full univ taker         OOS short days=483 mean=-66.1bp/d Sharpe=-1.09 t=-1.25 worst_mo=2026-04 -77.5%
+D V6 full univ taker         OOS long  days=483 mean=+10.7bp/d Sharpe=+0.20 t=+0.23 worst_mo=2026-08 -71.5%
