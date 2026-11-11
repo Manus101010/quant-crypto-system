@@ -1,0 +1,23 @@
+date,strategy,variant,direction,n,pf,win,expR,t,t_needed,pf1,pf2,verdict,tests_so_far,source
+2026-10-08,bounce_fade,"Z=2.0, S=2.5",short,713,1.28,69,+0.052,1.69,2.50,1.11,1.51,WATCH,4,"research/families/REPORT.md, round 1"
+2026-10-08,bounce_fade,"Z=2.5, S=2.5",short,520,1.35,71,+0.052,1.61,2.50,1.05,1.73,WATCH,4,"research/families/REPORT.md, round 1"
+2026-10-08,bounce_fade,"Z=2.0, S=3.0",short,556,1.33,71,+0.052,1.70,2.50,1.12,1.58,WATCH,4,"research/families/REPORT.md, round 1"
+2026-10-08,bounce_fade,"Z=3.0, S=2.5",short,348,1.32,72,+0.044,1.37,2.50,1.20,1.46,WATCH,4,"research/families/REPORT.md, round 1"
+2026-10-08,distribution_short,"P=0.1, M=trail",short,669,2.24,57,+0.366,8.59,2.73,1.30,3.56,CANDIDATE,8,"research/families/REPORT.md, round 1"
+2026-10-08,distribution_short,"P=0.2, M=trail",short,931,1.96,54,+0.280,8.02,2.73,0.96,3.50,REJECT,8,"research/families/REPORT.md, round 1"
+2026-10-08,distribution_short,"P=0.1, M=struct",short,688,2.19,54,+0.325,7.72,2.73,1.24,3.59,CANDIDATE,8,"research/families/REPORT.md, round 1"
+2026-10-08,distribution_short,"P=0.15, M=trail",short,817,2.22,55,+0.337,8.94,2.73,1.18,3.84,CANDIDATE,8,"research/families/REPORT.md, round 1"
+2026-10-08,compression_breakout,"P=0.1, V=1.5",long,401,1.06,32,+0.071,0.71,2.87,1.03,1.09,WATCH,12,"research/families/REPORT.md, round 1"
+2026-10-08,compression_breakout,"P=0.2, V=1.5",long,572,0.95,29,-0.021,-0.25,2.87,0.83,1.08,REJECT,12,"research/families/REPORT.md, round 1"
+2026-10-08,compression_breakout,"P=0.1, V=2.0",long,316,0.95,30,-0.007,-0.07,2.87,1.05,0.86,REJECT,12,"research/families/REPORT.md, round 1"
+2026-10-08,compression_breakout,"P=0.15, V=1.5",long,483,0.98,29,-0.010,-0.11,2.87,0.87,1.11,REJECT,12,"research/families/REPORT.md, round 1"
+2026-10-08,hype_ignition,"vol=3.0, rng=1.5, cap=any",long,1766,0.94,29,-0.023,-0.51,2.97,1.02,0.87,REJECT,17,"Manus: enter small caps showing hype, volume and volatility expansion"
+2026-10-08,hype_ignition,"vol=5.0, rng=1.5, cap=any",long,989,1.03,29,+0.021,0.32,2.97,1.05,1.01,WATCH,17,"Manus: enter small caps showing hype, volume and volatility expansion"
+2026-10-08,hype_ignition,"vol=3.0, rng=2.0, cap=any",long,1599,0.97,29,-0.003,-0.07,2.97,1.07,0.88,REJECT,17,"Manus: enter small caps showing hype, volume and volatility expansion"
+2026-10-08,hype_ignition,"vol=3.0, rng=1.5, cap=small",long,1369,0.96,28,-0.019,-0.36,2.97,1.12,0.84,REJECT,17,"Manus: enter small caps showing hype, volume and volatility expansion"
+2026-10-08,hype_ignition,"vol=5.0, rng=2.0, cap=small",long,784,1.03,28,+0.007,0.10,2.97,1.07,0.99,REJECT,17,"Manus: enter small caps showing hype, volume and volatility expansion"
+2026-10-08,hype_fade,"pump=1.0, taper=0.4",short,3474,1.11,60,+0.046,3.71,3.05,1.18,1.05,WATCH,22,Manus: small caps that taper off after hype make excellent shorts
+2026-10-08,hype_fade,"pump=2.0, taper=0.4",short,1403,1.11,64,+0.046,2.55,3.05,1.20,1.05,WATCH,22,Manus: small caps that taper off after hype make excellent shorts
+2026-10-08,hype_fade,"pump=1.0, taper=0.6",short,4035,1.06,59,+0.029,2.46,3.05,1.05,1.06,WATCH,22,Manus: small caps that taper off after hype make excellent shorts
+2026-10-08,hype_fade,"pump=0.7, taper=0.4",short,5066,1.06,57,+0.024,2.18,3.05,1.10,1.03,WATCH,22,Manus: small caps that taper off after hype make excellent shorts
+2026-10-08,hype_fade,"pump=1.0, taper=0.3",short,2996,1.13,60,+0.043,3.28,3.05,1.28,1.01,WATCH,22,Manus: small caps that taper off after hype make excellent shorts
