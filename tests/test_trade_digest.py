@@ -49,7 +49,7 @@ def test_plans_saved_only_after_delivery(monkeypatch):
     monkeypatch.setattr(td.tdb, "set_state", lambda k, v: saved.append(k))
     monkeypatch.setattr(td.tdb, "set_outcome", lambda i, p: saved.append(("outcome", i, p["outcome"])))
     monkeypatch.setattr(td, "pending", lambda now=None: [
-        {"id": 5, "symbol": "A-USD", "direction": "short", "setup_label": "Distribution Short",
+        {"id": 5, "symbol": "A-USD", "direction": "short", "setup_label": "Distribution Short", "condition_json": "{\"quiet\": true}",
          "stop": 1.3, "fired_at": "2026-11-23T00:06:00"},
         {"id": 6, "symbol": "B-USD", "direction": "short", "setup_label": "Distribution Short",
          "stop": 0.9, "fired_at": "2026-11-23T00:06:00"}])
@@ -67,3 +67,17 @@ def test_stale_fire_is_skipped(monkeypatch):
     import datetime as dt
     msg, recs = td.prepare(dt.datetime(2026, 11, 23, 6, 1), prices={"A-USD": 1.0})
     assert recs == [("skip", 9, None)]
+
+
+def test_awaiting_only_quiet_uncapped_untaken_recent(monkeypatch):
+    import datetime as dt
+    monkeypatch.setattr(td.tdb, "get_state", lambda k: None)
+    now = dt.datetime(2026, 11, 23, 6, 0)
+    base = {"id": 1, "outcome": None, "fired_at": "2026-11-23T00:06:00",
+            "condition_json": json.dumps({"quiet": True})}
+    assert td.awaiting_digest(base, now)
+    assert not td.awaiting_digest({**base, "condition_json": "{}"}, now)            # old instant alert
+    assert not td.awaiting_digest({**base, "condition_json": json.dumps(
+        {"quiet": True, "basket_cap": True})}, now)                                  # capped: graded as paper
+    assert not td.awaiting_digest({**base, "taken": True}, now)
+    assert not td.awaiting_digest({**base, "fired_at": "2026-11-20T00:06:00"}, now)  # over 48h

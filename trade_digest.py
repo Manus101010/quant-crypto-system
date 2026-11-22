@@ -35,9 +35,6 @@ TP_R = 2.0
 MAX_DAYS = 30
 MAX_AGE_H = 30           # a fire older than this is stale: skipped, not offered
 DIGEST_SETUPS = ("Distribution Short", "Downtrend Bounce Fade")
-# Trades fired from this time on are delivered by the 5pm message and graded on its
-# plan. Older open trades keep the rules they were alerted with.
-DIGEST_START = "2026-11-22T12:00:00"
 
 
 def _p(x: float) -> str:
@@ -70,12 +67,28 @@ def plan_for(t: dict, price: float) -> dict | None:
     return {"entry": price, "stop": stop, "target": target, "max_hold": days}
 
 
-def awaiting_digest(t: dict) -> bool:
-    """A research trade fired quietly that has not been through a 5pm message yet."""
-    return (t.get("setup_label") in DIGEST_SETUPS
-            and str(t.get("fired_at") or "") >= DIGEST_START
-            and t.get("outcome") is None
-            and not tdb.get_state(f"plan:{t['id']}"))
+def _quiet(t: dict) -> bool:
+    try:
+        return bool((json.loads(t.get("condition_json") or "{}") or {}).get("quiet"))
+    except (TypeError, ValueError):
+        return False
+
+
+def awaiting_digest(t: dict, now: dt.datetime | None = None) -> bool:
+    """A quiet research fire that has not been through a 5pm message yet. Only rows the
+    monitor tagged quiet at fire count, never basket capped or taken ones, and never
+    for more than 48h (after that the tracker grades it on its original rules)."""
+    if (not _quiet(t) or t.get("outcome") is not None or t.get("taken")
+            or tdb.get_state(f"plan:{t['id']}")):
+        return False
+    from triggers.outcomes import is_basket_capped
+    if is_basket_capped(t):
+        return False
+    try:
+        age = ((now or dt.datetime.utcnow()) - dt.datetime.fromisoformat(str(t.get("fired_at"))[:19]))
+        return age.total_seconds() < 48 * 3600
+    except (TypeError, ValueError):
+        return False
 
 
 def _live_price(symbol: str) -> float | None:
@@ -96,8 +109,9 @@ def pending(now: dt.datetime | None = None) -> list[dict]:
     from triggers.outcomes import is_basket_capped
     out = []
     for t in tdb.get_triggers_since(cutoff, statuses=("fired",)):
-        if (t.get("setup_label") in DIGEST_SETUPS and t.get("outcome") is None
-                and not is_basket_capped(t) and not tdb.get_state(f"plan:{t['id']}")
+        if (t.get("setup_label") in DIGEST_SETUPS and _quiet(t) and t.get("outcome") is None
+                and not is_basket_capped(t) and not t.get("taken")
+                and not tdb.get_state(f"plan:{t['id']}")
                 and not tdb.get_state(f"digest_skip:{t['id']}")):
             out.append(t)
     return out
