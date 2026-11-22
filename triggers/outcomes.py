@@ -137,7 +137,7 @@ def _simulate(t: dict, df: pd.DataFrame, h1: pd.DataFrame | None = None) -> dict
     m = _mgmt(t.get("setup_label"))
     trailing = bool(m.get("trailing")) and not t.get("target")
     target = t.get("target")
-    max_hold = int(m.get("max_hold") or 15)
+    max_hold = int(_cond(t).get("max_hold") or m.get("max_hold") or 15)
 
     fire_day = pd.Timestamp(t["fired_at"][:10])
     bars = df[df.index > fire_day]
@@ -232,7 +232,9 @@ def update_open_trades(notify: bool = True) -> dict:
     if missing:   # not on the trading venue → default chain (never for perp-universe coins)
         candles.update(exchange.get_ohlcv_batch(missing, timeframe="1d", limit=120))
     closed = 0
+    from trade_digest import with_plan
     for t in open_trades:
+        t = with_plan(t)          # graded on the 5pm set and forget plan, if one was sent
         df = candles.get(t["symbol"])
         if df is None or df.empty:
             continue

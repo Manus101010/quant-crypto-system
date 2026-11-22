@@ -119,6 +119,12 @@ AUTO_SCAN_SCHEDULE = [
 ]
 # Morning brief, sent by the monitor at this local time (GitHub cron ran it ~3h late).
 BRIEF_SCHEDULE = ("Australia/Sydney", "07:00")
+# 22 Nov 2026: research alerts fire silently at the daily close (11am Sydney, in class)
+# and go out in ONE after school message with set and forget levels (trade_digest.py,
+# research/ds_practical). The auto AI desk follow up message is off (/desk on demand).
+DIGEST_SCHEDULE = ("Australia/Sydney", "17:00")
+QUIET_FIRE = True
+DESK_AUTO_ON_ALERT = False
 # Trading venue: Bybit USDT perpetuals (native SL/TP + trailing stops, shorts).
 # Candles come from the perp market itself so levels match what you trade.
 EXCHANGE = "bybit"

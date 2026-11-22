@@ -730,7 +730,11 @@ def poll_once() -> dict:
             cond["fwd"] = fwd
             if snap is not None:
                 snap.update({f"fwd_{k}": v for k, v in fwd.items()})
-            delivered = telegram.send_message(text)
+            from config import QUIET_FIRE
+            from trade_digest import DIGEST_SETUPS
+            quiet = QUIET_FIRE and t.get("setup_label") in DIGEST_SETUPS
+            # Quiet: tracked now, delivered in the 5pm message (trade_digest.py).
+            delivered = True if quiet else telegram.send_message(text)
             # Mark fired if delivered (or Telegram is a no-op); leave active to
             # retry on a transient send failure so a real alert isn't lost.
             if delivered or not telegram.is_configured():
@@ -747,7 +751,8 @@ def poll_once() -> dict:
                 else:
                     fire_counts[d] = fire_counts.get(d, 0) + 1
                 try:                       # desk: background review, replies in ~1 to 2 min
-                    if not capped:
+                    from config import DESK_AUTO_ON_ALERT
+                    if not capped and DESK_AUTO_ON_ALERT:
                         from desk.agents.service import review_trigger_async
                         review_trigger_async(t_fire, price)
                 except Exception as exc:                  # noqa: BLE001

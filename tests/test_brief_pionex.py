@@ -8,11 +8,14 @@ import monitor
 def test_brief_is_short_and_has_no_dollar_results(monkeypatch):
     monkeypatch.setattr(mb.tdb, "init_db", lambda: None)
     monkeypatch.setattr(mb.tdb, "get_triggers_since", lambda c: [
-        {"status": "fired", "outcome": None, "direction": "short", "symbol": "GOAT-USD",
+        {"id": 1, "status": "fired", "outcome": None, "direction": "short", "symbol": "GOAT-USD",
          "fired_price": 0.0612, "stop": 0.0671, "tp": 0.0494},
-        {"status": "fired", "outcome": "stop", "direction": "short", "symbol": "OLD-USD",
+        {"id": 2, "status": "fired", "outcome": "stop", "direction": "short", "symbol": "ZZQ-USD",
          "fired_price": 1.0, "stop": 1.1},
     ])
+    import json as _j
+    monkeypatch.setattr(mb.tdb, "get_state", lambda k: _j.dumps(
+        {"entry": 0.0612, "stop": 0.0671, "target": 0.0494, "max_hold": 30}) if k == "plan:1" else None)
     monkeypatch.setattr(mb, "_btc_line", lambda: "BTC 76,326: below its 50 day average, so shorts only.")
     monkeypatch.setattr(mb, "_movers_short", lambda: "<b>Movers:</b> nothing clean in today's top gainers and losers.")
     monkeypatch.setattr(mb, "_week_short", lambda: "")
@@ -25,7 +28,7 @@ def test_brief_is_short_and_has_no_dollar_results(monkeypatch):
     monkeypatch.setattr(triggers, "outcomes", _O, raising=False)
     monkeypatch.setitem(__import__("sys").modules, "triggers.outcomes", _O)
     txt = mb.build_brief()
-    assert "GOAT" in txt and "OLD" not in txt and "Pionex" in txt
+    assert "GOAT" in txt and "ZZQ" not in txt and "5pm trades" in txt
     assert "/guard" not in txt and "Deactivated" not in txt and "Deployment" not in txt
     assert not re.search(r"\$-|−\$|\+\$|\(\$-", txt)      # no dollar results
     assert "R per trade" in txt and len(txt) < 1200

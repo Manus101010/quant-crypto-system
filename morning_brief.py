@@ -197,20 +197,21 @@ def _new_trades() -> str:
     except Exception:                              # noqa: BLE001
         def is_basket_capped(t):                   # noqa: E306
             return False
-    rows = [t for t in tdb.get_triggers_since(cutoff)
+    from trade_digest import with_plan
+    rows = [with_plan(t) for t in tdb.get_triggers_since(cutoff)
             if t.get("status") == "fired" and t.get("outcome") is None
-            and not is_basket_capped(t)]
+            and not is_basket_capped(t) and tdb.get_state(f"plan:{t['id']}")]
     if not rows:
-        return "<b>New trades:</b> none in the last 24 hours."
+        return "<b>Yesterday's 5pm trades:</b> none."
     try:
         from triggers.outcomes import planned_position
     except Exception:                              # noqa: BLE001
         planned_position = None
-    out = ["<b>New trades</b> (Pionex Futures)"]
+    out = ["<b>Yesterday's 5pm trades</b> (still open, same levels)"]
     for t in rows[:6]:
         short = t.get("direction") == "short"
         coin = t["symbol"].replace("-USD", "")
-        e, st_, tp = t.get("fired_price"), t.get("stop"), t.get("tp") or t.get("target")
+        e, st_, tp = t.get("fired_price"), t.get("stop"), t.get("target") or t.get("tp")
         line = f"{'🔴 Short' if short else '🟢 Long'} <b>{coin}</b>: entry {_fmt(e)}, stop {_fmt(st_)}"
         if tp:
             line += f", take profit {_fmt(tp)}"
@@ -218,7 +219,7 @@ def _new_trades() -> str:
         if pos:
             line += f", ${pos['margin']:.0f} at {pos['leverage']}x"
         out.append(line)
-    out.append("Prices may have moved since the alert: skip any that ran past the entry.")
+    out.append("Missed one? Only place it if price is still near the entry.")
     return "\n".join(out)
 
 
