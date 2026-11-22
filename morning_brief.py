@@ -190,7 +190,7 @@ def _btc_line() -> str:
 
 
 def _new_trades() -> str:
-    """Alerts that fired in the last 24h and are still open, as Pionex orders."""
+    """Alerts that fired in the last 24h and are still open, as Bybit orders."""
     cutoff = (datetime.datetime.utcnow() - datetime.timedelta(hours=30)).isoformat()
     try:
         from triggers.outcomes import is_basket_capped
@@ -271,22 +271,22 @@ def _week_short() -> str:
 
 
 def _universe_warning() -> str:
-    """The scanner's saved Pionex coin list goes stale: say so after 21 days."""
+    """The scanner's saved Bybit coin list goes stale: say so after 21 days."""
     try:
         import json
         from config import ROOT_DIR
-        d = json.loads((ROOT_DIR / "data" / "pionex_perps.json").read_text())
+        d = json.loads((ROOT_DIR / "data" / "bybit_perps.json").read_text())
         age = (datetime.date.today() - datetime.date.fromisoformat(d["updated"])).days
         if age > 21:
-            return (f"⚠️ The Pionex coin list is {age} days old; new listings are being missed. "
-                    "Ask Claude to refresh it.")
+            return (f"⚠️ The Bybit coin list is {age} days old; new listings are being missed. "
+                    "Ask Claude to refresh it (scripts/refresh_bybit_cg.py).")
     except Exception:                              # noqa: BLE001
-        return "⚠️ The saved Pionex coin list is missing; ask Claude to fix it."
+        return "⚠️ The saved Bybit coin list is missing; ask Claude to fix it."
     return ""
 
 
 def build_brief() -> str:
-    """6 Nov 2026 rewrite: short, plain, Pionex first. No dollar results, no command
+    """6 Nov 2026 rewrite: short, plain, Bybit first. No dollar results, no command
     list, no internal state (deactivated setups, deployment score)."""
     tdb.init_db()
     parts = [_date_line(), _btc_line(), _new_trades(), _movers_short(),

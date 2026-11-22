@@ -40,5 +40,5 @@ def test_alert_card_is_pionex_and_compact(monkeypatch):
     trg = {"symbol": "GOAT-USD", "direction": "short", "setup_label": "Distribution Short",
            "stop": 0.0671, "tp": 0.0494}
     txt = monitor._alert_text(trg, 0.0612, "x")
-    assert "Pionex" in txt and "Bybit" not in txt and "/took GOAT" in txt
+    assert "Bybit" in txt and "Pionex" not in txt and "/took GOAT" in txt
     assert txt.count("\n") <= 14

@@ -62,9 +62,9 @@ c1, c2, c3 = st.columns([1.4, 1, 1])
 with c1:
     source_lbl = st.selectbox(
         "Universe",
-        ["Pionex futures", "Bybit USDT perps", "MEXC all pairs", "Top by market cap"],
+        ["Bybit USDT perps", "Pionex futures", "MEXC all pairs", "Top by market cap"],
         index=0,
-        help="Pionex: every crypto USDT perpetual on Pionex, the venue you trade "
+        help="Bybit: every crypto USDT perpetual on Bybit, the venue you trade "
              "(candles from the same coin's MEXC perp).",
     )
     src = ("pionex_perps" if source_lbl.startswith("Pionex") else

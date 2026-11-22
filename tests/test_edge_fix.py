@@ -461,7 +461,7 @@ def test_basket_cap_limits_tradeable_fires_per_direction(tmpdb, monkeypatch):
         assert fwd["btc_below_50d"] is True and fwd["liquid_5m_180d"] is False
     import trade_digest
     msg = trade_digest.build(prices={f"C{i}-USD": 100.0 for i in range(4)}, save=True)
-    assert msg.count("Short C") == 2 and "Pionex" in msg       # the 2 tradeable ones only
+    assert msg.count("Short C") == 2 and "Bybit" in msg and "Trailing stop 7" in msg  # 2 tradeable only
     assert "Take profit $86" in msg or "Take profit 86" in msg
     assert trade_digest.build(prices={f"C{i}-USD": 100.0 for i in range(4)}) == ""  # sent once
     feats = json.loads(tdb.get_state(f"features:{ids[0]}"))

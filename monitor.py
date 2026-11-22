@@ -100,8 +100,7 @@ def _pct(a, b) -> str:
 
 
 def _alert_text(trg: dict, price: float, reason: str) -> str:
-    """Compact Pionex order card (6 Nov 2026: the long Bybit form was unreadable).
-    Everything needed to place the order on Pionex Futures, nothing else."""
+    """Compact Bybit order card (6 Nov 2026 compact form; 22 Nov 2026 back to Bybit)."""
     short = (trg.get("direction") or "long") == "short"
     coin = trg["symbol"].replace("-USD", "")
     label = trg.get("setup_label") or "setup"
@@ -122,7 +121,7 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     # Worst fill: lower for a short, higher for a long (wider stop, breaks sizing).
     cap = price * (1 + (-ENTRY_MAX_SLIP_PCT if short else ENTRY_MAX_SLIP_PCT) / 100)
 
-    lines = [f"{'🔴 <b>SHORT' if short else '🟢 <b>LONG'} {coin}</b> on Pionex Futures",
+    lines = [f"{'🔴 <b>SHORT' if short else '🟢 <b>LONG'} {coin}</b> on Bybit",
              f"<i>{label}: {_SETUP_PLAIN.get(label, 'a validated setup')}</i>", ""]
     lines.append(f"Entry: <b>{f(price)}</b> (skip if {'below' if short else 'above'} {f(cap)})")
     if stop:
@@ -143,7 +142,7 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     st_ = _backtest_stats(label)
     if st_:
         lines += ["", st_]
-    how = [f"On Pionex: Futures, {coin}USDT, {'Sell / Short' if short else 'Buy / Long'}, "
+    how = [f"On Bybit: Derivatives, {coin}USDT perpetual, {'Sell / Short' if short else 'Buy / Long'}, "
            f"Limit {f(price)}, tick TP/SL and enter the stop"
            + (" and take profit." if take else ".")]
     if trailing:

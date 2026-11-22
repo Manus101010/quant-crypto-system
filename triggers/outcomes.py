@@ -296,9 +296,9 @@ def _close_text(t: dict, p: dict) -> str:
         kind = "paper trade (basket cap, was not a tradeable alert)"
     urgent = ""
     if t.get("taken") and p["outcome"] in ("stop", "trail", "time"):
-        urgent = (f"🚨 <b>{coin} hit its exit. Check Pionex closed it.</b>\n"
+        urgent = (f"🚨 <b>{coin} hit its exit. Check Bybit closed it.</b>\n"
                   f"Price reached {p['exit_price']:.6g}. If your stop or take profit was set, "
-                  f"Pionex has closed it; if not, close it now.\n\n")
+                  f"Bybit has closed it; if not, close it now.\n\n")
     return urgent + (f"{icon} <b>{coin} {kind} closed</b> — {_EXIT_PLAIN.get(p['outcome'], p['outcome'])}\n"
             f"Result: <b>{r:+.2f}R</b> after {p['bars_held']} day(s).\n<i>{t.get('setup_label','')}</i>")
 
@@ -322,6 +322,8 @@ def _maybe_nudge_trail(t: dict, p: dict) -> None:
     be worth raising (≥ 0.25 of the original risk since the last nudge)."""
     new, stop0, entry = p.get("trail_stop"), t.get("stop"), t.get("fired_price")
     if new is None or stop0 is None or not entry:
+        return
+    if _cond(t).get("native_trail"):      # Bybit is holding the trailing stop for him
         return
     r0 = abs(entry - stop0)
     key = f"trail:{t['id']}"
