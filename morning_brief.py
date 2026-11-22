@@ -190,27 +190,28 @@ def _btc_line() -> str:
 
 
 def _new_trades() -> str:
-    """Alerts that fired in the last 24h and are still open, as Pionex orders."""
-    cutoff = (datetime.datetime.utcnow() - datetime.timedelta(hours=24)).isoformat()
+    """Alerts that fired in the last 24h and are still open, as Bybit orders."""
+    cutoff = (datetime.datetime.utcnow() - datetime.timedelta(hours=30)).isoformat()
     try:
         from triggers.outcomes import is_basket_capped
     except Exception:                              # noqa: BLE001
         def is_basket_capped(t):                   # noqa: E306
             return False
-    rows = [t for t in tdb.get_triggers_since(cutoff)
+    from trade_digest import with_plan
+    rows = [with_plan(t) for t in tdb.get_triggers_since(cutoff)
             if t.get("status") == "fired" and t.get("outcome") is None
-            and not is_basket_capped(t)]
+            and not is_basket_capped(t) and tdb.get_state(f"plan:{t['id']}")]
     if not rows:
-        return "<b>New trades:</b> none in the last 24 hours."
+        return "<b>Yesterday's 5pm trades:</b> none."
     try:
         from triggers.outcomes import planned_position
     except Exception:                              # noqa: BLE001
         planned_position = None
-    out = ["<b>New trades</b> (Pionex Futures)"]
+    out = ["<b>Yesterday's 5pm trades</b> (still open, same levels)"]
     for t in rows[:6]:
         short = t.get("direction") == "short"
         coin = t["symbol"].replace("-USD", "")
-        e, st_, tp = t.get("fired_price"), t.get("stop"), t.get("tp") or t.get("target")
+        e, st_, tp = t.get("fired_price"), t.get("stop"), t.get("target") or t.get("tp")
         line = f"{'🔴 Short' if short else '🟢 Long'} <b>{coin}</b>: entry {_fmt(e)}, stop {_fmt(st_)}"
         if tp:
             line += f", take profit {_fmt(tp)}"
@@ -218,7 +219,7 @@ def _new_trades() -> str:
         if pos:
             line += f", ${pos['margin']:.0f} at {pos['leverage']}x"
         out.append(line)
-    out.append("Prices may have moved since the alert: skip any that ran past the entry.")
+    out.append("Missed one? Only place it if price is still near the entry.")
     return "\n".join(out)
 
 
@@ -270,22 +271,22 @@ def _week_short() -> str:
 
 
 def _universe_warning() -> str:
-    """The scanner's saved Pionex coin list goes stale: say so after 21 days."""
+    """The scanner's saved Bybit coin list goes stale: say so after 21 days."""
     try:
         import json
         from config import ROOT_DIR
-        d = json.loads((ROOT_DIR / "data" / "pionex_perps.json").read_text())
+        d = json.loads((ROOT_DIR / "data" / "bybit_perps.json").read_text())
         age = (datetime.date.today() - datetime.date.fromisoformat(d["updated"])).days
         if age > 21:
-            return (f"⚠️ The Pionex coin list is {age} days old; new listings are being missed. "
-                    "Ask Claude to refresh it.")
+            return (f"⚠️ The Bybit coin list is {age} days old; new listings are being missed. "
+                    "Ask Claude to refresh it (scripts/refresh_bybit_cg.py).")
     except Exception:                              # noqa: BLE001
-        return "⚠️ The saved Pionex coin list is missing; ask Claude to fix it."
+        return "⚠️ The saved Bybit coin list is missing; ask Claude to fix it."
     return ""
 
 
 def build_brief() -> str:
-    """6 Nov 2026 rewrite: short, plain, Pionex first. No dollar results, no command
+    """6 Nov 2026 rewrite: short, plain, Bybit first. No dollar results, no command
     list, no internal state (deactivated setups, deployment score)."""
     tdb.init_db()
     parts = [_date_line(), _btc_line(), _new_trades(), _movers_short(),

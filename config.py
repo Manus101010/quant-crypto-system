@@ -119,6 +119,12 @@ AUTO_SCAN_SCHEDULE = [
 ]
 # Morning brief, sent by the monitor at this local time (GitHub cron ran it ~3h late).
 BRIEF_SCHEDULE = ("Australia/Sydney", "07:00")
+# 22 Nov 2026: research alerts fire silently at the daily close (11am Sydney, in class)
+# and go out in ONE after school message with set and forget levels (trade_digest.py,
+# research/ds_practical). The auto AI desk follow up message is off (/desk on demand).
+DIGEST_SCHEDULE = ("Australia/Sydney", "17:00")
+QUIET_FIRE = True
+DESK_AUTO_ON_ALERT = False
 # Trading venue: Bybit USDT perpetuals (native SL/TP + trailing stops, shorts).
 # Candles come from the perp market itself so levels match what you trade.
 EXCHANGE = "bybit"
@@ -167,7 +173,7 @@ ENTRY_MAX_SLIP_PCT = 0.3       # don't chase more than this past the signal pric
 # distance with ENTRY_MAX_SLIP_PCT when choosing leverage, so the WORST allowed
 # fill still loses at most MAX_LOSS_PCT_OF_MARGIN of the margin.
 SIZING_FEE_PCT = 0.15
-CANDLE_VENUE = "pionex"        # 6 Nov 2026: scan and price what he trades (Pionex), candles via MEXC perps
+CANDLE_VENUE = "bybit"         # 22 Nov 2026: he trades on Bybit only (candles via MEXC perps on US hosts)
 # Max 5 armed per scan (was 15): same-direction alts move together, so a big batch is one bet.
 # At most this many positions open at once. Counts only trades you TOOK: paper
 # signals you skipped no longer fill the book (fix (f), trade_flow.md). Same-direction alts move together, so more at
@@ -177,7 +183,7 @@ MAX_OPEN_POSITIONS = 10
 # 13.4x below the Binance volume all research floors were measured on, so floors
 # are divided by this factor live (docs/edge_fix/trade_flow.md, fix (e)).
 LIVE_VOLUME_FACTOR = 13.4
-AUTO_SCAN_PARAMS = {"source": "pionex_perps", "top_n": 5, "expiry_hours": 72,
+AUTO_SCAN_PARAMS = {"source": "bybit_perps", "top_n": 5, "expiry_hours": 72,
                     "min_vol_usd_m": 0.5 / LIVE_VOLUME_FACTOR, "max_stop_pct": 25.0}
 # Per-setup override of max_stop_pct. research/dist_wide_stops.py (2020-26):
 # Distribution Short with a 25-50% stop did BETTER (PF 2.71, n 217) than with a

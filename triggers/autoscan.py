@@ -50,8 +50,8 @@ def due(now_utc: _dt.datetime | None = None) -> list[tuple[str, _dt.datetime]]:
 def seconds_to_next(now_utc: _dt.datetime | None = None) -> float:
     """Seconds until the next scheduled slot (lets the monitor wake on time)."""
     now_utc = now_utc or _dt.datetime.now(_dt.timezone.utc)
-    from config import BRIEF_SCHEDULE
-    slots = [(tz, hhmm) for _, tz, hhmm in AUTO_SCAN_SCHEDULE] + [BRIEF_SCHEDULE]
+    from config import BRIEF_SCHEDULE, DIGEST_SCHEDULE
+    slots = [(tz, hhmm) for _, tz, hhmm in AUTO_SCAN_SCHEDULE] + [BRIEF_SCHEDULE, DIGEST_SCHEDULE]
     nxt = min(_slot_time(tz, hhmm, now_utc) + _dt.timedelta(days=1) for tz, hhmm in slots)
     return max(0.0, (nxt - now_utc).total_seconds())
 
@@ -165,9 +165,36 @@ def _brief_due(now_utc=None):
     return None if (last and last >= slot.isoformat()) else slot
 
 
+DIGEST_CATCH_UP_MIN = 240    # 5pm message may go out as late as 9pm if the relay was down
+
+
+def _digest_due(now_utc=None):
+    from config import DIGEST_SCHEDULE
+    now_utc = now_utc or _dt.datetime.now(_dt.timezone.utc)
+    slot = _slot_time(DIGEST_SCHEDULE[0], DIGEST_SCHEDULE[1], now_utc)
+    if now_utc - slot > _dt.timedelta(minutes=DIGEST_CATCH_UP_MIN):
+        return None
+    last = tdb.get_state("digest:daily")
+    return None if (last and last >= slot.isoformat()) else slot
+
+
 def run_due() -> list[str]:
-    """Run every scan slot (and the morning brief) that's due now."""
+    """Run every scan slot (and the morning brief, and the 5pm trades) that's due now."""
     ran = []
+    dslot = _digest_due()
+    if dslot:
+        try:
+            import trade_digest
+            msg, recs = trade_digest.prepare()
+            ok = telegram.send_message(msg) if msg else True
+            if ok or not telegram.is_configured():
+                trade_digest.commit(recs)            # plans saved only once delivered
+                tdb.set_state("digest:daily", dslot.isoformat())
+                ran.append("digest")
+            else:
+                log.error("digest: Telegram send failed, will retry next poll")
+        except Exception as exc:                      # noqa: BLE001
+            log.error("digest failed — %s", exc)
     slot = _brief_due()
     if slot:
         tdb.set_state("brief:daily", slot.isoformat())

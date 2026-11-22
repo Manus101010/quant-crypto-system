@@ -39,6 +39,13 @@ def track_from() -> str | None:
         return None
 
 
+def open_trades() -> list[dict]:
+    """Open fired trades as he sees them: 5pm plans applied, trades still waiting for
+    the 5pm message left out (not shown, not graded, not counted)."""
+    from trade_digest import awaiting_digest, with_plan
+    return [with_plan(t) for t in tdb.get_fired_trades(open_only=True) if not awaiting_digest(t)]
+
+
 def _in_period(t: dict, start: str | None) -> bool:
     return not start or (t.get("created_at") or "") >= start
 
@@ -137,7 +144,7 @@ def _simulate(t: dict, df: pd.DataFrame, h1: pd.DataFrame | None = None) -> dict
     m = _mgmt(t.get("setup_label"))
     trailing = bool(m.get("trailing")) and not t.get("target")
     target = t.get("target")
-    max_hold = int(m.get("max_hold") or 15)
+    max_hold = int(_cond(t).get("max_hold") or m.get("max_hold") or 15)
 
     fire_day = pd.Timestamp(t["fired_at"][:10])
     bars = df[df.index > fire_day]
@@ -221,18 +228,17 @@ def update_open_trades(notify: bool = True) -> dict:
     start = track_from()
     # Old paper trades from before the reset are no longer followed; trades you
     # actually took always are (you still need their stop / close alerts).
-    open_trades = [t for t in tdb.get_fired_trades(open_only=True)
-                   if t.get("taken") or _in_period(t, start)]
-    if not open_trades:
+    trades = [t for t in open_trades() if t.get("taken") or _in_period(t, start)]
+    if not trades:
         return {"open": 0, "closed": 0}
-    syms = sorted({t["symbol"] for t in open_trades})
+    syms = sorted({t["symbol"] for t in trades})
     candles = exchange.get_ohlcv_batch(syms, timeframe="1d", limit=120, exchange=_venue())
     missing = [s for s in syms if s not in candles
                and not exchange.in_perp_universe(s, _venue())]
     if missing:   # not on the trading venue → default chain (never for perp-universe coins)
         candles.update(exchange.get_ohlcv_batch(missing, timeframe="1d", limit=120))
     closed = 0
-    for t in open_trades:
+    for t in trades:              # 5pm plans already applied by open_trades()
         df = candles.get(t["symbol"])
         if df is None or df.empty:
             continue
@@ -290,9 +296,9 @@ def _close_text(t: dict, p: dict) -> str:
         kind = "paper trade (basket cap, was not a tradeable alert)"
     urgent = ""
     if t.get("taken") and p["outcome"] in ("stop", "trail", "time"):
-        urgent = (f"🚨 <b>{coin} hit its exit. Check Pionex closed it.</b>\n"
+        urgent = (f"🚨 <b>{coin} hit its exit. Check Bybit closed it.</b>\n"
                   f"Price reached {p['exit_price']:.6g}. If your stop or take profit was set, "
-                  f"Pionex has closed it; if not, close it now.\n\n")
+                  f"Bybit has closed it; if not, close it now.\n\n")
     return urgent + (f"{icon} <b>{coin} {kind} closed</b> — {_EXIT_PLAIN.get(p['outcome'], p['outcome'])}\n"
             f"Result: <b>{r:+.2f}R</b> after {p['bars_held']} day(s).\n<i>{t.get('setup_label','')}</i>")
 
@@ -316,6 +322,8 @@ def _maybe_nudge_trail(t: dict, p: dict) -> None:
     be worth raising (≥ 0.25 of the original risk since the last nudge)."""
     new, stop0, entry = p.get("trail_stop"), t.get("stop"), t.get("fired_price")
     if new is None or stop0 is None or not entry:
+        return
+    if _cond(t).get("native_trail"):      # Bybit is holding the trailing stop for him
         return
     r0 = abs(entry - stop0)
     key = f"trail:{t['id']}"
@@ -354,7 +362,8 @@ def live_stats(taken_only: bool = False) -> dict:
     trades = [t for t in tdb.get_fired_trades() if _in_period(t, start)]
     if taken_only:
         trades = [t for t in trades if t.get("taken")]
-    closed = [t for t in trades if t.get("outcome")]
+    closed = [t for t in trades if t.get("outcome") and t.get("outcome") != "skipped"
+              and t.get("r_multiple") is not None]
     by: dict[str, list[float]] = {}
     for t in closed:
         by.setdefault(t.get("setup_label") or "?", []).append(t["r_multiple"])
@@ -413,7 +422,7 @@ def portfolio_heat(risk_per_trade: float | None = None,
     cap = cap if cap is not None else MAX_PORTFOLIO_RISK_USD
     # Heat is REAL risk: only trades you marked as taken. Paper-tracked signals
     # (everything else) feed the track record but carry no money at risk.
-    paper = tdb.get_fired_trades(open_only=True)
+    paper = open_trades()
     open_ = [t for t in paper if t.get("taken")]
     start = track_from()
     paper = [t for t in paper if _in_period(t, start)]
@@ -438,7 +447,7 @@ def open_marks(trades: list[dict] | None = None) -> dict:
     (paper P&L so far, in units of the initial risk). Network: ccxt last close."""
     if trades is None:
         start = track_from()
-        trades = [t for t in tdb.get_fired_trades(open_only=True) if _in_period(t, start)]
+        trades = [t for t in open_trades() if _in_period(t, start)]
     if not trades:
         return {}
     syms = sorted({t["symbol"] for t in trades})

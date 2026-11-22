@@ -450,7 +450,7 @@ def test_basket_cap_limits_tradeable_fires_per_direction(tmpdb, monkeypatch):
     rows = {t["id"]: t for t in tdb.get_fired_trades()}
     capped = [i for i in ids if outcomes.is_basket_capped(rows[i])]
     assert len(capped) == 2                            # 1 earlier + 2 new = cap 3
-    assert sum("basket cap" in s for s in sent) == 2
+    assert sent == []                                  # 22 Nov 2026: research fires are quiet (5pm message)
     assert len(issued) == 2                            # guard sees tradeable alerts only
     for i in ids:
         t = rows[i]
@@ -459,9 +459,11 @@ def test_basket_cap_limits_tradeable_fires_per_direction(tmpdb, monkeypatch):
         fwd = json.loads(t["condition_json"])["fwd"]
         assert fwd["oi_chg_72h"] == 4.2 and fwd["oi_3d_rising"] is True
         assert fwd["btc_below_50d"] is True and fwd["liquid_5m_180d"] is False
-    tradeable_txt = [s for s in sent if "basket cap" not in s]
-    assert any("Take profit" in s and "$86.00" in s for s in tradeable_txt)
-    assert any("Pionex" in s for s in tradeable_txt)               # Pionex order card
+    import trade_digest
+    msg = trade_digest.build(prices={f"C{i}-USD": 100.0 for i in range(4)}, save=True)
+    assert msg.count("Short C") == 2 and "Bybit" in msg and "Trailing stop 7" in msg  # 2 tradeable only
+    assert "Take profit $86" in msg or "Take profit 86" in msg
+    assert trade_digest.build(prices={f"C{i}-USD": 100.0 for i in range(4)}) == ""  # sent once
     feats = json.loads(tdb.get_state(f"features:{ids[0]}"))
     assert feats["fwd_oi_3d_rising"] is True
 

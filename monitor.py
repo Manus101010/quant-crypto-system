@@ -100,8 +100,7 @@ def _pct(a, b) -> str:
 
 
 def _alert_text(trg: dict, price: float, reason: str) -> str:
-    """Compact Pionex order card (6 Nov 2026: the long Bybit form was unreadable).
-    Everything needed to place the order on Pionex Futures, nothing else."""
+    """Compact Bybit order card (6 Nov 2026 compact form; 22 Nov 2026 back to Bybit)."""
     short = (trg.get("direction") or "long") == "short"
     coin = trg["symbol"].replace("-USD", "")
     label = trg.get("setup_label") or "setup"
@@ -122,7 +121,7 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     # Worst fill: lower for a short, higher for a long (wider stop, breaks sizing).
     cap = price * (1 + (-ENTRY_MAX_SLIP_PCT if short else ENTRY_MAX_SLIP_PCT) / 100)
 
-    lines = [f"{'🔴 <b>SHORT' if short else '🟢 <b>LONG'} {coin}</b> on Pionex Futures",
+    lines = [f"{'🔴 <b>SHORT' if short else '🟢 <b>LONG'} {coin}</b> on Bybit",
              f"<i>{label}: {_SETUP_PLAIN.get(label, 'a validated setup')}</i>", ""]
     lines.append(f"Entry: <b>{f(price)}</b> (skip if {'below' if short else 'above'} {f(cap)})")
     if stop:
@@ -143,7 +142,7 @@ def _alert_text(trg: dict, price: float, reason: str) -> str:
     st_ = _backtest_stats(label)
     if st_:
         lines += ["", st_]
-    how = [f"On Pionex: Futures, {coin}USDT, {'Sell / Short' if short else 'Buy / Long'}, "
+    how = [f"On Bybit: Derivatives, {coin}USDT perpetual, {'Sell / Short' if short else 'Buy / Long'}, "
            f"Limit {f(price)}, tick TP/SL and enter the stop"
            + (" and take profit." if take else ".")]
     if trailing:
@@ -730,7 +729,13 @@ def poll_once() -> dict:
             cond["fwd"] = fwd
             if snap is not None:
                 snap.update({f"fwd_{k}": v for k, v in fwd.items()})
-            delivered = telegram.send_message(text)
+            from config import QUIET_FIRE
+            from trade_digest import DIGEST_SETUPS
+            quiet = QUIET_FIRE and t.get("setup_label") in DIGEST_SETUPS
+            if quiet:
+                cond["quiet"] = True       # delivered by the 5pm message, not now
+            # Quiet: tracked now, delivered in the 5pm message (trade_digest.py).
+            delivered = True if quiet else telegram.send_message(text)
             # Mark fired if delivered (or Telegram is a no-op); leave active to
             # retry on a transient send failure so a real alert isn't lost.
             if delivered or not telegram.is_configured():
@@ -747,7 +752,8 @@ def poll_once() -> dict:
                 else:
                     fire_counts[d] = fire_counts.get(d, 0) + 1
                 try:                       # desk: background review, replies in ~1 to 2 min
-                    if not capped:
+                    from config import DESK_AUTO_ON_ALERT
+                    if not capped and DESK_AUTO_ON_ALERT:
                         from desk.agents.service import review_trigger_async
                         review_trigger_async(t_fire, price)
                 except Exception as exc:                  # noqa: BLE001

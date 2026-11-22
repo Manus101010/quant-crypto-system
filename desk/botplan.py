@@ -183,7 +183,7 @@ def text(p: dict) -> str:
         f"Why: {p['reason']}.",
         f"Trend: {tf_line}",
         "",
-        "<b>Futures Grid (Pionex or Bybit), manual setup:</b>",
+        "<b>Futures Grid (Bybit), manual setup:</b>",
         f"• Mode: <b>{side}</b>, Arithmetic, <b>{g['grids']} grids</b>",
         f"• Price range: <b>{_p(g['lo'])}</b> to <b>{_p(g['hi'])}</b>",
         f"• Leverage: <b>{g['leverage']}x</b> · Investment: <b>${g['investment']:,.2f}</b>",
