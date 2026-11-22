@@ -30,9 +30,14 @@ from utils.logger import get_logger
 log = get_logger("trade_digest")
 
 STOP_CAP = 0.15          # research/ds_practical: SET15
+MIN_STOP = 0.01          # research dropped stops under 1% (run.py)
 TP_R = 2.0
 MAX_DAYS = 30
+MAX_AGE_H = 30           # a fire older than this is stale: skipped, not offered
 DIGEST_SETUPS = ("Distribution Short", "Downtrend Bounce Fade")
+# Trades fired from this time on are delivered by the 5pm message and graded on its
+# plan. Older open trades keep the rules they were alerted with.
+DIGEST_START = "2026-11-22T12:00:00"
 
 
 def _p(x: float) -> str:
@@ -56,9 +61,21 @@ def plan_for(t: dict, price: float) -> dict | None:
         days = 10
         if not target or target >= price:
             return None                          # already at or past its target
-    if target <= 0:
+        # Downtrend Bounce Fade was NOT re-tested at a 6h delay (DS was): keep it
+        # only while at least 1R of room is left to its own target.
+        if price - target < (stop - price):
+            return None
+    if target <= 0 or (stop - price) / price < MIN_STOP:
         return None
     return {"entry": price, "stop": stop, "target": target, "max_hold": days}
+
+
+def awaiting_digest(t: dict) -> bool:
+    """A research trade fired quietly that has not been through a 5pm message yet."""
+    return (t.get("setup_label") in DIGEST_SETUPS
+            and str(t.get("fired_at") or "") >= DIGEST_START
+            and t.get("outcome") is None
+            and not tdb.get_state(f"plan:{t['id']}"))
 
 
 def _live_price(symbol: str) -> float | None:
@@ -75,7 +92,7 @@ def _live_price(symbol: str) -> float | None:
 def pending(now: dt.datetime | None = None) -> list[dict]:
     """Research alerts from the last 24h that have not been in a digest yet."""
     now = now or dt.datetime.utcnow()
-    cutoff = (now - dt.timedelta(hours=24)).isoformat()
+    cutoff = (now - dt.timedelta(hours=48)).isoformat()     # survives one missed slot
     from triggers.outcomes import is_basket_capped
     out = []
     for t in tdb.get_triggers_since(cutoff, statuses=("fired",)):
@@ -87,9 +104,31 @@ def pending(now: dt.datetime | None = None) -> list[dict]:
 
 
 def build(now: dt.datetime | None = None, *, prices: dict | None = None, save: bool = True) -> str:
+    msg, recs = prepare(now, prices=prices)
+    if save:
+        commit(recs)
+    return msg
+
+
+def commit(recs: list[tuple]) -> None:
+    """Save plans and skips. Call only AFTER the message was delivered."""
+    for kind, tid, payload in recs:
+        if kind == "plan":
+            tdb.set_state(f"plan:{tid}", payload)
+        else:
+            tdb.set_state(f"digest_skip:{tid}", "1")
+            try:        # never offered: out of the track record and every open list
+                tdb.set_outcome(tid, {"outcome": "skipped"})
+            except Exception as exc:              # noqa: BLE001
+                log.warning("digest: could not mark #%s skipped (%s)", tid, exc)
+
+
+def prepare(now: dt.datetime | None = None, *, prices: dict | None = None) -> tuple[str, list]:
+    now = now or dt.datetime.utcnow()
     rows = pending(now)
+    recs: list[tuple] = []
     if not rows:
-        return ""
+        return "", recs
     try:
         from triggers.outcomes import planned_position
     except Exception:                            # noqa: BLE001
@@ -98,11 +137,14 @@ def build(now: dt.datetime | None = None, *, prices: dict | None = None, save: b
     for t in rows:
         coin = t["symbol"].replace("-USD", "")
         px = (prices or {}).get(t["symbol"]) if prices is not None else _live_price(t["symbol"])
-        plan = plan_for(t, px) if px else None
+        try:
+            age_h = (now - dt.datetime.fromisoformat(str(t.get("fired_at"))[:19])).total_seconds() / 3600
+        except (TypeError, ValueError):
+            age_h = 0.0
+        plan = plan_for(t, px) if px and age_h <= MAX_AGE_H else None
         if not plan:
             skipped.append(coin)
-            if save:
-                tdb.set_state(f"digest_skip:{t['id']}", "1")
+            recs.append(("skip", t["id"], None))
             continue
         pos = planned_position(plan["entry"], plan["stop"]) if planned_position else None
         size = f"${pos['margin']:.0f} margin at {pos['leverage']}x" if pos else "your normal size"
@@ -110,11 +152,9 @@ def build(now: dt.datetime | None = None, *, prices: dict | None = None, save: b
             f"🔴 <b>Short {coin}</b>\n"
             f"Entry {_p(plan['entry'])} · Stop {_p(plan['stop'])} · Take profit {_p(plan['target'])}\n"
             f"{size}, Isolated. Close after {plan['max_hold']} days if neither hits.")
-        if save:
-            tdb.set_state(f"plan:{t['id']}", json.dumps(
-                {**plan, "at": (now or dt.datetime.utcnow()).isoformat()}))
+        recs.append(("plan", t["id"], json.dumps({**plan, "at": now.isoformat()})))
     if not cards and not skipped:
-        return ""
+        return "", recs
     head = [f"📋 <b>Today's trades</b> ({len(cards)})"]
     if cards:
         head.append("Place each once on Pionex Futures: Sell / Short, Limit at the entry, tick "
@@ -125,7 +165,7 @@ def build(now: dt.datetime | None = None, *, prices: dict | None = None, save: b
         tail.append("Skipped (price already through the stop or target since 11am): "
                     + ", ".join(skipped))
     tail.append("Took one? Send /took COIN.")
-    return "\n\n".join(x for x in ["\n".join(head), body, "\n".join(tail)] if x)
+    return "\n\n".join(x for x in ["\n".join(head), body, "\n".join(tail)] if x), recs
 
 
 def with_plan(t: dict) -> dict:
@@ -141,12 +181,14 @@ def with_plan(t: dict) -> dict:
         except (TypeError, ValueError):
             cond = {}
         cond["max_hold"] = plan.get("max_hold", MAX_DAYS)
-        return {**t, "fired_price": plan["entry"], "stop": plan["stop"],
-                "target": plan["target"], "condition_json": json.dumps(cond)}
+        cond["tp"] = plan["target"]          # the old fire time 2R must not close it
+        at = str(plan.get("at") or t.get("fired_at"))[:13] + ":00:00"   # floored to the hour
+        return {**t, "fired_price": plan["entry"], "stop": plan["stop"], "target": plan["target"],
+                "tp": plan["target"], "fired_at": at, "condition_json": json.dumps(cond)}
     except Exception as exc:                     # noqa: BLE001
         log.debug("with_plan %s: %s", t.get("id"), exc)
         return t
 
 
 if __name__ == "__main__":
-    print(build(save=False) or "(nothing pending)")
+    print(prepare()[0] or "(nothing pending)")

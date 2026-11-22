@@ -165,11 +165,14 @@ def _brief_due(now_utc=None):
     return None if (last and last >= slot.isoformat()) else slot
 
 
+DIGEST_CATCH_UP_MIN = 240    # 5pm message may go out as late as 9pm if the relay was down
+
+
 def _digest_due(now_utc=None):
     from config import DIGEST_SCHEDULE
     now_utc = now_utc or _dt.datetime.now(_dt.timezone.utc)
     slot = _slot_time(DIGEST_SCHEDULE[0], DIGEST_SCHEDULE[1], now_utc)
-    if now_utc - slot > _dt.timedelta(minutes=CATCH_UP_MIN):
+    if now_utc - slot > _dt.timedelta(minutes=DIGEST_CATCH_UP_MIN):
         return None
     last = tdb.get_state("digest:daily")
     return None if (last and last >= slot.isoformat()) else slot
@@ -180,13 +183,16 @@ def run_due() -> list[str]:
     ran = []
     dslot = _digest_due()
     if dslot:
-        tdb.set_state("digest:daily", dslot.isoformat())
         try:
             import trade_digest
-            msg = trade_digest.build()
-            if msg:
-                telegram.send_message(msg)
-            ran.append("digest")
+            msg, recs = trade_digest.prepare()
+            ok = telegram.send_message(msg) if msg else True
+            if ok or not telegram.is_configured():
+                trade_digest.commit(recs)            # plans saved only once delivered
+                tdb.set_state("digest:daily", dslot.isoformat())
+                ran.append("digest")
+            else:
+                log.error("digest: Telegram send failed, will retry next poll")
         except Exception as exc:                      # noqa: BLE001
             log.error("digest failed — %s", exc)
     slot = _brief_due()

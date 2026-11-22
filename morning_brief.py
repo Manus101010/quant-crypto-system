@@ -191,7 +191,7 @@ def _btc_line() -> str:
 
 def _new_trades() -> str:
     """Alerts that fired in the last 24h and are still open, as Pionex orders."""
-    cutoff = (datetime.datetime.utcnow() - datetime.timedelta(hours=24)).isoformat()
+    cutoff = (datetime.datetime.utcnow() - datetime.timedelta(hours=30)).isoformat()
     try:
         from triggers.outcomes import is_basket_capped
     except Exception:                              # noqa: BLE001

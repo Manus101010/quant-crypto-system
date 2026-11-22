@@ -56,7 +56,8 @@ def _status() -> str:
     act = db.get_triggers("active")
     lines.append(f"📡 Armed: {len(act)}" + (" — " + ", ".join(
         f"{t['symbol'].replace('-USD', '')}{'▼' if t['direction'] == 'short' else '▲'}" for t in act[:15]) if act else ""))
-    op = db.get_fired_trades(open_only=True)
+    from triggers.outcomes import open_trades
+    op = open_trades()
     taken = [t for t in op if t.get("taken")]
     h = portfolio_heat()
     lines.append(f"📒 Open: {len(op)} tracked · {len(taken)} taken by you")
@@ -66,8 +67,8 @@ def _status() -> str:
 
 def _open() -> str:
     from triggers import db
-    from triggers.outcomes import open_marks
-    op = db.get_fired_trades(open_only=True)
+    from triggers.outcomes import open_marks, open_trades
+    op = open_trades()
     if not op:
         return "📒 No open trades."
     mk = open_marks(op)
@@ -86,7 +87,8 @@ def _took(arg: str, taken: bool) -> str:
     sym = arg.strip().upper().replace("-USD", "")
     if not sym:
         return "Usage: /took HYPE"
-    op = [t for t in db.get_fired_trades(open_only=True) if t["symbol"].replace("-USD", "") == sym]
+    from triggers.outcomes import open_trades
+    op = [t for t in open_trades() if t["symbol"].replace("-USD", "") == sym]
     if not op:
         return f"No open {sym} trade to mark."
     t = sorted(op, key=lambda t: t.get("fired_at") or "")[-1]
