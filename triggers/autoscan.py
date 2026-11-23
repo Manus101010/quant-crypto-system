@@ -51,7 +51,7 @@ def seconds_to_next(now_utc: _dt.datetime | None = None) -> float:
     """Seconds until the next scheduled slot (lets the monitor wake on time)."""
     now_utc = now_utc or _dt.datetime.now(_dt.timezone.utc)
     from config import BRIEF_SCHEDULE, DIGEST_SCHEDULE
-    slots = [(tz, hhmm) for _, tz, hhmm in AUTO_SCAN_SCHEDULE] + [BRIEF_SCHEDULE, DIGEST_SCHEDULE]
+    slots = [(tz, hhmm) for _, tz, hhmm in AUTO_SCAN_SCHEDULE] + [BRIEF_SCHEDULE, *DIGEST_SCHEDULE]
     nxt = min(_slot_time(tz, hhmm, now_utc) + _dt.timedelta(days=1) for tz, hhmm in slots)
     return max(0.0, (nxt - now_utc).total_seconds())
 
@@ -165,31 +165,37 @@ def _brief_due(now_utc=None):
     return None if (last and last >= slot.isoformat()) else slot
 
 
-DIGEST_CATCH_UP_MIN = 240    # 5pm message may go out as late as 9pm if the relay was down
+DIGEST_CATCH_UP_MIN = 120    # a trade message may go out up to 2h late if the relay was down
 
 
 def _digest_due(now_utc=None):
+    """(state key, slot) of the trade message slot due now, if any."""
     from config import DIGEST_SCHEDULE
     now_utc = now_utc or _dt.datetime.now(_dt.timezone.utc)
-    slot = _slot_time(DIGEST_SCHEDULE[0], DIGEST_SCHEDULE[1], now_utc)
-    if now_utc - slot > _dt.timedelta(minutes=DIGEST_CATCH_UP_MIN):
-        return None
-    last = tdb.get_state("digest:daily")
-    return None if (last and last >= slot.isoformat()) else slot
+    for tz, hhmm in DIGEST_SCHEDULE:
+        slot = _slot_time(tz, hhmm, now_utc)
+        if now_utc - slot > _dt.timedelta(minutes=DIGEST_CATCH_UP_MIN):
+            continue
+        key = f"digest:{hhmm}"
+        last = tdb.get_state(key)
+        if not (last and last >= slot.isoformat()):
+            return key, slot
+    return None
 
 
 def run_due() -> list[str]:
-    """Run every scan slot (and the morning brief, and the 5pm trades) that's due now."""
+    """Run every scan slot (and the morning brief, and the trade messages) that's due now."""
     ran = []
-    dslot = _digest_due()
-    if dslot:
+    due_d = _digest_due()
+    if due_d:
+        dkey, dslot = due_d
         try:
             import trade_digest
             msg, recs = trade_digest.prepare()
             ok = telegram.send_message(msg) if msg else True
             if ok or not telegram.is_configured():
                 trade_digest.commit(recs)            # plans saved only once delivered
-                tdb.set_state("digest:daily", dslot.isoformat())
+                tdb.set_state(dkey, dslot.isoformat())
                 ran.append("digest")
             else:
                 log.error("digest: Telegram send failed, will retry next poll")
@@ -200,7 +206,13 @@ def run_due() -> list[str]:
         tdb.set_state("brief:daily", slot.isoformat())
         try:
             import morning_brief
-            telegram.send_message(morning_brief.build_brief())
+            import trade_digest
+            # 7am: new trades go inside the brief (one message, not two). If the send
+            # fails their plans are not saved, so the 3:30pm message picks them up.
+            dmsg, recs = trade_digest.prepare(header="New trades")
+            ok = telegram.send_message(morning_brief.build_brief(new_trades=dmsg))
+            if dmsg and (ok or not telegram.is_configured()):
+                trade_digest.commit(recs)
             ran.append("brief")
         except Exception as exc:                      # noqa: BLE001
             log.error("brief failed — %s", exc)

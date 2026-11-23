@@ -120,9 +120,13 @@ AUTO_SCAN_SCHEDULE = [
 # Morning brief, sent by the monitor at this local time (GitHub cron ran it ~3h late).
 BRIEF_SCHEDULE = ("Australia/Sydney", "07:00")
 # 22 Nov 2026: research alerts fire silently at the daily close (11am Sydney, in class)
-# and go out in ONE after school message with set and forget levels (trade_digest.py,
+# and go out in the next trade message with set and forget levels (trade_digest.py,
 # research/ds_practical). The auto AI desk follow up message is off (/desk on demand).
-DIGEST_SCHEDULE = ("Australia/Sydney", "17:00")
+# 24 Nov 2026: trades go out at 7am (inside the morning brief), 3:30pm and 7pm Sydney.
+# Each new trade is sent once, in the first of these after it fires (fires are mostly
+# 11am Sydney, so 3:30pm; the 6:51am scan's fires make the 7am brief). Tested delays:
+# research/ds_practical 0h/6h/20h all hold (3:30pm = 4.5h, 7pm = 8h after 11am).
+DIGEST_SCHEDULE = [("Australia/Sydney", "15:30"), ("Australia/Sydney", "19:00")]
 QUIET_FIRE = True
 DESK_AUTO_ON_ALERT = False
 # Trading venue: Bybit USDT perpetuals (native SL/TP + trailing stops, shorts).

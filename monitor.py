@@ -733,8 +733,8 @@ def poll_once() -> dict:
             from trade_digest import DIGEST_SETUPS
             quiet = QUIET_FIRE and t.get("setup_label") in DIGEST_SETUPS
             if quiet:
-                cond["quiet"] = True       # delivered by the 5pm message, not now
-            # Quiet: tracked now, delivered in the 5pm message (trade_digest.py).
+                cond["quiet"] = True       # delivered by the next trade message (7am, 3:30pm or 7pm)
+            # Quiet: tracked now, delivered in the next trade message (trade_digest.py).
             delivered = True if quiet else telegram.send_message(text)
             # Mark fired if delivered (or Telegram is a no-op); leave active to
             # retry on a transient send failure so a real alert isn't lost.

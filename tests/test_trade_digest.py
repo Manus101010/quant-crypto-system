@@ -92,3 +92,19 @@ def test_with_plan_trailing_keeps_trail_on_and_tp_in_tp(monkeypatch):
     t = td.with_plan({"id": 3, "fired_at": "2026-11-23T00:06:10", "condition_json": "{}"})
     c = json.loads(t["condition_json"])
     assert t["target"] is None and t["tp"] == 0.4 and c["native_trail"] and c["max_hold"] == 60
+
+
+def test_three_slots_each_once(monkeypatch):
+    import datetime as dt
+    from triggers import autoscan
+    state = {}
+    monkeypatch.setattr(autoscan.tdb, "get_state", lambda k: state.get(k))
+    utc = dt.timezone.utc
+    # 3:30pm Sydney (AEDT, UTC+11) = 04:30 UTC; 7pm = 08:00 UTC
+    k, slot = autoscan._digest_due(dt.datetime(2026, 11, 24, 4, 40, tzinfo=utc))
+    assert k == "digest:15:30" and slot.hour == 4 and slot.minute == 30
+    state[k] = slot.isoformat()
+    assert autoscan._digest_due(dt.datetime(2026, 11, 24, 5, 0, tzinfo=utc)) is None
+    k2, _ = autoscan._digest_due(dt.datetime(2026, 11, 24, 8, 5, tzinfo=utc))
+    assert k2 == "digest:19:00"
+    assert autoscan._digest_due(dt.datetime(2026, 11, 24, 12, 0, tzinfo=utc)) is None   # past catch up
