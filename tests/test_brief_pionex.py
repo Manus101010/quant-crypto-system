@@ -28,7 +28,7 @@ def test_brief_is_short_and_has_no_dollar_results(monkeypatch):
     monkeypatch.setattr(triggers, "outcomes", _O, raising=False)
     monkeypatch.setitem(__import__("sys").modules, "triggers.outcomes", _O)
     txt = mb.build_brief()
-    assert "GOAT" in txt and "ZZQ" not in txt and "5pm trades" in txt
+    assert "GOAT" in txt and "ZZQ" not in txt and "Sent in the last day" in txt
     assert "/guard" not in txt and "Deactivated" not in txt and "Deployment" not in txt
     assert not re.search(r"\$-|−\$|\+\$|\(\$-", txt)      # no dollar results
     assert "R per trade" in txt and len(txt) < 1200

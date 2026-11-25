@@ -10,7 +10,8 @@ so the whole trade is placed ONCE: entry, stop, take profit and trailing distanc
 Distribution Short, 6h delay, live rules (DS stop, 3.5 ATR trail, TP 2R, 60 days):
 held back data PF 2.06, +0.30R, t 4.10 (random PF 1.16); in sample PF 2.18, t 5.54.
 
-At 5pm Sydney this sends ONE message with every trade still worth placing, levels
+At 7am (inside the morning brief), 3:30pm and 7pm Sydney this sends every NEW trade
+still worth placing (each trade once, in the first slot after it fires), levels
 from the price right now:
   Distribution Short: stop = the signal's stop; take profit = 2x that risk below;
                       trailing stop distance = 3.5 x the signal ATR; close after 60 days.
@@ -87,7 +88,7 @@ def _quiet(t: dict) -> bool:
 
 
 def awaiting_digest(t: dict, now: dt.datetime | None = None) -> bool:
-    """A quiet research fire that has not been through a 5pm message yet. Only rows the
+    """A quiet research fire that has not been through a trade message yet. Only rows the
     monitor tagged quiet at fire count, never basket capped or taken ones, and never
     for more than 48h (after that the tracker grades it on its original rules)."""
     if (not _quiet(t) or t.get("outcome") is not None or t.get("taken")
@@ -149,7 +150,8 @@ def commit(recs: list[tuple]) -> None:
                 log.warning("digest: could not mark #%s skipped (%s)", tid, exc)
 
 
-def prepare(now: dt.datetime | None = None, *, prices: dict | None = None) -> tuple[str, list]:
+def prepare(now: dt.datetime | None = None, *, prices: dict | None = None,
+            header: str = "Today's trades") -> tuple[str, list]:
     now = now or dt.datetime.utcnow()
     rows = pending(now)
     recs: list[tuple] = []
@@ -182,7 +184,7 @@ def prepare(now: dt.datetime | None = None, *, prices: dict | None = None) -> tu
         recs.append(("plan", t["id"], json.dumps({**plan, "at": now.isoformat()})))
     if not cards and not skipped:
         return "", recs
-    head = [f"📋 <b>Today's trades</b> ({len(cards)})"]
+    head = [f"📋 <b>{header}</b> ({len(cards)})"]
     if cards:
         head.append("Place each once on Bybit: Derivatives, USDT perpetual, Sell / Short, Limit at "
                     "the entry, tick TP/SL and enter both. Once filled, open the position's TP/SL, "
@@ -197,7 +199,7 @@ def prepare(now: dt.datetime | None = None, *, prices: dict | None = None) -> tu
 
 
 def with_plan(t: dict) -> dict:
-    """Overlay a saved 5pm plan so the tracker grades what he would have done."""
+    """Overlay a saved trade message plan so the tracker grades what he would have done."""
     try:
         raw = tdb.get_state(f"plan:{t['id']}")
         if not raw:

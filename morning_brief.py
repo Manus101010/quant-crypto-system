@@ -202,12 +202,12 @@ def _new_trades() -> str:
             if t.get("status") == "fired" and t.get("outcome") is None
             and not is_basket_capped(t) and tdb.get_state(f"plan:{t['id']}")]
     if not rows:
-        return "<b>Yesterday's 5pm trades:</b> none."
+        return ""
     try:
         from triggers.outcomes import planned_position
     except Exception:                              # noqa: BLE001
         planned_position = None
-    out = ["<b>Yesterday's 5pm trades</b> (still open, same levels)"]
+    out = ["<b>Sent in the last day</b> (still open, same levels)"]
     for t in rows[:6]:
         short = t.get("direction") == "short"
         coin = t["symbol"].replace("-USD", "")
@@ -285,11 +285,11 @@ def _universe_warning() -> str:
     return ""
 
 
-def build_brief() -> str:
+def build_brief(new_trades: str = "") -> str:
     """6 Nov 2026 rewrite: short, plain, Bybit first. No dollar results, no command
     list, no internal state (deactivated setups, deployment score)."""
     tdb.init_db()
-    parts = [_date_line(), _btc_line(), _new_trades(), _movers_short(),
+    parts = [_date_line(), _btc_line(), new_trades, _new_trades(), _movers_short(),
              _results_line(), _week_short(), _universe_warning(),
              "<i>/help lists the commands.</i>"]
     return "\n\n".join(p for p in parts if p)
